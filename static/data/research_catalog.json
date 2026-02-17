@@ -1,0 +1,120 @@
+{
+  "techTypes": [
+    {
+      "id": "thrusters",
+      "label": "Thrusters",
+      "trees": [
+        {
+          "id": "thrusters_nuclear_thermal",
+          "label": "Nuclear Thermal",
+          "description": "Generation path for high-performance NTR propulsion.",
+          "nodes": [
+            {
+              "id": "early_solid_core_ntr",
+              "name": "Early Solid Core NTR",
+              "passive": { "stat": "ISP", "perLevel": 1, "unit": "%", "sign": "+" },
+              "unlocks": {
+                "1": { "name": "SCN-1 \"Pioneer\"", "massT": 20, "thrustKN": 250, "ispS": 850, "reactorLevelRequired": 2 },
+                "4": { "name": "SCN-2 \"Frontier\"", "massT": 28, "thrustKN": 400, "ispS": 900, "reactorLevelRequired": 3 }
+              }
+            },
+            {
+              "id": "advanced_solid_core_ntr",
+              "name": "Advanced Solid Core NTR",
+              "passive": { "stat": "Thrust", "perLevel": 2, "unit": "%", "sign": "+" },
+              "unlocks": {
+                "1": { "name": "ASCN-1 \"Venture\"", "massT": 24, "thrustKN": 350, "ispS": 950, "reactorLevelRequired": 4 },
+                "4": { "name": "ASCN-2 \"Atlas\"", "massT": 35, "thrustKN": 600, "ispS": 1000, "reactorLevelRequired": 5 }
+              }
+            },
+            {
+              "id": "closed_gas_cycle_ntr",
+              "name": "Closed Gas Cycle NTR",
+              "passive": { "stat": "Mass", "perLevel": 2, "unit": "%", "sign": "-" },
+              "unlocks": {
+                "1": { "name": "CGN-1 \"Helios\"", "massT": 40, "thrustKN": 500, "ispS": 1400, "reactorLevelRequired": 6 },
+                "4": { "name": "CGN-2 \"Prometheus\"", "massT": 55, "thrustKN": 900, "ispS": 1600, "reactorLevelRequired": 7 }
+              }
+            },
+            {
+              "id": "open_gas_cycle_ntr",
+              "name": "Open Gas Cycle NTR",
+              "passive": { "stat": "ISP", "perLevel": 1, "unit": "%", "sign": "+" },
+              "unlocks": {
+                "1": { "name": "OGN-1 \"Icarus\"", "massT": 60, "thrustKN": 800, "ispS": 2200, "reactorLevelRequired": 8 },
+                "4": { "name": "OGN-2 \"Daedalus\"", "massT": 80, "thrustKN": 1400, "ispS": 2500, "reactorLevelRequired": 9 }
+              }
+            }
+          ],
+          "edges": [
+            ["early_solid_core_ntr", "advanced_solid_core_ntr"],
+            ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
+            ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"]
+          ]
+        },
+        { "id": "thrusters_cryo", "label": "Cryo", "template": true },
+        { "id": "thrusters_solar", "label": "Solar", "template": true },
+        { "id": "thrusters_nuclear_pulse", "label": "Nuclear Pulse", "template": true },
+        { "id": "thrusters_electric", "label": "Electric", "template": true }
+      ]
+    },
+    {
+      "id": "reactors",
+      "label": "Reactors",
+      "trees": [
+        { "id": "reactors_fission", "label": "Fission", "template": true },
+        { "id": "reactors_solar_concentrator", "label": "Solar Concentrator", "template": true },
+        { "id": "reactors_direct_plasma", "label": "Direct Plasma", "template": true },
+        { "id": "reactors_z_pinch", "label": "Z-Pinch", "template": true }
+      ]
+    },
+    {
+      "id": "generators",
+      "label": "Generators",
+      "trees": [
+        { "id": "generators_thermoelectric_advanced_solid_state_conversion", "label": "Thermoelectric to Advanced Solid-State Conversion", "template": true },
+        { "id": "generators_closed_brayton_cycle_turbine", "label": "Closed Brayton Cycle (Turbine)", "template": true },
+        { "id": "generators_thermionic_direct_emission", "label": "Thermionic (Direct Emission)", "template": true },
+        { "id": "generators_magnetohydrodynamic", "label": "Magnetohydrodynamic (MHD)", "template": true }
+      ]
+    },
+    {
+      "id": "robonauts",
+      "label": "Robonauts",
+      "trees": [
+        { "id": "robonauts_raygun", "label": "Raygun", "template": true },
+        { "id": "robonauts_missile", "label": "Missile", "template": true },
+        { "id": "robonauts_rover", "label": "Rover", "template": true }
+      ]
+    },
+    {
+      "id": "constructors",
+      "label": "Constructors",
+      "trees": [
+        { "id": "constructors_gravity", "label": "Gravity", "template": true },
+        { "id": "constructors_microgravity", "label": "Microgravity", "template": true },
+        { "id": "constructors_cryovolitile", "label": "Cryovolitile", "template": true }
+      ]
+    },
+    {
+      "id": "refineries",
+      "label": "Refineries",
+      "trees": [
+        { "id": "refineries_lithic_processing", "label": "Lithic Processing", "template": true },
+        { "id": "refineries_metallurgy", "label": "Metallurgy", "template": true },
+        { "id": "refineries_volatiles_cryogenics", "label": "Volatiles & Cryogenics", "template": true },
+        { "id": "refineries_nuclear_exotic", "label": "Nuclear & Exotic", "template": true }
+      ]
+    },
+    {
+      "id": "radiators",
+      "label": "Radiators",
+      "trees": [
+        { "id": "radiators_rigid_panels", "label": "Rigid Panels", "template": true },
+        { "id": "radiators_liquid_sheet", "label": "Liquid Sheet Radiators", "template": true },
+        { "id": "radiators_spinning_heat_sink", "label": "Spinning Heat Sink Radiators", "template": true },
+        { "id": "radiators_phase_change", "label": "Phase Change Radiator", "template": true }
+      ]
+    }
+  ]
+}

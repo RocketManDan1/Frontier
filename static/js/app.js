@@ -10,6 +10,8 @@
   const actions = document.getElementById("actions");
   const mapOverviewEl = document.getElementById("mapOverview");
   const zoneJumpBarEl = document.getElementById("zoneJumpBar");
+  const overviewPanelEl = document.getElementById("overviewPanel");
+  const infoPanelEl = document.getElementById("infoPanel");
   const stageParallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const cameraMotion = { x: 0, y: 0, energy: 0 };
   const PARALLAX_MAX_PX = 12;
@@ -22,6 +24,8 @@
   const DUST_BASE_ALPHA = 0.028;
   const DUST_ACTIVE_ALPHA = 0.17;
   const dustParticles = [];
+  const MAP_WINDOW_LAYOUT_KEY = "earthmoon.mapWindowLayout.v1";
+  let mapWindowZIndex = 20;
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -59,6 +63,252 @@
         infoList.appendChild(li);
       });
     }
+  }
+
+  function loadWindowLayoutState() {
+    try {
+      const raw = localStorage.getItem(MAP_WINDOW_LAYOUT_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveWindowLayoutState(state) {
+    try {
+      localStorage.setItem(MAP_WINDOW_LAYOUT_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function setupMapWindows() {
+    const content = document.querySelector(".mapPage .content");
+    if (!content) return;
+
+    const layoutState = loadWindowLayoutState();
+
+    function bringWindowToFront(panelEl) {
+      mapWindowZIndex += 1;
+      panelEl.style.zIndex = String(mapWindowZIndex);
+    }
+
+    function clampPanelRect(rect, limits, minW, minH) {
+      const width = clamp(rect.width, minW, Math.max(minW, limits.maxWidth));
+      const height = clamp(rect.height, minH, Math.max(minH, limits.maxHeight));
+      const left = clamp(rect.left, limits.minLeft, limits.maxLeft - width);
+      const top = clamp(rect.top, limits.minTop, limits.maxTop - height);
+      return { left, top, width, height };
+    }
+
+    function contentLimits() {
+      const r = content.getBoundingClientRect();
+      return {
+        minLeft: 0,
+        minTop: 92,
+        maxLeft: Math.max(0, r.width),
+        maxTop: Math.max(0, r.height),
+        maxWidth: Math.max(220, r.width - 8),
+        maxHeight: Math.max(180, r.height - 96),
+      };
+    }
+
+    function applyRect(panelEl, rect) {
+      panelEl.style.left = `${Math.round(rect.left)}px`;
+      panelEl.style.top = `${Math.round(rect.top)}px`;
+      panelEl.style.width = `${Math.round(rect.width)}px`;
+      panelEl.style.height = `${Math.round(rect.height)}px`;
+      panelEl.style.right = "auto";
+      panelEl.style.maxHeight = "none";
+    }
+
+    function setupPanel(panelEl, panelId, minW, minH) {
+      if (!panelEl) return;
+      const dragHandle = panelEl.querySelector("[data-drag-handle='true']");
+      const resizeHandle = panelEl.querySelector("[data-resize-handle='true']");
+      if (!dragHandle || !resizeHandle) return;
+
+      const startRect = panelEl.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
+      const saved = layoutState[panelId];
+
+      const initialRect = saved && typeof saved === "object"
+        ? {
+            left: Number(saved.left || 0),
+            top: Number(saved.top || 0),
+            width: Number(saved.width || startRect.width),
+            height: Number(saved.height || startRect.height),
+          }
+        : {
+            left: startRect.left - contentRect.left,
+            top: startRect.top - contentRect.top,
+            width: startRect.width,
+            height: startRect.height,
+          };
+
+      const boundedInitial = clampPanelRect(initialRect, contentLimits(), minW, minH);
+      applyRect(panelEl, boundedInitial);
+
+      const persistRect = (rect) => {
+        layoutState[panelId] = {
+          left: Math.round(rect.left),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+        saveWindowLayoutState(layoutState);
+      };
+
+      function startDrag(event) {
+        if (event.button !== 0) return;
+        if (event.target.closest("button,a,input,select,textarea")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        bringWindowToFront(panelEl);
+        panelEl.classList.add("isDragging");
+
+        const baseRect = panelEl.getBoundingClientRect();
+        const contentNow = content.getBoundingClientRect();
+        const origin = {
+          x: event.clientX,
+          y: event.clientY,
+          left: baseRect.left - contentNow.left,
+          top: baseRect.top - contentNow.top,
+          width: baseRect.width,
+          height: baseRect.height,
+        };
+
+        const onMove = (moveEvent) => {
+          const limits = contentLimits();
+          const next = clampPanelRect(
+            {
+              left: origin.left + (moveEvent.clientX - origin.x),
+              top: origin.top + (moveEvent.clientY - origin.y),
+              width: origin.width,
+              height: origin.height,
+            },
+            limits,
+            minW,
+            minH
+          );
+          applyRect(panelEl, next);
+        };
+
+        const stop = () => {
+          panelEl.classList.remove("isDragging");
+          const now = panelEl.getBoundingClientRect();
+          const contentNow2 = content.getBoundingClientRect();
+          persistRect({
+            left: now.left - contentNow2.left,
+            top: now.top - contentNow2.top,
+            width: now.width,
+            height: now.height,
+          });
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", stop);
+          window.removeEventListener("pointercancel", stop);
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", stop);
+        window.addEventListener("pointercancel", stop);
+      }
+
+      function startResize(event) {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        bringWindowToFront(panelEl);
+        panelEl.classList.add("isResizing");
+
+        const baseRect = panelEl.getBoundingClientRect();
+        const contentNow = content.getBoundingClientRect();
+        const origin = {
+          x: event.clientX,
+          y: event.clientY,
+          left: baseRect.left - contentNow.left,
+          top: baseRect.top - contentNow.top,
+          width: baseRect.width,
+          height: baseRect.height,
+        };
+
+        const onMove = (moveEvent) => {
+          const limits = contentLimits();
+          const nextWidth = origin.width + (moveEvent.clientX - origin.x);
+          const nextHeight = origin.height + (moveEvent.clientY - origin.y);
+          const bounded = clampPanelRect(
+            {
+              left: origin.left,
+              top: origin.top,
+              width: nextWidth,
+              height: nextHeight,
+            },
+            limits,
+            minW,
+            minH
+          );
+          applyRect(panelEl, bounded);
+        };
+
+        const stop = () => {
+          panelEl.classList.remove("isResizing");
+          const now = panelEl.getBoundingClientRect();
+          const contentNow2 = content.getBoundingClientRect();
+          persistRect({
+            left: now.left - contentNow2.left,
+            top: now.top - contentNow2.top,
+            width: now.width,
+            height: now.height,
+          });
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", stop);
+          window.removeEventListener("pointercancel", stop);
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", stop);
+        window.addEventListener("pointercancel", stop);
+      }
+
+      dragHandle.addEventListener("pointerdown", startDrag);
+      resizeHandle.addEventListener("pointerdown", startResize);
+      panelEl.addEventListener("pointerdown", () => bringWindowToFront(panelEl));
+    }
+
+    setupPanel(overviewPanelEl, "overview", 240, 220);
+    setupPanel(infoPanelEl, "info", 260, 280);
+
+    window.addEventListener("resize", () => {
+      [
+        { el: overviewPanelEl, id: "overview", minW: 240, minH: 220 },
+        { el: infoPanelEl, id: "info", minW: 260, minH: 280 },
+      ].forEach((entry) => {
+        if (!entry.el) return;
+        const r = entry.el.getBoundingClientRect();
+        const cr = content.getBoundingClientRect();
+        const next = clampPanelRect(
+          {
+            left: r.left - cr.left,
+            top: r.top - cr.top,
+            width: r.width,
+            height: r.height,
+          },
+          contentLimits(),
+          entry.minW,
+          entry.minH
+        );
+        applyRect(entry.el, next);
+        layoutState[entry.id] = {
+          left: Math.round(next.left),
+          top: Math.round(next.top),
+          width: Math.round(next.width),
+          height: Math.round(next.height),
+        };
+      });
+      saveWindowLayoutState(layoutState);
+    });
   }
 
   const wikiSummaryCache = new Map();
@@ -299,6 +549,8 @@
     ]);
   });
   app.view.addEventListener("webglcontextrestored", () => window.location.reload());
+
+  setupMapWindows();
 
   // ---------- Layers ----------
   const world = new PIXI.Container();

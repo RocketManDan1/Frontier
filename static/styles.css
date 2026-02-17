@@ -1,14 +1,14 @@
 :root {
-  --bg-0: #05080f;
-  --bg-1: #0a111e;
-  --panel: rgba(8, 14, 24, 0.76);
-  --panel-solid: #0b131f;
-  --border: rgba(132, 188, 255, 0.23);
-  --border-soft: rgba(120, 165, 214, 0.14);
-  --text: #dceaf5;
-  --muted: rgba(198, 221, 241, 0.68);
-  --accent: #6db6ff;
-  --accent-2: #44e0ff;
+  --bg-0: #060910;
+  --bg-1: #0b111a;
+  --panel: rgba(11, 16, 24, 0.9);
+  --panel-solid: #0d131c;
+  --border: rgba(126, 166, 206, 0.35);
+  --border-soft: rgba(100, 132, 166, 0.24);
+  --text: #d7e6f2;
+  --muted: rgba(170, 192, 212, 0.72);
+  --accent: #59b9e6;
+  --accent-2: #48d1f3;
   --ok: #74d8c0;
 }
 
@@ -24,11 +24,11 @@ body {
 body {
   margin: 0;
   color: var(--text);
-  font-family: "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: 0.01em;
+  font-family: "Segoe UI", "Roboto Condensed", Tahoma, sans-serif;
+  letter-spacing: 0.012em;
   background:
-    radial-gradient(1100px 700px at 9% -8%, rgba(63, 107, 170, 0.16), transparent 66%),
-    radial-gradient(900px 560px at 95% 8%, rgba(48, 92, 160, 0.13), transparent 62%),
+    radial-gradient(1100px 700px at 9% -8%, rgba(52, 95, 144, 0.15), transparent 66%),
+    radial-gradient(900px 560px at 95% 8%, rgba(44, 78, 128, 0.12), transparent 62%),
     linear-gradient(180deg, var(--bg-1), var(--bg-0) 68%);
   position: relative;
 }
@@ -91,21 +91,82 @@ body::before {
   backdrop-filter: blur(8px);
 }
 
+.mapPage .mapWindow {
+  touch-action: none;
+}
+
+.mapPage .mapWindow.isDragging,
+.mapPage .mapWindow.isResizing {
+  box-shadow:
+    0 22px 52px rgba(0, 0, 0, 0.56),
+    inset 0 0 0 1px rgba(220, 238, 255, 0.05);
+}
+
+.mapPage .mapWindowHeader {
+  cursor: move;
+  user-select: none;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.14);
+  margin: -14px -14px 10px;
+  padding: 10px 12px 9px;
+  background: linear-gradient(180deg, rgba(14, 23, 36, 0.58), rgba(9, 16, 25, 0));
+}
+
+.mapPage .mapWindowBody {
+  overflow: auto;
+  max-height: calc(100% - 54px);
+  padding-bottom: 2px;
+}
+
+.mapPage .mapWindowResize {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: 2px solid rgba(109, 182, 255, 0.45);
+  border-bottom: 2px solid rgba(109, 182, 255, 0.45);
+  border-radius: 0 0 5px 0;
+  opacity: 0.8;
+}
+
 .mapPage .overview {
   left: 16px;
   width: 320px;
+  min-width: 240px;
+  min-height: 220px;
   max-height: calc(100vh - 108px);
 }
 
 .mapPage .info {
   right: 16px;
   width: 340px;
+  min-width: 260px;
+  min-height: 280px;
   max-height: calc(100vh - 108px);
   overflow: auto;
 }
 
 .mapPage .mapOverview {
-  max-height: calc(100vh - 210px);
+  max-height: none;
+  min-height: 120px;
+  flex: 1 1 auto;
+}
+
+.mapPage .overview,
+.mapPage .info {
+  font-size: 12px;
+}
+
+.mapPage .titleSmall {
+  margin-bottom: 5px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.mapPage .muted.small,
+.mapPage .small {
+  font-size: 12px;
 }
 
 .mapPage .stage {
@@ -166,14 +227,14 @@ body::before {
 
 .panel {
   background:
-    linear-gradient(160deg, rgba(18, 33, 52, 0.24), transparent 34%),
+    linear-gradient(160deg, rgba(18, 30, 45, 0.16), transparent 34%),
     var(--panel);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 14px;
   box-shadow:
-    0 20px 46px rgba(0, 0, 0, 0.46),
-    inset 0 0 0 1px rgba(220, 238, 255, 0.03);
+    0 18px 42px rgba(0, 0, 0, 0.46),
+    inset 0 0 0 1px rgba(220, 238, 255, 0.02);
   backdrop-filter: blur(8px);
   position: relative;
   overflow: hidden;
@@ -222,30 +283,30 @@ body::before {
 
 .tab {
   display: inline-block;
-  padding: 8px 12px;
-  min-width: 72px;
+  padding: 8px 14px;
+  min-width: 82px;
   text-align: center;
-  text-transform: uppercase;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  color: rgba(220, 234, 245, 0.84);
+  text-transform: none;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(99, 128, 162, 0.52);
+  border-radius: 1px;
+  color: rgba(194, 212, 228, 0.86);
   text-decoration: none;
-  background: rgba(8, 15, 24, 0.78);
+  background: linear-gradient(180deg, rgba(18, 24, 34, 0.96), rgba(11, 15, 22, 0.98));
   transition: 120ms ease;
 }
 
 .tab:hover {
-  border-color: rgba(109, 182, 255, 0.45);
-  color: rgba(220, 234, 245, 0.96);
+  border-color: rgba(90, 168, 212, 0.72);
+  color: rgba(219, 235, 247, 0.98);
 }
 
 .tab.active {
-  background: linear-gradient(180deg, rgba(47, 99, 161, 0.28), rgba(17, 32, 48, 0.84));
-  border-color: rgba(109, 182, 255, 0.62);
-  color: #e7f6ff;
-  box-shadow: inset 0 0 22px rgba(68, 224, 255, 0.12);
+  background: linear-gradient(180deg, rgba(33, 124, 168, 0.46), rgba(20, 47, 66, 0.95));
+  border-color: rgba(84, 180, 228, 0.82);
+  color: #def6ff;
+  box-shadow: inset 0 0 0 1px rgba(52, 206, 255, 0.14);
 }
 
 .content {
@@ -543,9 +604,10 @@ body::before {
 }
 
 .infoList {
-  margin: 10px 0 0;
+  margin: 9px 0 0;
   padding-left: 16px;
   color: var(--muted);
+  font-size: 12px;
 }
 
 .realWorldRef {
@@ -647,14 +709,14 @@ button,
 .adminBtn,
 .iconBtn {
   appearance: none;
-  border-radius: 4px;
-  border: 1px solid rgba(112, 162, 220, 0.45);
-  background: linear-gradient(180deg, rgba(31, 66, 102, 0.54), rgba(12, 22, 35, 0.92));
+  border-radius: 1px;
+  border: 1px solid rgba(99, 128, 162, 0.58);
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.96), rgba(11, 15, 22, 0.98));
   color: var(--text);
-  padding: 8px 12px;
-  min-height: 34px;
+  padding: 9px 14px;
+  min-height: 36px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   cursor: pointer;
   transition: 120ms ease;
 }
@@ -673,12 +735,12 @@ button:disabled {
 
 .adminBtn,
 .btnPrimary {
-  background: linear-gradient(180deg, rgba(52, 116, 184, 0.6), rgba(16, 36, 56, 0.94));
-  border-color: rgba(109, 182, 255, 0.75);
+  background: linear-gradient(180deg, rgba(41, 134, 178, 0.56), rgba(20, 49, 68, 0.96));
+  border-color: rgba(84, 180, 228, 0.84);
 }
 
 .btnSecondary {
-  background: linear-gradient(180deg, rgba(23, 37, 55, 0.86), rgba(8, 14, 22, 0.94));
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.95), rgba(11, 15, 22, 0.98));
 }
 
 .field label {
@@ -695,9 +757,9 @@ button:disabled {
 .field textarea {
   width: 100%;
   padding: 9px 10px;
-  border-radius: 4px;
+  border-radius: 1px;
   border: 1px solid rgba(107, 153, 205, 0.42);
-  background: rgba(8, 13, 22, 0.8);
+  background: rgba(10, 15, 23, 0.94);
   color: var(--text);
 }
 
@@ -724,7 +786,7 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 9px;
 }
 
 .tableWrap {
@@ -741,7 +803,7 @@ button:disabled {
 .fleetTable th,
 .fleetTable td {
   text-align: left;
-  padding: 10px 10px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
@@ -759,14 +821,16 @@ button:disabled {
 
 .shipName {
   font-weight: 650;
+  font-size: 12px;
 }
 
 .badge {
   display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 3px 7px;
+  border-radius: 1px;
   border: 1px solid rgba(117, 160, 208, 0.38);
   background: rgba(34, 54, 78, 0.34);
+  font-size: 11px;
 }
 
 .badgeMove {
@@ -824,18 +888,19 @@ button:disabled {
 
 .fleetDetails {
   margin: 6px 0 10px;
-  padding: 10px 12px;
-  border-radius: 6px;
+  padding: 10px 11px;
+  border-radius: 2px;
   border: 1px solid var(--border-soft);
   background: rgba(10, 17, 27, 0.8);
   display: grid;
-  gap: 8px;
+  gap: 7px;
+  font-size: 12px;
 }
 
 .partsStack {
   margin-top: 6px;
   border: 1px solid var(--border-soft);
-  border-radius: 4px;
+  border-radius: 1px;
   background: rgba(6, 11, 18, 0.88);
   overflow: hidden;
 }
@@ -861,6 +926,17 @@ button:disabled {
 .partsStackCell {
   padding: 6px 8px;
   border-bottom: 1px solid rgba(120, 165, 214, 0.12);
+}
+
+.fleetPage .pagePanel {
+  padding: 10px;
+}
+
+.fleetPage .muted,
+.fleetPage .small,
+.fleetPage td,
+.fleetPage th {
+  font-size: 12px;
 }
 
 .partsStackRow:last-child .partsStackCell {
@@ -1230,6 +1306,29 @@ button:disabled {
 .researchPagePanel {
   display: grid;
   gap: 12px;
+  border-radius: 2px;
+  border-color: rgba(120, 150, 184, 0.34);
+  background:
+    linear-gradient(180deg, rgba(17, 23, 32, 0.9), rgba(10, 14, 21, 0.94)),
+    rgba(9, 13, 19, 0.94);
+}
+
+.researchPage .top.panel,
+.researchPage .researchPagePanel,
+.researchPage .researchPagePanel .panel {
+  border-radius: 2px;
+}
+
+.researchPage .top .title,
+.researchPage .top .subtitle,
+.researchPage .researchPagePanel,
+.researchPage .researchPagePanel button,
+.researchPage .researchPagePanel .titleSmall,
+.researchPage .researchPagePanel .muted,
+.researchPage .researchPagePanel .small,
+.researchPage .researchPagePanel .infoList {
+  font-family: "Segoe UI", "Roboto Condensed", Tahoma, sans-serif;
+  letter-spacing: 0.012em;
 }
 
 .researchSubtabs {
@@ -1239,24 +1338,45 @@ button:disabled {
 }
 
 .researchSubtab {
-  min-width: 108px;
+  min-width: 126px;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 1px;
+  border-color: rgba(99, 128, 162, 0.52);
+  background: linear-gradient(180deg, rgba(18, 24, 34, 0.96), rgba(11, 15, 22, 0.98));
+  color: rgba(192, 212, 228, 0.82);
+  text-transform: none;
+  font-size: 13px;
+}
+
+.researchSubtab.active {
+  border-color: rgba(84, 180, 228, 0.82);
+  color: #def6ff;
+  background: linear-gradient(180deg, rgba(33, 124, 168, 0.46), rgba(20, 47, 66, 0.95));
+  box-shadow: inset 0 0 0 1px rgba(52, 206, 255, 0.14);
 }
 
 .researchLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 14px;
 }
 
 .researchViewport {
-  height: calc(100vh - 230px);
-  min-height: 440px;
-  border-radius: 8px;
+  height: calc(100vh - 215px);
+  min-height: 500px;
+  border-radius: 2px;
   overflow: hidden;
-  border: 1px solid rgba(112, 162, 220, 0.3);
+  border: 1px solid rgba(98, 130, 165, 0.5);
   background:
-    radial-gradient(circle at 20% 20%, rgba(93, 147, 214, 0.1), transparent 45%),
-    linear-gradient(180deg, rgba(7, 13, 22, 0.95), rgba(5, 9, 16, 0.98));
+    linear-gradient(180deg, rgba(14, 19, 27, 0.98), rgba(8, 11, 17, 0.99)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(116, 153, 194, 0.05),
+      rgba(116, 153, 194, 0.05) 1px,
+      transparent 1px,
+      transparent 24px
+    );
   position: relative;
 }
 
@@ -1269,7 +1389,7 @@ button:disabled {
 .researchSkillEdge {
   position: absolute;
   height: 1px;
-  background: rgba(109, 182, 255, 0.58);
+  background: rgba(91, 186, 233, 0.7);
   transform-origin: left center;
   pointer-events: none;
   z-index: 1;
@@ -1277,108 +1397,118 @@ button:disabled {
 
 .researchSkillNode {
   position: absolute;
-  width: 190px;
-  min-height: 132px;
-  padding: 9px;
-  border-radius: 6px;
-  border: 1px solid var(--border-soft);
-  background: rgba(9, 16, 25, 0.92);
-  color: var(--text);
+  width: 230px;
+  min-height: 158px;
+  padding: 11px;
+  border-radius: 1px;
+  border: 1px solid rgba(103, 132, 163, 0.42);
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.96), rgba(11, 15, 22, 0.98));
+  color: rgba(215, 230, 242, 0.95);
   text-align: left;
   font-size: 12px;
   line-height: 1.3;
   z-index: 2;
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
 .researchSkillNode:hover {
-  border-color: rgba(109, 182, 255, 0.72);
+  border-color: rgba(113, 186, 225, 0.78);
 }
 
 .researchSkillNode.isSelected {
-  border-color: rgba(109, 182, 255, 0.9);
-  box-shadow: inset 0 0 20px rgba(68, 224, 255, 0.12);
+  border-color: rgba(93, 205, 244, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(85, 220, 255, 0.22);
+  background: linear-gradient(180deg, rgba(24, 40, 53, 0.96), rgba(12, 20, 29, 0.98));
 }
 
 .researchSkillNodeName {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
 }
 
 .researchSkillNodeLevel {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(163, 184, 203, 0.9);
+  text-transform: uppercase;
 }
 
 .researchSkillPassive {
-  margin-top: 5px;
-  font-size: 11px;
-  color: rgba(210, 232, 248, 0.85);
+  margin-top: 7px;
+  font-size: 12px;
+  color: rgba(173, 203, 223, 0.86);
 }
 
 .researchLevelRow {
-  margin-top: 9px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
 }
 
 .researchLevelBtn {
-  min-height: 24px;
-  border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  background: rgba(8, 14, 22, 0.8);
-  color: var(--muted);
-  font-size: 10px;
+  min-height: 30px;
+  border: 1px solid rgba(94, 124, 156, 0.52);
+  border-radius: 1px;
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.95), rgba(11, 15, 22, 0.98));
+  color: rgba(146, 170, 192, 0.92);
+  font-size: 12px;
 }
 
 .researchLevelBtn.isReached {
-  border-color: rgba(109, 182, 255, 0.62);
-  color: #e7f6ff;
-  background: linear-gradient(180deg, rgba(47, 99, 161, 0.3), rgba(17, 32, 48, 0.88));
+  border-color: rgba(84, 180, 228, 0.86);
+  color: #e8f9ff;
+  background: linear-gradient(180deg, rgba(41, 134, 178, 0.56), rgba(20, 49, 68, 0.96));
 }
 
 .researchSidebar {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   align-content: start;
 }
 
 .researchInfo {
-  padding-bottom: 12px;
+  padding-bottom: 14px;
 }
 
 .researchUnlockPanel {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  border-color: rgba(120, 150, 184, 0.34);
+  background:
+    linear-gradient(180deg, rgba(17, 23, 32, 0.9), rgba(10, 14, 21, 0.94)),
+    rgba(9, 13, 19, 0.94);
 }
 
 .researchUnlockRows {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .researchUnlockRow {
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  padding: 8px;
-  background: rgba(8, 13, 22, 0.62);
+  border: 1px solid rgba(94, 124, 156, 0.52);
+  border-radius: 1px;
+  padding: 10px;
+  background: linear-gradient(180deg, rgba(20, 25, 34, 0.94), rgba(11, 15, 22, 0.98));
 }
 
 .researchUnlockRow.isUnlocked {
-  border-color: rgba(109, 182, 255, 0.55);
+  border-color: rgba(84, 180, 228, 0.72);
 }
 
 .researchUnlockName {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .researchUnlockStats {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(163, 184, 203, 0.9);
 }
 
 .shipyardPanel {

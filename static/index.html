@@ -28,22 +28,32 @@
       </div>
 
       <div class="content">
-        <div class="panel overview">
-          <div class="titleSmall">Map Overview</div>
-          <div class="muted small">Visible hierarchy: planets, moons, orbits, ships</div>
+        <div id="overviewPanel" class="panel overview mapWindow" data-window-id="overview">
+          <div class="mapWindowHeader" data-drag-handle="true">
+            <div class="titleSmall">Map Overview</div>
+            <div class="muted small">Visible hierarchy: planets, moons, orbits, ships</div>
+          </div>
           <div id="mapOverview" class="mapOverview"></div>
+          <div class="mapWindowResize" data-resize-handle="true" aria-hidden="true"></div>
         </div>
 
         <div id="stage" class="stage"></div>
 
-        <div class="panel info">
-          <div id="shipInfoTabsHost" class="shipInfoTabsHost"></div>
-          <div id="infoTitle" class="titleSmall">Select a ship</div>
-          <div id="infoSubtitle" class="muted"></div>
-          <div id="infoCoords" class="muted small"></div>
-          <ul id="infoList" class="infoList"></ul>
-          <div id="realWorldRef" class="realWorldRef"></div>
-          <div id="actions"></div>
+        <div id="infoPanel" class="panel info mapWindow" data-window-id="info">
+          <div class="mapWindowHeader" data-drag-handle="true">
+            <div class="titleSmall">Info Panel</div>
+            <div class="muted small">Selection details and actions</div>
+          </div>
+          <div class="mapWindowBody">
+            <div id="shipInfoTabsHost" class="shipInfoTabsHost"></div>
+            <div id="infoTitle" class="titleSmall">Select a ship</div>
+            <div id="infoSubtitle" class="muted"></div>
+            <div id="infoCoords" class="muted small"></div>
+            <ul id="infoList" class="infoList"></ul>
+            <div id="realWorldRef" class="realWorldRef"></div>
+            <div id="actions"></div>
+          </div>
+          <div class="mapWindowResize" data-resize-handle="true" aria-hidden="true"></div>
         </div>
       </div>
 

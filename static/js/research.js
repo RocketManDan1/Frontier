@@ -7,6 +7,9 @@
   const infoListEl = document.getElementById("researchInfoList");
   const unlockSummaryEl = document.getElementById("researchUnlockSummary");
   const unlockRowsEl = document.getElementById("researchUnlockRows");
+  const CATALOG_URL = "/static/data/research_catalog.json?v=rc1";
+  const RESEARCH_NODE_WIDTH = 230;
+  const RESEARCH_NODE_HEIGHT = 158;
 
   function slugify(value) {
     return String(value || "")
@@ -76,136 +79,221 @@
     };
   }
 
-  const RESEARCH_CATALOG = {
-    techTypes: [
-      {
-        id: "thrusters",
-        label: "Thrusters",
-        trees: [
-          {
-            id: "thrusters_nuclear_thermal",
-            label: "Nuclear Thermal",
-            description: "Generation path for high-performance NTR propulsion.",
-            nodes: [
-              {
-                id: "early_solid_core_ntr",
-                name: "Early Solid Core NTR",
-                passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
-                unlocks: {
-                  1: { name: "SCN-1 \"Pioneer\"", massT: 20, thrustKN: 250, ispS: 850, reactorLevelRequired: 2 },
-                  4: { name: "SCN-2 \"Frontier\"", massT: 28, thrustKN: 400, ispS: 900, reactorLevelRequired: 3 },
-                },
-              },
-              {
-                id: "advanced_solid_core_ntr",
-                name: "Advanced Solid Core NTR",
-                passive: { stat: "Thrust", perLevel: 2, unit: "%", sign: "+" },
-                unlocks: {
-                  1: { name: "ASCN-1 \"Venture\"", massT: 24, thrustKN: 350, ispS: 950, reactorLevelRequired: 4 },
-                  4: { name: "ASCN-2 \"Atlas\"", massT: 35, thrustKN: 600, ispS: 1000, reactorLevelRequired: 5 },
-                },
-              },
-              {
-                id: "closed_gas_cycle_ntr",
-                name: "Closed Gas Cycle NTR",
-                passive: { stat: "Mass", perLevel: 2, unit: "%", sign: "-" },
-                unlocks: {
-                  1: { name: "CGN-1 \"Helios\"", massT: 40, thrustKN: 500, ispS: 1400, reactorLevelRequired: 6 },
-                  4: { name: "CGN-2 \"Prometheus\"", massT: 55, thrustKN: 900, ispS: 1600, reactorLevelRequired: 7 },
-                },
-              },
-              {
-                id: "open_gas_cycle_ntr",
-                name: "Open Gas Cycle NTR",
-                passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
-                unlocks: {
-                  1: { name: "OGN-1 \"Icarus\"", massT: 60, thrustKN: 800, ispS: 2200, reactorLevelRequired: 8 },
-                  4: { name: "OGN-2 \"Daedalus\"", massT: 80, thrustKN: 1400, ispS: 2500, reactorLevelRequired: 9 },
-                },
-              },
-            ],
-            edges: [
-              ["early_solid_core_ntr", "advanced_solid_core_ntr"],
-              ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
-              ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"],
-            ],
+  function buildFallbackCatalog() {
+    const detailedNuclearThermal = {
+      id: "thrusters_nuclear_thermal",
+      label: "Nuclear Thermal",
+      description: "Generation path for high-performance NTR propulsion.",
+      nodes: [
+        {
+          id: "early_solid_core_ntr",
+          name: "Early Solid Core NTR",
+          passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: "SCN-1 \"Pioneer\"", massT: 20, thrustKN: 250, ispS: 850, reactorLevelRequired: 2 },
+            4: { name: "SCN-2 \"Frontier\"", massT: 28, thrustKN: 400, ispS: 900, reactorLevelRequired: 3 },
           },
-          makeTemplateTree("thrusters", "Cryo"),
-          makeTemplateTree("thrusters", "Solar"),
-          makeTemplateTree("thrusters", "Nuclear Pulse"),
-          makeTemplateTree("thrusters", "Electric"),
-        ],
-      },
-      {
-        id: "reactors",
-        label: "Reactors",
-        trees: [
-          makeTemplateTree("reactors", "Fission"),
-          makeTemplateTree("reactors", "Solar Concentrator"),
-          makeTemplateTree("reactors", "Direct Plasma"),
-          makeTemplateTree("reactors", "Z-Pinch"),
-        ],
-      },
-      {
-        id: "generators",
-        label: "Generators",
-        trees: [
-          makeTemplateTree("generators", "Thermoelectric to Advanced Solid-State Conversion"),
-          makeTemplateTree("generators", "Closed Brayton Cycle (Turbine)"),
-          makeTemplateTree("generators", "Thermionic (Direct Emission)"),
-          makeTemplateTree("generators", "Magnetohydrodynamic (MHD)"),
-        ],
-      },
-      {
-        id: "robonauts",
-        label: "Robonauts",
-        trees: [
-          makeTemplateTree("robonauts", "Raygun"),
-          makeTemplateTree("robonauts", "Missile"),
-          makeTemplateTree("robonauts", "Rover"),
-        ],
-      },
-      {
-        id: "constructors",
-        label: "Constructors",
-        trees: [
-          makeTemplateTree("constructors", "Gravity"),
-          makeTemplateTree("constructors", "Microgravity"),
-          makeTemplateTree("constructors", "Cryovolitile"),
-        ],
-      },
-      {
-        id: "refineries",
-        label: "Refineries",
-        trees: [
-          makeTemplateTree("refineries", "Lithic Processing"),
-          makeTemplateTree("refineries", "Metallurgy"),
-          makeTemplateTree("refineries", "Volatiles & Cryogenics"),
-          makeTemplateTree("refineries", "Nuclear & Exotic"),
-        ],
-      },
-      {
-        id: "radiators",
-        label: "Radiators",
-        trees: [
-          makeTemplateTree("radiators", "Rigid Panels"),
-          makeTemplateTree("radiators", "Liquid Sheet Radiators"),
-          makeTemplateTree("radiators", "Spinning Heat Sink Radiators"),
-          makeTemplateTree("radiators", "Phase Change Radiator"),
-        ],
-      },
-    ],
-  };
+        },
+        {
+          id: "advanced_solid_core_ntr",
+          name: "Advanced Solid Core NTR",
+          passive: { stat: "Thrust", perLevel: 2, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: "ASCN-1 \"Venture\"", massT: 24, thrustKN: 350, ispS: 950, reactorLevelRequired: 4 },
+            4: { name: "ASCN-2 \"Atlas\"", massT: 35, thrustKN: 600, ispS: 1000, reactorLevelRequired: 5 },
+          },
+        },
+        {
+          id: "closed_gas_cycle_ntr",
+          name: "Closed Gas Cycle NTR",
+          passive: { stat: "Mass", perLevel: 2, unit: "%", sign: "-" },
+          unlocks: {
+            1: { name: "CGN-1 \"Helios\"", massT: 40, thrustKN: 500, ispS: 1400, reactorLevelRequired: 6 },
+            4: { name: "CGN-2 \"Prometheus\"", massT: 55, thrustKN: 900, ispS: 1600, reactorLevelRequired: 7 },
+          },
+        },
+        {
+          id: "open_gas_cycle_ntr",
+          name: "Open Gas Cycle NTR",
+          passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: "OGN-1 \"Icarus\"", massT: 60, thrustKN: 800, ispS: 2200, reactorLevelRequired: 8 },
+            4: { name: "OGN-2 \"Daedalus\"", massT: 80, thrustKN: 1400, ispS: 2500, reactorLevelRequired: 9 },
+          },
+        },
+      ],
+      edges: [
+        ["early_solid_core_ntr", "advanced_solid_core_ntr"],
+        ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
+        ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"],
+      ],
+      isTemplate: false,
+    };
+
+    return {
+      techTypes: [
+        {
+          id: "thrusters",
+          label: "Thrusters",
+          trees: [
+            detailedNuclearThermal,
+            makeTemplateTree("thrusters", "Cryo"),
+            makeTemplateTree("thrusters", "Solar"),
+            makeTemplateTree("thrusters", "Nuclear Pulse"),
+            makeTemplateTree("thrusters", "Electric"),
+          ],
+        },
+        {
+          id: "reactors",
+          label: "Reactors",
+          trees: [
+            makeTemplateTree("reactors", "Fission"),
+            makeTemplateTree("reactors", "Solar Concentrator"),
+            makeTemplateTree("reactors", "Direct Plasma"),
+            makeTemplateTree("reactors", "Z-Pinch"),
+          ],
+        },
+        {
+          id: "generators",
+          label: "Generators",
+          trees: [
+            makeTemplateTree("generators", "Thermoelectric to Advanced Solid-State Conversion"),
+            makeTemplateTree("generators", "Closed Brayton Cycle (Turbine)"),
+            makeTemplateTree("generators", "Thermionic (Direct Emission)"),
+            makeTemplateTree("generators", "Magnetohydrodynamic (MHD)"),
+          ],
+        },
+        {
+          id: "robonauts",
+          label: "Robonauts",
+          trees: [
+            makeTemplateTree("robonauts", "Raygun"),
+            makeTemplateTree("robonauts", "Missile"),
+            makeTemplateTree("robonauts", "Rover"),
+          ],
+        },
+        {
+          id: "constructors",
+          label: "Constructors",
+          trees: [
+            makeTemplateTree("constructors", "Gravity"),
+            makeTemplateTree("constructors", "Microgravity"),
+            makeTemplateTree("constructors", "Cryovolitile"),
+          ],
+        },
+        {
+          id: "refineries",
+          label: "Refineries",
+          trees: [
+            makeTemplateTree("refineries", "Lithic Processing"),
+            makeTemplateTree("refineries", "Metallurgy"),
+            makeTemplateTree("refineries", "Volatiles & Cryogenics"),
+            makeTemplateTree("refineries", "Nuclear & Exotic"),
+          ],
+        },
+        {
+          id: "radiators",
+          label: "Radiators",
+          trees: [
+            makeTemplateTree("radiators", "Rigid Panels"),
+            makeTemplateTree("radiators", "Liquid Sheet Radiators"),
+            makeTemplateTree("radiators", "Spinning Heat Sink Radiators"),
+            makeTemplateTree("radiators", "Phase Change Radiator"),
+          ],
+        },
+      ],
+    };
+  }
+
+  let researchCatalog = { techTypes: [] };
 
   const roman = ["I", "II", "III", "IV", "V"];
   const levelsByNode = {};
 
-  let activeTypeId = RESEARCH_CATALOG.techTypes[0]?.id || null;
-  let activeTreeId = RESEARCH_CATALOG.techTypes[0]?.trees?.[0]?.id || null;
-  let selectedNodeId = RESEARCH_CATALOG.techTypes[0]?.trees?.[0]?.nodes?.[0]?.id || null;
+  let activeTypeId = null;
+  let activeTreeId = null;
+  let selectedNodeId = null;
+
+  function withDefaultUnlocks(label) {
+    return {
+      1: { name: `${label} Mk I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+      4: { name: `${label} Mk II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+    };
+  }
+
+  function hydrateTree(typeId, tree) {
+    if (!tree || typeof tree !== "object") return null;
+    if (!tree.template && Array.isArray(tree.nodes) && tree.nodes.length) {
+      return {
+        ...tree,
+        isTemplate: false,
+      };
+    }
+
+    const generated = makeTemplateTree(typeId, tree.label || "Untitled Tree");
+    return {
+      ...generated,
+      ...tree,
+      id: tree.id || generated.id,
+      label: tree.label || generated.label,
+      description:
+        tree.description || `${tree.label || "This"} research line. Placeholder template ready for detailed values.`,
+      nodes: (tree.nodes || generated.nodes).map((node, index) => ({
+        ...generated.nodes[index],
+        ...node,
+        unlocks: {
+          ...withDefaultUnlocks(tree.label || "Tree"),
+          ...(node.unlocks || {}),
+        },
+      })),
+      edges: tree.edges || generated.edges,
+      isTemplate: tree.template !== false,
+    };
+  }
+
+  function hydrateCatalog(rawCatalog) {
+    const techTypes = Array.isArray(rawCatalog?.techTypes) ? rawCatalog.techTypes : [];
+    return {
+      techTypes: techTypes
+        .map((type) => {
+          const trees = Array.isArray(type?.trees) ? type.trees : [];
+          const hydratedTrees = trees
+            .map((tree) => hydrateTree(type.id, tree))
+            .filter(Boolean);
+          if (!hydratedTrees.length) return null;
+          return {
+            id: type.id,
+            label: type.label,
+            trees: hydratedTrees,
+          };
+        })
+        .filter(Boolean),
+    };
+  }
+
+  async function loadCatalog() {
+    try {
+      const resp = await fetch(CATALOG_URL, { cache: "no-store" });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data?.detail || `Failed to load research catalog (${resp.status})`);
+      }
+      return hydrateCatalog(data);
+    } catch (err) {
+      console.warn("research catalog load failed, using fallback", err);
+      return buildFallbackCatalog();
+    }
+  }
+
+  function setInitialStateFromCatalog() {
+    const firstType = researchCatalog.techTypes[0] || null;
+    activeTypeId = firstType?.id || null;
+    activeTreeId = firstType?.trees?.[0]?.id || null;
+    selectedNodeId = firstType?.trees?.[0]?.nodes?.[0]?.id || null;
+  }
 
   function activeType() {
-    return RESEARCH_CATALOG.techTypes.find((type) => type.id === activeTypeId) || RESEARCH_CATALOG.techTypes[0] || null;
+    return researchCatalog.techTypes.find((type) => type.id === activeTypeId) || researchCatalog.techTypes[0] || null;
   }
 
   function activeTree() {
@@ -221,7 +309,7 @@
   }
 
   function initLevels() {
-    RESEARCH_CATALOG.techTypes.forEach((type) => {
+    researchCatalog.techTypes.forEach((type) => {
       type.trees.forEach((tree) => {
         tree.nodes.forEach((node) => {
           if (typeof levelsByNode[node.id] !== "number") levelsByNode[node.id] = 0;
@@ -239,7 +327,7 @@
 
   function renderTypeTabs() {
     typeTabsEl.innerHTML = "";
-    RESEARCH_CATALOG.techTypes.forEach((type) => {
+    researchCatalog.techTypes.forEach((type) => {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = `tab researchSubtab ${type.id === activeTypeId ? "active" : ""}`;
@@ -287,10 +375,10 @@
       const edgeEl = document.createElement("div");
       edgeEl.className = "researchSkillEdge";
 
-      const x1 = Number(fromNode.x) + 150;
-      const y1 = Number(fromNode.y) + 40;
+      const x1 = Number(fromNode.x) + RESEARCH_NODE_WIDTH;
+      const y1 = Number(fromNode.y) + Math.round(RESEARCH_NODE_HEIGHT * 0.5);
       const x2 = Number(toNode.x);
-      const y2 = Number(toNode.y) + 40;
+      const y2 = Number(toNode.y) + Math.round(RESEARCH_NODE_HEIGHT * 0.5);
       const dx = x2 - x1;
       const dy = y2 - y1;
       const width = Math.max(1, Math.hypot(dx, dy));
@@ -331,14 +419,17 @@
   function layoutTree(tree) {
     return tree.nodes.map((node, index) => ({
       ...node,
-      x: 40 + index * 210,
-      y: 72 + (index % 2 === 0 ? 0 : 124),
+      x: 40 + index * 270,
+      y: 84 + (index % 2 === 0 ? 0 : 152),
     }));
   }
 
   function renderTree() {
     const tree = activeTree();
-    if (!tree) return;
+    if (!tree) {
+      treeEl.innerHTML = "";
+      return;
+    }
 
     treeEl.innerHTML = "";
     const layoutNodes = layoutTree(tree);
@@ -408,7 +499,7 @@
     const node = selectedNode();
 
     if (!tree || !node) {
-      infoTitleEl.textContent = "No research tree loaded";
+      infoTitleEl.textContent = "No research data loaded";
       infoTreeEl.textContent = "";
       infoListEl.innerHTML = "";
       unlockRowsEl.innerHTML = "";
@@ -439,9 +530,24 @@
     renderUnlockRows(node, nodeLevel);
   }
 
-  initLevels();
-  renderTypeTabs();
-  renderTreeTabs();
-  renderTree();
-  renderInfo();
+  loadCatalog()
+    .then((catalog) => {
+      researchCatalog = catalog;
+      setInitialStateFromCatalog();
+      initLevels();
+      renderTypeTabs();
+      renderTreeTabs();
+      renderTree();
+      renderInfo();
+    })
+    .catch((error) => {
+      infoTitleEl.textContent = "Research catalog error";
+      infoTreeEl.textContent = error?.message || "Failed to load catalog data.";
+      infoListEl.innerHTML = "";
+      unlockSummaryEl.textContent = "";
+      unlockRowsEl.innerHTML = "";
+      treeEl.innerHTML = "";
+      typeTabsEl.innerHTML = "";
+      treeTabsEl.innerHTML = "";
+    });
 })();
