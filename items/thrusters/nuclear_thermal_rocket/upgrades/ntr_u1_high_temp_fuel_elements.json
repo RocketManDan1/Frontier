@@ -1,0 +1,39 @@
+{
+  "id": "ntr_u1_high_temp_fuel_elements",
+  "name": "High-Temperature Fuel Elements",
+  "tier_between_main": [
+    1,
+    2
+  ],
+  "prerequisites": [
+    "ntr_m1_nerva_solid_core"
+  ],
+  "applies_to_branches": [
+    "solid_core"
+  ],
+  "effects": [
+    {
+      "system": "main",
+      "path": "performance.isp_s",
+      "op": "mul",
+      "value": 1.03
+    },
+    {
+      "system": "main",
+      "path": "performance.max_thrust_kN",
+      "op": "mul",
+      "value": 1.05
+    }
+  ],
+  "tradeoffs": [
+    {
+      "system": "reactor",
+      "path": "build_cost",
+      "op": "mul",
+      "value": 1.1,
+      "note": "Optional economy hook."
+    }
+  ],
+  "unlocks": [],
+  "ui_tags": []
+}

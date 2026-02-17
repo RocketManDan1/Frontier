@@ -1,0 +1,8 @@
+{
+  "id": "biosphere_materials",
+  "name": "Biosphere Materials",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 900,
+  "description": "Atmosphere and agricultural starter feed including trace nutrients and catalytic elements. Total feed ~1.87 t per 1 t output."
+}

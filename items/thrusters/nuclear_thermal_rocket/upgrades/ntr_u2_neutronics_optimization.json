@@ -1,0 +1,25 @@
+{
+  "id": "ntr_u2_neutronics_optimization",
+  "name": "Compact Reflector & Neutronics Optimization",
+  "tier_between_main": [
+    2,
+    3
+  ],
+  "prerequisites": [
+    "ntr_m2_dumbo_folded_flow"
+  ],
+  "applies_to_branches": [
+    "solid_core"
+  ],
+  "effects": [
+    {
+      "system": "main",
+      "path": "power_requirements.min_reactor_rating",
+      "op": "add",
+      "value": -1
+    }
+  ],
+  "tradeoffs": [],
+  "unlocks": [],
+  "ui_tags": []
+}

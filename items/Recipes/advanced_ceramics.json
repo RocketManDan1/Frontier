@@ -1,0 +1,26 @@
+{
+  "recipe_id": "advanced_ceramics",
+  "name": "Produce Advanced Ceramics",
+  "output_item_id": "advanced_ceramics",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "silicate_rock",
+      "qty": 0.63
+    },
+    {
+      "item_id": "aluminum_oxides",
+      "qty": 0.32
+    },
+    {
+      "item_id": "magnesium_oxides",
+      "qty": 0.11
+    }
+  ],
+  "build_time_s": 700,
+  "facility_type": "refinery",
+  "refinery_category": "lithic_processing",
+  "min_tech_tier": 1,
+  "power_kw": 120,
+  "byproducts": []
+}

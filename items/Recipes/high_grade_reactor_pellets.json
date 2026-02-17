@@ -1,0 +1,26 @@
+{
+  "recipe_id": "high_grade_reactor_pellets",
+  "name": "Produce High-Grade Reactor Pellets",
+  "output_item_id": "high_grade_reactor_pellets",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "radioactives",
+      "qty": 150
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.25
+    },
+    {
+      "item_id": "precious_rare_metals",
+      "qty": 0.05
+    }
+  ],
+  "build_time_s": 3600,
+  "facility_type": "refinery",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 900,
+  "byproducts": []
+}

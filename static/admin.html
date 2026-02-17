@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Admin</div>
+            <div class="subtitle">Spawn ships into the simulation</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab active" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="panel pagePanel">
+        <div class="adminGrid">
+          <form id="spawnForm" class="adminForm">
+            <div class="field">
+              <label for="shipName">Ship Name</label>
+              <input id="shipName" name="shipName" type="text" required placeholder="New Vessel" />
+            </div>
+
+            <div class="field">
+              <label for="shipId">Ship ID (optional)</label>
+              <input id="shipId" name="shipId" type="text" placeholder="auto from name" />
+            </div>
+
+            <div class="field">
+              <label for="locationId">Spawn Location</label>
+              <select id="locationId" name="locationId" required></select>
+            </div>
+
+            <div class="field fieldInline">
+              <div>
+                <label for="shipColor">Color</label>
+                <input id="shipColor" name="shipColor" type="color" value="#ffffff" />
+              </div>
+              <div>
+                <label for="shipSize">Size (px)</label>
+                <input id="shipSize" name="shipSize" type="number" min="4" max="36" step="1" value="12" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="shipNotes">Notes (one per line, optional)</label>
+              <textarea id="shipNotes" name="shipNotes" rows="4" placeholder="Ready\nPrototype"></textarea>
+            </div>
+
+            <button type="submit" class="adminBtn">Spawn Ship</button>
+            <div id="adminMsg" class="muted small" style="margin-top:8px;"></div>
+          </form>
+
+          <div class="panel adminSide">
+            <div class="adminSimControls">
+              <div class="titleSmall">Simulation</div>
+              <div id="simStatus" class="muted small">Status: Running</div>
+              <div class="adminSimActions">
+                <button id="pauseSimBtn" type="button" class="btnSecondary">Pause Simulation</button>
+                <button id="resetGameBtn" type="button" class="btnSecondary">Reset Game</button>
+              </div>
+            </div>
+
+            <div class="titleSmall">Recent Ships</div>
+            <ul id="recentShips" class="infoList"></ul>
+
+            <div class="adminAccounts">
+              <div class="titleSmall">Accounts</div>
+
+              <div class="field">
+                <label for="accountUsername">Username</label>
+                <input id="accountUsername" type="text" placeholder="new_user" />
+              </div>
+
+              <div class="field">
+                <label for="accountPassword">Password</label>
+                <input id="accountPassword" type="password" placeholder="password" />
+              </div>
+
+              <div class="adminAccountActions">
+                <button id="createAccountBtn" type="button" class="btnSecondary">Create Account</button>
+                <button id="changePasswordBtn" type="button" class="btnSecondary">Change Password</button>
+                <button id="deleteAccountBtn" type="button" class="btnSecondary">Delete Account</button>
+              </div>
+
+              <div id="accountsMsg" class="muted small" style="margin-top:8px;"></div>
+              <ul id="accountsList" class="infoList"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/admin.js?v=ti3"></script>
+  </body>
+</html>

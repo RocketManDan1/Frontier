@@ -1,0 +1,8 @@
+{
+  "id": "titanium_oxides",
+  "name": "Titanium Oxides",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 4200,
+  "description": "Found in lunar mare regions; enables high-strength alloys and advanced aerospace components."
+}

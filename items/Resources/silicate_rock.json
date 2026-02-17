@@ -1,0 +1,8 @@
+{
+  "id": "silicate_rock",
+  "name": "Silicate Rock",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 2700,
+  "description": "Basaltic crust and regolith; primary bulk material on rocky bodies. Source of oxygen, silicon, and ceramics."
+}

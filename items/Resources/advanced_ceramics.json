@@ -1,0 +1,8 @@
+{
+  "id": "advanced_ceramics",
+  "name": "Advanced Ceramics",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 2800,
+  "description": "Ceramics with mostly melt/sinter losses instead of oxide oxygen reduction losses. Total feed ~1.05 t per 1 t output."
+}

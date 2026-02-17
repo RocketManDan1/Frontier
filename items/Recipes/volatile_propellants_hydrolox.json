@@ -1,0 +1,18 @@
+{
+  "recipe_id": "volatile_propellants_hydrolox",
+  "name": "Produce Volatile Propellants (hydrolox)",
+  "output_item_id": "volatile_propellants_hydrolox",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "water_ice",
+      "qty": 1.46
+    }
+  ],
+  "build_time_s": 600,
+  "facility_type": "refinery",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 1,
+  "power_kw": 140,
+  "byproducts": []
+}

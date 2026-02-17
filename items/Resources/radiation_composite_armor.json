@@ -1,0 +1,8 @@
+{
+  "id": "radiation_composite_armor",
+  "name": "Radiation Composite Armor",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 1800,
+  "description": "Hydrogen-rich shielding laminated with ceramic and neutron-absorbing layers for deep-space radiation hardening. Total feed ~1.93 t per 1 t output."
+}

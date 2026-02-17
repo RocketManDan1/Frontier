@@ -1,0 +1,8 @@
+{
+  "id": "deuterium",
+  "name": "Deuterium",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 160,
+  "description": "Heavy hydrogen isotope extracted from water ice; foundational fusion fuel for D-He3 and D-D reactor chains."
+}

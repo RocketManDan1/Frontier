@@ -1,0 +1,55 @@
+{
+  "template_id": "universal_thruster_v1",
+  "schema_version": "1.0",
+  "tech_category": "nuclear_thermal_rocket",
+  "display_name": "Nuclear Thermal Rocket",
+  "notes": [
+    "One active engine per vessel.",
+    "Reactor thermal power curve: P_th(MW) = 50 * R^2, where R is Reactor Rating 1..10.",
+    "If reactor can't supply an item's P_req, throttle is capped: maxThrottle = min(1, P_th(R)/item.P_req_mw_th).",
+    "ActualThrust = maxThrust * throttle.",
+    "Robotic shielding/hardening mass (optional ship rule): m_shield_t = 0.2 * R."
+  ],
+  "constraints": {
+    "one_active_main_per_vessel": true
+  },
+  "power_interface": {
+    "model": "reactor_thermal",
+    "rating_min": 1,
+    "rating_max": 10,
+    "power_formula": "50 * R^2",
+    "throttle_cap_formula": "min(1, P_th(R) / main.P_req_mw_th)"
+  },
+  "resource_interfaces": {
+    "propellant": {
+      "supported": [
+        "water"
+      ],
+      "default": "water"
+    },
+    "consumables": {
+      "fissiles": {
+        "model": "core_life_years",
+        "properties": {
+          "core_life_years_at_full_power": 5
+        }
+      },
+      "other": {}
+    }
+  },
+  "mainline_files": [
+    "main/ntr_m1_nerva_solid_core.json",
+    "main/ntr_m2_dumbo_folded_flow.json",
+    "main/ntr_m3_particle_bed.json",
+    "main/ntr_m4_advanced_carbide_cermet.json",
+    "main/ntr_m5_closed_cycle_gas_core.json",
+    "main/ntr_m6_open_cycle_gas_core.json"
+  ],
+  "upgrade_files": [
+    "upgrades/ntr_u1_high_temp_fuel_elements.json",
+    "upgrades/ntr_u2_neutronics_optimization.json",
+    "upgrades/ntr_u3_erosion_control.json",
+    "upgrades/ntr_u4_crack_resistant_nozzles.json",
+    "upgrades/ntr_u5_plasma_stability_control.json"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "superconductors",
+  "name": "Superconductors",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 6500,
+  "description": "NbTi/REE-class systems with stabilizers and insulation, including refinement and fabrication losses. Total feed ~1.55 t per 1 t output."
+}

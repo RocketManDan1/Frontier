@@ -1,0 +1,133 @@
+{
+  "template_id": "universal_thruster_v1",
+  "schema_version": "1.0",
+  "tech_category": "<thruster_family_id>",
+  "display_name": "<Thruster Family Name>",
+  "notes": [],
+  "constraints": {
+    "one_active_main_per_vessel": true
+  },
+  "power_interface": {
+    "model": "none_or_custom",
+    "rating_min": null,
+    "rating_max": null,
+    "power_formula": "",
+    "throttle_cap_formula": ""
+  },
+  "resource_interfaces": {
+    "propellant": {
+      "supported": [],
+      "default": ""
+    },
+    "consumables": {
+      "fissiles": {
+        "model": "",
+        "properties": {}
+      },
+      "other": {}
+    }
+  },
+  "mainline": [
+    {
+      "id": "<unique_main_id>",
+      "name": "<Engine Name>",
+      "tier": 1,
+      "branch": "<branch_id>",
+      "mass_t": 0,
+      "performance": {
+        "max_thrust_kN": 0,
+        "isp_s": 0
+      },
+      "power_requirements": {
+        "thermal_mw": null,
+        "electric_mw": null,
+        "min_reactor_rating": null,
+        "min_bus_voltage_kv": null
+      },
+      "consumables": {
+        "reaction_mass": "",
+        "fissiles": {
+          "model": "",
+          "properties": {}
+        }
+      },
+      "ui_tags": []
+    }
+  ],
+  "upgrades": [
+    {
+      "id": "<unique_upgrade_id>",
+      "name": "<Upgrade Name>",
+      "tier_between_main": [
+        1,
+        2
+      ],
+      "prerequisites": [
+        "<main_or_upgrade_id>"
+      ],
+      "applies_to_branches": [
+        "<branch_id>"
+      ],
+      "effects": [
+        {
+          "system": "main",
+          "path": "performance.isp_s",
+          "op": "mul",
+          "value": 1.03
+        }
+      ],
+      "tradeoffs": [],
+      "unlocks": [],
+      "ui_tags": []
+    }
+  ],
+  "compat": {
+    "legacy_research_tree_fields": {
+      "engines": [
+        {
+          "id": "<unique_main_id>",
+          "name": "<Engine Name>",
+          "tier": 1,
+          "engine_mass_t": 0,
+          "min_reactor_rating": null,
+          "P_req_mw_th": null,
+          "isp_s": 0,
+          "max_thrust_kN": 0,
+          "branch": "<branch_id>",
+          "consumables": {
+            "reaction_mass": "",
+            "fissiles": {
+              "model": "",
+              "core_life_years_at_full_power": null
+            }
+          }
+        }
+      ],
+      "upgrades": [
+        {
+          "id": "<unique_upgrade_id>",
+          "name": "<Upgrade Name>",
+          "tier_between_main": [
+            1,
+            2
+          ],
+          "prerequisites": [
+            "<main_or_upgrade_id>"
+          ],
+          "applies_to_branches": [
+            "<branch_id>"
+          ],
+          "effects": [
+            {
+              "stat": "isp_s",
+              "op": "mul",
+              "value": 1.03
+            }
+          ],
+          "tradeoffs": [],
+          "unlocks": []
+        }
+      ]
+    }
+  }
+}

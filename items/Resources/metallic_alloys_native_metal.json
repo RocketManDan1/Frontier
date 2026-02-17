@@ -1,0 +1,8 @@
+{
+  "id": "metallic_alloys_native_metal",
+  "name": "Metallic Alloys (Native Metal)",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 7800,
+  "description": "Iron-nickel metal from differentiated asteroid cores; direct source of structural metal without oxide reduction."
+}

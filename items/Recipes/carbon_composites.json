@@ -1,0 +1,22 @@
+{
+  "recipe_id": "carbon_composites",
+  "name": "Produce Carbon Composites",
+  "output_item_id": "carbon_composites",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 1.33
+    },
+    {
+      "item_id": "silicate_rock",
+      "qty": 0.56
+    }
+  ],
+  "build_time_s": 1000,
+  "facility_type": "factory",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 2,
+  "power_kw": 220,
+  "byproducts": []
+}

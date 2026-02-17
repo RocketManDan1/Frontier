@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Fleet</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Fleet</div>
+            <div class="subtitle">All ships (synced from /api/state)</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab active" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="panel pagePanel">
+        <div class="fleetHeader">
+          <div id="fleetSummary" class="muted">Loading…</div>
+          <div class="muted">Refresh: 1s</div>
+        </div>
+
+        <div class="tableWrap">
+          <table class="fleetTable" id="fleetTable">
+            <thead>
+              <tr>
+                <th>Ship</th>
+                <th>Status</th>
+                <th>Location / Route</th>
+                <th>ETA</th>
+                <th>Δv</th>
+                <th>Path</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/fleet.js?v=ti3"></script>
+  </body>
+</html>

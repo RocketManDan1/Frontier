@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Shipyard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Shipyard</div>
+            <div class="subtitle">Assemble ships from catalog parts or orbital inventory</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab active" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="panel pagePanel shipyardPanel">
+        <div class="shipyardHeader">
+          <div class="field">
+            <label for="shipyardName">Ship Name</label>
+            <input id="shipyardName" type="text" placeholder="New Vessel" />
+          </div>
+          <div class="field">
+            <label for="shipyardSourceLocation">Part Source</label>
+            <select id="shipyardSourceLocation"></select>
+          </div>
+          <div id="shipyardSourceHint" class="muted small">Part source: <b>LEO</b> (catalog supply)</div>
+        </div>
+
+        <div class="shipyardLayout">
+          <section class="shipyardColumn panel">
+            <div class="titleSmall">Parts Garage</div>
+            <div id="shipyardGarage" class="shipyardGarage"></div>
+          </section>
+
+          <section class="shipyardColumn panel">
+            <div class="titleSmall">Ship Stack</div>
+            <div id="shipyardSlots" class="shipyardSlots"></div>
+          </section>
+
+          <section class="shipyardColumn panel">
+            <div class="titleSmall">Derived Stats</div>
+            <ul id="shipyardStats" class="infoList shipyardStats"></ul>
+          </section>
+        </div>
+
+        <div class="shipyardBuildBar">
+          <button id="shipyardBuildBtn" class="btnPrimary" type="button">Build Ship</button>
+          <div id="shipyardMsg" class="muted small"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/shipyard.js?v=sy7"></script>
+  </body>
+</html>

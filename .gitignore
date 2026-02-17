@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+*.log
+.env
+.env.*
+
+# Local virtual environments
+.venv/
+venv/
+
+# OS/editor noise
+.DS_Store
+.vscode/

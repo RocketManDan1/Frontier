@@ -1,0 +1,38 @@
+{
+  "recipe_id": "superconductors",
+  "name": "Produce Superconductors",
+  "output_item_id": "superconductors",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "titanium_oxides",
+      "qty": 0.6
+    },
+    {
+      "item_id": "metallic_alloys_native_metal",
+      "qty": 0.2
+    },
+    {
+      "item_id": "aluminum_oxides",
+      "qty": 0.25
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.35
+    },
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 0.1
+    },
+    {
+      "item_id": "water_ice",
+      "qty": 0.05
+    }
+  ],
+  "build_time_s": 2400,
+  "facility_type": "factory",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 520,
+  "byproducts": []
+}

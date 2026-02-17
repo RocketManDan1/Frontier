@@ -1,0 +1,30 @@
+{
+  "recipe_id": "advanced_aerospace_alloys",
+  "name": "Produce Advanced Aerospace Alloys",
+  "output_item_id": "advanced_aerospace_alloys",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "titanium_oxides",
+      "qty": 0.93
+    },
+    {
+      "item_id": "aluminum_oxides",
+      "qty": 0.64
+    },
+    {
+      "item_id": "magnesium_oxides",
+      "qty": 0.28
+    },
+    {
+      "item_id": "metallic_alloys_native_metal",
+      "qty": 0.06
+    }
+  ],
+  "build_time_s": 1200,
+  "facility_type": "refinery",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 2,
+  "power_kw": 260,
+  "byproducts": []
+}

@@ -1,0 +1,30 @@
+{
+  "recipe_id": "fusion_fuel",
+  "name": "Produce Fusion Fuel",
+  "output_item_id": "fusion_fuel",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "deuterium",
+      "qty": 0.8
+    },
+    {
+      "item_id": "helium_3",
+      "qty": 0.25
+    },
+    {
+      "item_id": "nitrogen_volatiles",
+      "qty": 0.03
+    },
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 0.02
+    }
+  ],
+  "build_time_s": 2200,
+  "facility_type": "factory",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 480,
+  "byproducts": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "structural_alloys",
+  "name": "Structural Alloys",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 7000,
+  "description": "Represents a mostly Fe/Al build alloy; oxygen gets dumped as O2 / slag. Total feed ~1.71 t per 1 t output."
+}

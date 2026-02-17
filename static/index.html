@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Earth–Luna Map</title>
+    <link rel="stylesheet" href="/static/styles.css?v=layout7" />
+  </head>
+
+  <body class="mapPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Earth–Luna Transfers</div>
+            <div class="subtitle">DB-driven locations + precomputed transfer costs</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab active" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="panel overview">
+          <div class="titleSmall">Map Overview</div>
+          <div class="muted small">Visible hierarchy: planets, moons, orbits, ships</div>
+          <div id="mapOverview" class="mapOverview"></div>
+        </div>
+
+        <div id="stage" class="stage"></div>
+
+        <div class="panel info">
+          <div id="shipInfoTabsHost" class="shipInfoTabsHost"></div>
+          <div id="infoTitle" class="titleSmall">Select a ship</div>
+          <div id="infoSubtitle" class="muted"></div>
+          <div id="infoCoords" class="muted small"></div>
+          <ul id="infoList" class="infoList"></ul>
+          <div id="realWorldRef" class="realWorldRef"></div>
+          <div id="actions"></div>
+        </div>
+      </div>
+
+      <div id="zoneJumpBar" class="zoneJumpBar" aria-label="Heliocentric zone quick jump"></div>
+    </div>
+
+    <!-- Pixi: local first, CDN fallback -->
+    <script
+      src="/static/js/pixi.min.js"
+      onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js';">
+    </script>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/app.js?v=ti39"></script>
+  </body>
+</html>

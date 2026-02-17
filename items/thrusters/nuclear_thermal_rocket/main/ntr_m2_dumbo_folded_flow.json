@@ -1,0 +1,29 @@
+{
+  "id": "ntr_m2_dumbo_folded_flow",
+  "name": "DUMBO Folded-Flow Solid Core",
+  "tier": 2,
+  "branch": "solid_core",
+  "mass_t": 2.5,
+  "performance": {
+    "max_thrust_kN": 332,
+    "isp_s": 920
+  },
+  "power_requirements": {
+    "thermal_mw": 1500,
+    "electric_mw": null,
+    "min_reactor_rating": 6,
+    "min_bus_voltage_kv": null
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "ui_tags": [
+    "solid_core"
+  ]
+}

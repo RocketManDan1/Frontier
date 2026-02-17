@@ -1,0 +1,38 @@
+{
+  "recipe_id": "biosphere_materials",
+  "name": "Produce Biosphere Materials",
+  "output_item_id": "biosphere_materials",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "water_ice",
+      "qty": 0.95
+    },
+    {
+      "item_id": "nitrogen_volatiles",
+      "qty": 0.4
+    },
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 0.25
+    },
+    {
+      "item_id": "silicate_rock",
+      "qty": 0.2
+    },
+    {
+      "item_id": "sulfur_compounds",
+      "qty": 0.05
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.02
+    }
+  ],
+  "build_time_s": 1600,
+  "facility_type": "factory",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 2,
+  "power_kw": 280,
+  "byproducts": []
+}

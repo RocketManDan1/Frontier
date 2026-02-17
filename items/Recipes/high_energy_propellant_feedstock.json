@@ -1,0 +1,26 @@
+{
+  "recipe_id": "high_energy_propellant_feedstock",
+  "name": "Produce High-Energy Propellant Feedstock",
+  "output_item_id": "high_energy_propellant_feedstock",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "water_ice",
+      "qty": 1.2
+    },
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 0.55
+    },
+    {
+      "item_id": "nitrogen_volatiles",
+      "qty": 0.2
+    }
+  ],
+  "build_time_s": 1200,
+  "facility_type": "refinery",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 2,
+  "power_kw": 300,
+  "byproducts": []
+}

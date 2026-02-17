@@ -1,0 +1,17 @@
+{
+  "recipe_id": "water_ice_to_water",
+  "name": "Melt Water Ice",
+  "output_item_id": "water",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "water_ice",
+      "qty": 1
+    }
+  ],
+  "build_time_s": 120,
+  "facility_type": "refinery",
+  "min_tech_tier": 1,
+  "power_kw": 25,
+  "byproducts": []
+}

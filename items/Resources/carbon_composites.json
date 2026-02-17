@@ -1,0 +1,8 @@
+{
+  "id": "carbon_composites",
+  "name": "Carbon Composites",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 1600,
+  "description": "Composite material based on polymers/resins with basalt/glass-fiber reinforcement. Total feed ~1.89 t per 1 t output."
+}

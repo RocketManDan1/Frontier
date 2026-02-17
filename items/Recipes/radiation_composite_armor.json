@@ -1,0 +1,34 @@
+{
+  "recipe_id": "radiation_composite_armor",
+  "name": "Produce Radiation Composite Armor",
+  "output_item_id": "radiation_composite_armor",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "water_ice",
+      "qty": 0.95
+    },
+    {
+      "item_id": "silicate_rock",
+      "qty": 0.55
+    },
+    {
+      "item_id": "aluminum_oxides",
+      "qty": 0.15
+    },
+    {
+      "item_id": "carbon_volatiles",
+      "qty": 0.2
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.08
+    }
+  ],
+  "build_time_s": 1800,
+  "facility_type": "factory",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 360,
+  "byproducts": []
+}

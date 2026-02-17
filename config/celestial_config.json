@@ -1,0 +1,337 @@
+{
+  "version": "1.0",
+  "notes": "Solar system bodies and gameplay nodes. Edit this file to tune body positions, orbit markers, and transfer network.",
+  "bodies": [
+    {
+      "id": "sun",
+      "name": "Sun",
+      "group_id": "grp_sun",
+      "symbol": "☉",
+      "wikipedia_title": "Sun",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Sun",
+      "parent_group_id": null,
+      "sort_order": 1,
+      "mass_kg": 1.9885e30,
+      "gravity_m_s2": 274.0,
+      "radius_km": 695700.0,
+      "position": { "type": "fixed", "x_km": 0.0, "y_km": 0.0 }
+    },
+    {
+      "id": "mercury",
+      "name": "Mercury",
+      "group_id": "grp_mercury",
+      "symbol": "☿",
+      "wikipedia_title": "Mercury (planet)",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Mercury_(planet)",
+      "parent_group_id": "grp_sun",
+      "sort_order": 8,
+      "mass_kg": 3.3011e23,
+      "gravity_m_s2": 3.7,
+      "radius_km": 2439.7,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 57909227.0,
+        "angle_deg": -16.0
+      }
+    },
+    {
+      "id": "venus",
+      "name": "Venus",
+      "group_id": "grp_venus",
+      "symbol": "♀",
+      "wikipedia_title": "Venus",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Venus",
+      "parent_group_id": "grp_sun",
+      "sort_order": 9,
+      "mass_kg": 4.8675e24,
+      "gravity_m_s2": 8.87,
+      "radius_km": 6051.8,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 108209475.0,
+        "angle_deg": 11.0
+      }
+    },
+    {
+      "id": "zoozve",
+      "name": "524522 Zoozve",
+      "group_id": "grp_zoozve",
+      "wikipedia_title": "524522 Zoozve",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/524522_Zoozve",
+      "emit_group": false,
+      "sort_order": 100,
+      "mass_kg": 8.5e12,
+      "gravity_m_s2": 0.0002,
+      "radius_km": 1.2,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "venus",
+        "radius_km": 1800000.0,
+        "angle_deg": 37.0
+      }
+    },
+    {
+      "id": "earth",
+      "name": "Earth",
+      "group_id": "grp_earth",
+      "symbol": "⊕",
+      "wikipedia_title": "Earth",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Earth",
+      "parent_group_id": "grp_sun",
+      "sort_order": 10,
+      "mass_kg": 5.9722e24,
+      "gravity_m_s2": 9.81,
+      "radius_km": 6378.137,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 149597870.7,
+        "angle_deg": 0.0
+      }
+    },
+    {
+      "id": "moon",
+      "name": "Luna",
+      "group_id": "grp_moon",
+      "symbol": "☾",
+      "wikipedia_title": "Moon",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Moon",
+      "parent_group_id": "grp_earth",
+      "sort_order": 20,
+      "mass_kg": 7.342e22,
+      "gravity_m_s2": 1.62,
+      "radius_km": 1737.4,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "earth",
+        "radius_km": 384400.0,
+        "angle_deg": 10.0
+      }
+    },
+    {
+      "id": "mars",
+      "name": "Mars",
+      "group_id": "grp_mars",
+      "symbol": "♂",
+      "wikipedia_title": "Mars",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Mars",
+      "parent_group_id": "grp_sun",
+      "sort_order": 30,
+      "mass_kg": 6.4171e23,
+      "gravity_m_s2": 3.71,
+      "radius_km": 3389.5,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 227943824.0,
+        "angle_deg": -7.0
+      }
+    },
+    {
+      "id": "phobos",
+      "name": "Phobos",
+      "group_id": "grp_phobos",
+      "wikipedia_title": "Phobos (moon)",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Phobos_(moon)",
+      "emit_group": false,
+      "sort_order": 100,
+      "mass_kg": 1.0659e16,
+      "gravity_m_s2": 0.0057,
+      "radius_km": 11.2667,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "mars",
+        "radius_km": 9376.0,
+        "angle_deg": 28.0
+      }
+    },
+    {
+      "id": "deimos",
+      "name": "Deimos",
+      "group_id": "grp_deimos",
+      "wikipedia_title": "Deimos (moon)",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Deimos_(moon)",
+      "emit_group": false,
+      "sort_order": 100,
+      "mass_kg": 1.4762e15,
+      "gravity_m_s2": 0.003,
+      "radius_km": 6.2,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "mars",
+        "radius_km": 23463.2,
+        "angle_deg": -12.0
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "grp_mercury_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_mercury",
+      "sort_order": 10,
+      "anchor_body_id": "mercury"
+    },
+    {
+      "id": "grp_venus_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_venus",
+      "sort_order": 10,
+      "anchor_body_id": "venus"
+    },
+    {
+      "id": "grp_venus_asteroids",
+      "name": "Asteroids",
+      "parent_id": "grp_venus",
+      "sort_order": 20,
+      "anchor_body_id": "venus"
+    },
+    {
+      "id": "grp_earth_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_earth",
+      "sort_order": 10,
+      "anchor_body_id": "earth"
+    },
+    {
+      "id": "grp_em_lpoints",
+      "name": "Earth–Luna Lagrange",
+      "parent_id": "grp_earth",
+      "sort_order": 20,
+      "anchor_body_id": "earth"
+    },
+    {
+      "id": "grp_moon_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_moon",
+      "sort_order": 10,
+      "anchor_body_id": "moon"
+    },
+    {
+      "id": "grp_mars_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_mars",
+      "sort_order": 10,
+      "anchor_body_id": "mars"
+    },
+    {
+      "id": "grp_mars_moons",
+      "name": "Moons",
+      "parent_id": "grp_mars",
+      "sort_order": 20,
+      "anchor_body_id": "mars"
+    }
+  ],
+  "orbit_nodes": [
+    { "id": "LEO", "name": "Low Earth Orbit", "parent_id": "grp_earth_orbits", "sort_order": 10, "body_id": "earth", "radius_km": 6778.137, "angle_deg": 0.0 },
+    { "id": "HEO", "name": "High Earth Orbit", "parent_id": "grp_earth_orbits", "sort_order": 20, "body_id": "earth", "radius_km": 26600.0, "angle_deg": 0.0 },
+    { "id": "GEO", "name": "Earth Geostationary", "parent_id": "grp_earth_orbits", "sort_order": 30, "body_id": "earth", "radius_km": 42164.137, "angle_deg": 0.0 },
+    { "id": "LLO", "name": "Low Luna Orbit", "parent_id": "grp_moon_orbits", "sort_order": 10, "body_id": "moon", "radius_km": 1837.4, "angle_deg": 0.0 },
+    { "id": "HLO", "name": "High Luna Orbit", "parent_id": "grp_moon_orbits", "sort_order": 20, "body_id": "moon", "radius_km": 4400.0, "angle_deg": 0.0 },
+    { "id": "MERC_ORB", "name": "Low Mercury Orbit", "parent_id": "grp_mercury_orbits", "sort_order": 10, "body_id": "mercury", "radius_km": 6778.137, "angle_deg": 0.0 },
+    { "id": "MERC_HEO", "name": "High Mercury Orbit", "parent_id": "grp_mercury_orbits", "sort_order": 20, "body_id": "mercury", "radius_km": 26600.0, "angle_deg": 0.0 },
+    { "id": "MERC_GEO", "name": "Mercury Geo-Sync Orbit", "parent_id": "grp_mercury_orbits", "sort_order": 30, "body_id": "mercury", "radius_km": 42164.137, "angle_deg": 0.0 },
+    { "id": "VEN_ORB", "name": "Low Venus Orbit", "parent_id": "grp_venus_orbits", "sort_order": 10, "body_id": "venus", "radius_km": 6778.137, "angle_deg": 0.0 },
+    { "id": "VEN_HEO", "name": "High Venus Orbit", "parent_id": "grp_venus_orbits", "sort_order": 20, "body_id": "venus", "radius_km": 26600.0, "angle_deg": 0.0 },
+    { "id": "VEN_GEO", "name": "Venus Geo-Sync Orbit", "parent_id": "grp_venus_orbits", "sort_order": 30, "body_id": "venus", "radius_km": 42164.137, "angle_deg": 0.0 },
+    { "id": "LMO", "name": "Low Mars Orbit", "parent_id": "grp_mars_orbits", "sort_order": 10, "body_id": "mars", "radius_km": 3639.5, "angle_deg": 0.0 }
+    ,{ "id": "HMO", "name": "High Mars Orbit", "parent_id": "grp_mars_orbits", "sort_order": 20, "body_id": "mars", "radius_km": 26600.0, "angle_deg": 0.0 }
+    ,{ "id": "MGO", "name": "Mars Geo-Sync Orbit", "parent_id": "grp_mars_orbits", "sort_order": 30, "body_id": "mars", "radius_km": 42164.137, "angle_deg": 0.0 }
+  ],
+  "lagrange_systems": [
+    {
+      "id": "earth_moon",
+      "primary_body_id": "earth",
+      "secondary_body_id": "moon",
+      "parent_group_id": "grp_em_lpoints",
+      "points": [
+        { "id": "L1", "name": "L1", "sort_order": 10, "model": "line_primary_plus", "distance_km": 326400.0 },
+        { "id": "L2", "name": "L2", "sort_order": 20, "model": "line_primary_plus", "distance_km": 448900.0 },
+        { "id": "L3", "name": "L3", "sort_order": 30, "model": "line_primary_minus", "distance_km": 381700.0 },
+        { "id": "L4", "name": "L4", "sort_order": 40, "model": "triangle_plus" },
+        { "id": "L5", "name": "L5", "sort_order": 50, "model": "triangle_minus" }
+      ]
+    }
+  ],
+  "markers": [
+    { "id": "SUN", "name": "Sun", "parent_id": "grp_sun", "sort_order": 1, "body_id": "sun" },
+    { "id": "ZOOZVE", "name": "524522 Zoozve", "parent_id": "grp_venus_asteroids", "sort_order": 10, "body_id": "zoozve" },
+    { "id": "PHOBOS", "name": "Phobos", "parent_id": "grp_mars_moons", "sort_order": 20, "body_id": "phobos" },
+    { "id": "DEIMOS", "name": "Deimos", "parent_id": "grp_mars_moons", "sort_order": 30, "body_id": "deimos" }
+  ],
+  "transfer_edges": [
+    { "from_id": "LEO", "to_id": "HEO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "HEO", "to_id": "LEO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "HEO", "to_id": "GEO", "dv_m_s": 1200, "tof_s": 14400 },
+    { "from_id": "GEO", "to_id": "HEO", "dv_m_s": 700, "tof_s": 14400 },
+    { "from_id": "LEO", "to_id": "GEO", "dv_m_s": 1800, "tof_s": 21600 },
+    { "from_id": "GEO", "to_id": "LEO", "dv_m_s": 900, "tof_s": 21600 },
+    { "from_id": "GEO", "to_id": "L1", "dv_m_s": 1200, "tof_s": 43200 },
+    { "from_id": "L1", "to_id": "GEO", "dv_m_s": 500, "tof_s": 43200 },
+    { "from_id": "L1", "to_id": "L2", "dv_m_s": 150, "tof_s": 21600 },
+    { "from_id": "L2", "to_id": "L1", "dv_m_s": 150, "tof_s": 21600 },
+    { "from_id": "L1", "to_id": "L4", "dv_m_s": 250, "tof_s": 86400 },
+    { "from_id": "L4", "to_id": "L1", "dv_m_s": 250, "tof_s": 86400 },
+    { "from_id": "L1", "to_id": "L5", "dv_m_s": 250, "tof_s": 86400 },
+    { "from_id": "L5", "to_id": "L1", "dv_m_s": 250, "tof_s": 86400 },
+    { "from_id": "L1", "to_id": "L3", "dv_m_s": 450, "tof_s": 129600 },
+    { "from_id": "L3", "to_id": "L1", "dv_m_s": 450, "tof_s": 129600 },
+    { "from_id": "L1", "to_id": "LLO", "dv_m_s": 900, "tof_s": 21600 },
+    { "from_id": "LLO", "to_id": "L1", "dv_m_s": 900, "tof_s": 21600 },
+    { "from_id": "LLO", "to_id": "HLO", "dv_m_s": 450, "tof_s": 7200 },
+    { "from_id": "HLO", "to_id": "LLO", "dv_m_s": 450, "tof_s": 7200 },
+    { "from_id": "L2", "to_id": "HLO", "dv_m_s": 900, "tof_s": 21600 },
+    { "from_id": "HLO", "to_id": "L2", "dv_m_s": 900, "tof_s": 21600 },
+
+    { "from_id": "MERC_ORB", "to_id": "MERC_HEO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "MERC_HEO", "to_id": "MERC_ORB", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "MERC_HEO", "to_id": "MERC_GEO", "dv_m_s": 1200, "tof_s": 14400 },
+    { "from_id": "MERC_GEO", "to_id": "MERC_HEO", "dv_m_s": 700, "tof_s": 14400 },
+    { "from_id": "MERC_ORB", "to_id": "MERC_GEO", "dv_m_s": 1800, "tof_s": 21600 },
+    { "from_id": "MERC_GEO", "to_id": "MERC_ORB", "dv_m_s": 900, "tof_s": 21600 },
+
+    { "from_id": "VEN_ORB", "to_id": "VEN_HEO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "VEN_HEO", "to_id": "VEN_ORB", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "VEN_HEO", "to_id": "VEN_GEO", "dv_m_s": 1200, "tof_s": 14400 },
+    { "from_id": "VEN_GEO", "to_id": "VEN_HEO", "dv_m_s": 700, "tof_s": 14400 },
+    { "from_id": "VEN_ORB", "to_id": "VEN_GEO", "dv_m_s": 1800, "tof_s": 21600 },
+    { "from_id": "VEN_GEO", "to_id": "VEN_ORB", "dv_m_s": 900, "tof_s": 21600 },
+
+    { "from_id": "LMO", "to_id": "HMO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "HMO", "to_id": "LMO", "dv_m_s": 900, "tof_s": 7200 },
+    { "from_id": "HMO", "to_id": "MGO", "dv_m_s": 1200, "tof_s": 14400 },
+    { "from_id": "MGO", "to_id": "HMO", "dv_m_s": 700, "tof_s": 14400 },
+    { "from_id": "LMO", "to_id": "MGO", "dv_m_s": 1800, "tof_s": 21600 },
+    { "from_id": "MGO", "to_id": "LMO", "dv_m_s": 900, "tof_s": 21600 },
+
+    { "from_id": "LMO", "to_id": "PHOBOS", "dv_m_s": 889, "tof_s": 5122 },
+    { "from_id": "PHOBOS", "to_id": "LMO", "dv_m_s": 889, "tof_s": 5122 },
+    { "from_id": "LMO", "to_id": "DEIMOS", "dv_m_s": 1264, "tof_s": 17048 },
+    { "from_id": "DEIMOS", "to_id": "LMO", "dv_m_s": 1264, "tof_s": 17048 },
+    { "from_id": "PHOBOS", "to_id": "DEIMOS", "dv_m_s": 727, "tof_s": 12830 },
+    { "from_id": "DEIMOS", "to_id": "PHOBOS", "dv_m_s": 727, "tof_s": 12830 },
+
+    { "from_id": "LEO", "to_id": "MERC_ORB", "dv_m_s": 11000, "tof_s": 11059200 },
+    { "from_id": "MERC_ORB", "to_id": "LEO", "dv_m_s": 9500, "tof_s": 11059200 },
+    { "from_id": "LEO", "to_id": "VEN_ORB", "dv_m_s": 5800, "tof_s": 12614400 },
+    { "from_id": "VEN_ORB", "to_id": "LEO", "dv_m_s": 4300, "tof_s": 12614400 },
+    { "from_id": "LEO", "to_id": "LMO", "dv_m_s": 6500, "tof_s": 22464000 },
+    { "from_id": "LMO", "to_id": "LEO", "dv_m_s": 5200, "tof_s": 22464000 },
+
+    { "from_id": "LEO", "to_id": "SUN", "dv_m_s": 28000, "tof_s": 11232000 },
+    { "from_id": "SUN", "to_id": "LEO", "dv_m_s": 28000, "tof_s": 11232000 },
+    { "from_id": "MERC_ORB", "to_id": "SUN", "dv_m_s": 12000, "tof_s": 4752000 },
+    { "from_id": "SUN", "to_id": "MERC_ORB", "dv_m_s": 12000, "tof_s": 4752000 },
+    { "from_id": "VEN_ORB", "to_id": "SUN", "dv_m_s": 19000, "tof_s": 7776000 },
+    { "from_id": "SUN", "to_id": "VEN_ORB", "dv_m_s": 19000, "tof_s": 7776000 },
+    { "from_id": "LMO", "to_id": "SUN", "dv_m_s": 22000, "tof_s": 15552000 },
+    { "from_id": "SUN", "to_id": "LMO", "dv_m_s": 22000, "tof_s": 15552000 },
+
+    { "from_id": "VEN_ORB", "to_id": "ZOOZVE", "dv_m_s": 1450, "tof_s": 259200 },
+    { "from_id": "ZOOZVE", "to_id": "VEN_ORB", "dv_m_s": 900, "tof_s": 259200 },
+    { "from_id": "VEN_HEO", "to_id": "ZOOZVE", "dv_m_s": 900, "tof_s": 172800 },
+    { "from_id": "ZOOZVE", "to_id": "VEN_HEO", "dv_m_s": 700, "tof_s": 172800 }
+  ]
+}

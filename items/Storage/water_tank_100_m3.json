@@ -1,0 +1,9 @@
+{
+  "id": "water_tank_100_m3",
+  "name": "Water Tank 100 m3",
+  "type": "storage",
+  "category_id": "storage",
+  "resource_id": "water",
+  "capacity_m3": 100,
+  "mass_kg": 0
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://earthmoon-db.local/celestial_config.schema.json",
+  "title": "EarthMoon Celestial Config",
+  "type": "object",
+  "required": ["version", "bodies", "groups", "orbit_nodes", "lagrange_systems", "markers", "transfer_edges"],
+  "properties": {
+    "version": { "type": "string" },
+    "notes": { "type": "string" },
+    "bodies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "group_id", "sort_order", "position"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "group_id": { "type": "string" },
+          "parent_group_id": { "type": ["string", "null"] },
+          "sort_order": { "type": "integer" },
+          "emit_group": { "type": "boolean" },
+          "symbol": { "type": "string" },
+          "wikipedia_title": { "type": "string" },
+          "wikipedia_url": { "type": "string" },
+          "mass_kg": { "type": "number" },
+          "gravity_m_s2": { "type": "number" },
+          "radius_km": { "type": "number" },
+          "position": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "enum": ["fixed", "polar_from_body"] },
+              "x_km": { "type": "number" },
+              "y_km": { "type": "number" },
+              "center_body_id": { "type": "string" },
+              "radius_km": { "type": "number" },
+              "angle_deg": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "sort_order"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "parent_id": { "type": ["string", "null"] },
+          "sort_order": { "type": "integer" },
+          "symbol": { "type": "string" },
+          "wikipedia_title": { "type": "string" },
+          "wikipedia_url": { "type": "string" },
+          "anchor_body_id": { "type": "string" },
+          "offset_x_km": { "type": "number" },
+          "offset_y_km": { "type": "number" },
+          "x_km": { "type": "number" },
+          "y_km": { "type": "number" }
+        }
+      }
+    },
+    "orbit_nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol": { "type": "string" },
+          "wikipedia_title": { "type": "string" },
+          "wikipedia_url": { "type": "string" }
+        }
+      }
+    },
+    "lagrange_systems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "symbol": { "type": "string" },
+                "wikipedia_title": { "type": "string" },
+                "wikipedia_url": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "symbol": { "type": "string" },
+          "wikipedia_title": { "type": "string" },
+          "wikipedia_url": { "type": "string" }
+        }
+      }
+    },
+    "transfer_edges": { "type": "array" }
+  }
+}

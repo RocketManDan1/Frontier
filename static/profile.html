@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Profile</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Profile</div>
+            <div class="subtitle">Player account details</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab active" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="panel pagePanel profilePanel">
+        <div class="titleSmall">Player Profile</div>
+        <div id="profileInfo" class="muted">Loading profile…</div>
+        <div>
+          <button id="logoutBtn" class="btnSecondary" type="button">Log Out</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/profile.js?v=pf1"></script>
+  </body>
+</html>

@@ -1,0 +1,159 @@
+import sqlite3
+import time
+from dataclasses import dataclass
+from typing import Callable, List
+
+
+@dataclass(frozen=True)
+class Migration:
+    migration_id: str
+    description: str
+    apply: Callable[[sqlite3.Connection], None]
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
+    return {str(r["name"]) for r in rows}
+
+
+def _safe_add_column(conn: sqlite3.Connection, table: str, name: str, coltype: str) -> None:
+    if name in _table_columns(conn, table):
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {coltype};")
+
+
+def _migration_0001_initial(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS locations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          parent_id TEXT REFERENCES locations(id) ON DELETE CASCADE,
+          is_group INTEGER NOT NULL DEFAULT 0,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          x REAL NOT NULL DEFAULT 0,
+          y REAL NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_locations_parent ON locations(parent_id);
+
+        CREATE TABLE IF NOT EXISTS transfer_edges (
+          from_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          to_id   TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          dv_m_s  REAL NOT NULL,
+          tof_s   REAL NOT NULL,
+          PRIMARY KEY (from_id, to_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_edges_from ON transfer_edges(from_id);
+
+        CREATE TABLE IF NOT EXISTS transfer_matrix (
+          from_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          to_id   TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          dv_m_s  REAL NOT NULL,
+          tof_s   REAL NOT NULL,
+          path_json TEXT NOT NULL DEFAULT '[]',
+          PRIMARY KEY (from_id, to_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_matrix_from ON transfer_matrix(from_id);
+
+        CREATE TABLE IF NOT EXISTS transfer_meta (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+          username TEXT PRIMARY KEY,
+          password_hash TEXT NOT NULL,
+          is_admin INTEGER NOT NULL DEFAULT 0,
+          created_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+          token TEXT PRIMARY KEY,
+          username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+          created_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
+
+        CREATE TABLE IF NOT EXISTS ships (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          shape TEXT NOT NULL DEFAULT 'triangle',
+          color TEXT NOT NULL DEFAULT '#ffffff',
+          size_px REAL NOT NULL DEFAULT 12,
+          notes_json TEXT NOT NULL DEFAULT '[]'
+        );
+        """
+    )
+
+
+def _migration_0002_ships_runtime_columns(conn: sqlite3.Connection) -> None:
+    _safe_add_column(conn, "ships", "location_id", "TEXT")
+    _safe_add_column(conn, "ships", "from_location_id", "TEXT")
+    _safe_add_column(conn, "ships", "to_location_id", "TEXT")
+    _safe_add_column(conn, "ships", "departed_at", "REAL")
+    _safe_add_column(conn, "ships", "arrives_at", "REAL")
+    _safe_add_column(conn, "ships", "transfer_path_json", "TEXT NOT NULL DEFAULT '[]'")
+    _safe_add_column(conn, "ships", "dv_planned_m_s", "REAL")
+    _safe_add_column(conn, "ships", "dock_slot", "INTEGER")
+    _safe_add_column(conn, "ships", "parts_json", "TEXT NOT NULL DEFAULT '[]'")
+    _safe_add_column(conn, "ships", "fuel_kg", "REAL NOT NULL DEFAULT 0")
+    _safe_add_column(conn, "ships", "fuel_capacity_kg", "REAL NOT NULL DEFAULT 0")
+    _safe_add_column(conn, "ships", "dry_mass_kg", "REAL NOT NULL DEFAULT 0")
+    _safe_add_column(conn, "ships", "isp_s", "REAL NOT NULL DEFAULT 0")
+
+
+def _migration_0003_location_inventory(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS location_inventory_stacks (
+          location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          stack_type TEXT NOT NULL,
+          stack_key TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 0,
+          mass_kg REAL NOT NULL DEFAULT 0,
+          volume_m3 REAL NOT NULL DEFAULT 0,
+          payload_json TEXT NOT NULL DEFAULT '{}',
+          updated_at REAL NOT NULL,
+          PRIMARY KEY (location_id, stack_type, stack_key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_location_inventory_lookup
+          ON location_inventory_stacks(location_id, stack_type, item_id);
+        """
+    )
+
+
+def _migrations() -> List[Migration]:
+    return [
+        Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
+        Migration("0002_ships_runtime_columns", "Add ships runtime/stat columns", _migration_0002_ships_runtime_columns),
+    Migration("0003_location_inventory", "Add scalable location inventory stack table", _migration_0003_location_inventory),
+    ]
+
+
+def apply_migrations(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          migration_id TEXT PRIMARY KEY,
+          description TEXT NOT NULL,
+          applied_at REAL NOT NULL
+        );
+        """
+    )
+
+    applied = {
+        str(r["migration_id"])
+        for r in conn.execute("SELECT migration_id FROM schema_migrations").fetchall()
+    }
+
+    for migration in _migrations():
+        if migration.migration_id in applied:
+            continue
+        migration.apply(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations (migration_id,description,applied_at) VALUES (?,?,?)",
+            (migration.migration_id, migration.description, time.time()),
+        )

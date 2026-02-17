@@ -1,0 +1,8 @@
+{
+  "id": "megastructure_mass",
+  "name": "Megastructure Mass",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 1700,
+  "description": "Bulk construction feedstock using ice-rock composites, basalt fiber mass, and sulfur binder for high-throughput builds. Total feed ~1.75 t per 1 t output."
+}

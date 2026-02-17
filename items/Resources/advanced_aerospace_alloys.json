@@ -1,0 +1,8 @@
+{
+  "id": "advanced_aerospace_alloys",
+  "name": "Advanced Aerospace Alloys",
+  "type": "resource",
+  "category_id": "finished_material",
+  "mass_per_m3_kg": 4500,
+  "description": "Ti/Al/Mg-heavy advanced alloy for engines and lightweight structures. Total feed ~1.90 t per 1 t output."
+}

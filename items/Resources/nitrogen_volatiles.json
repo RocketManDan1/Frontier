@@ -1,0 +1,8 @@
+{
+  "id": "nitrogen_volatiles",
+  "name": "Nitrogen Volatiles",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 800,
+  "description": "Nitrogen-rich ices or liquids; required for atmosphere creation, agriculture, and life support."
+}

@@ -1,0 +1,8 @@
+{
+  "id": "water_ice",
+  "name": "Water Ice",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 900,
+  "description": "Frozen H2O found in lunar poles, Mars, and outer moons; critical for life support and rocket fuel production."
+}

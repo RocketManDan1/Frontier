@@ -1,0 +1,29 @@
+{
+  "id": "ntr_m6_open_cycle_gas_core",
+  "name": "Open-Cycle Gas Core",
+  "tier": 6,
+  "branch": "gas_core_open",
+  "mass_t": 10.0,
+  "performance": {
+    "max_thrust_kN": 340,
+    "isp_s": 3000
+  },
+  "power_requirements": {
+    "thermal_mw": 5000,
+    "electric_mw": null,
+    "min_reactor_rating": 10,
+    "min_bus_voltage_kv": null
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "ui_tags": [
+    "gas_core_open"
+  ]
+}

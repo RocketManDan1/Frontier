@@ -1,0 +1,8 @@
+{
+  "id": "helium_3",
+  "name": "Helium-3",
+  "type": "resource",
+  "category_id": "raw_material",
+  "mass_per_m3_kg": 60,
+  "description": "Rare light isotope gas harvested from gas giant atmospheres or trace regolith deposits; primary fuel component for advanced aneutronic fusion systems."
+}

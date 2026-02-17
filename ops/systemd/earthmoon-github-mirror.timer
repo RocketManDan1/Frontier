@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Earthmoon GitHub mirror hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=earthmoon-github-mirror.service
+
+[Install]
+WantedBy=timers.target

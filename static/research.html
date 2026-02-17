@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Research</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Research</div>
+            <div class="subtitle">Technology progression and unlock planning</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab active" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="panel pagePanel researchPagePanel">
+        <div id="researchSubtabs" class="researchSubtabs" role="tablist" aria-label="Research categories"></div>
+
+        <div class="researchLayout">
+          <div id="researchViewport" class="researchViewport" aria-label="Research tree canvas">
+            <div id="researchTree" class="researchTree"></div>
+          </div>
+
+          <div class="researchInfo panel">
+            <div id="researchInfoTitle" class="titleSmall">Select a technology</div>
+            <div id="researchInfoCategory" class="muted small"></div>
+            <ul id="researchInfoList" class="infoList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/clock.js?v=ti2"></script>
+    <script src="/static/js/research.js?v=rs1"></script>
+  </body>
+</html>

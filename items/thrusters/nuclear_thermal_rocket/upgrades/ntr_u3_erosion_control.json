@@ -1,0 +1,39 @@
+{
+  "id": "ntr_u3_erosion_control",
+  "name": "Particle Bed Containment & Erosion Control",
+  "tier_between_main": [
+    3,
+    4
+  ],
+  "prerequisites": [
+    "ntr_m3_particle_bed"
+  ],
+  "applies_to_branches": [
+    "solid_core"
+  ],
+  "effects": [
+    {
+      "system": "main",
+      "path": "performance.isp_s",
+      "op": "mul",
+      "value": 1.05
+    }
+  ],
+  "tradeoffs": [
+    {
+      "system": "main",
+      "path": "performance.max_thrust_kN",
+      "op": "mul",
+      "value": 0.95
+    },
+    {
+      "system": "fissiles",
+      "path": "burn_rate",
+      "op": "mul",
+      "value": 0.9,
+      "note": "Interpreted as 10% longer core life at equal usage."
+    }
+  ],
+  "unlocks": [],
+  "ui_tags": []
+}
