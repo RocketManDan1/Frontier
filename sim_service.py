@@ -52,3 +52,21 @@ def reset_simulation_clock() -> None:
         _REAL_TIME_ANCHOR_S = now_real_s
         _GAME_TIME_ANCHOR_S = RESET_GAME_EPOCH_S
         _SIMULATION_PAUSED = False
+
+
+def export_simulation_state() -> dict:
+    with _SIMULATION_LOCK:
+        return {
+            "real_time_anchor_s": float(_REAL_TIME_ANCHOR_S),
+            "game_time_anchor_s": float(_GAME_TIME_ANCHOR_S),
+            "paused": bool(_SIMULATION_PAUSED),
+        }
+
+
+def import_simulation_state(real_time_anchor_s: float, game_time_anchor_s: float, paused: bool) -> None:
+    global _REAL_TIME_ANCHOR_S, _GAME_TIME_ANCHOR_S, _SIMULATION_PAUSED
+
+    with _SIMULATION_LOCK:
+        _REAL_TIME_ANCHOR_S = float(real_time_anchor_s)
+        _GAME_TIME_ANCHOR_S = float(game_time_anchor_s)
+        _SIMULATION_PAUSED = bool(paused)

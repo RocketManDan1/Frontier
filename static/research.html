@@ -13,7 +13,7 @@
         <div class="topbar">
           <div>
             <div class="title">Research</div>
-            <div class="subtitle">Technology progression and unlock planning</div>
+            <div class="subtitle">Skillbook-style progression for organizational technology</div>
           </div>
 
           <nav class="tabs">
@@ -28,17 +28,25 @@
       </div>
 
       <div class="panel pagePanel researchPagePanel">
-        <div id="researchSubtabs" class="researchSubtabs" role="tablist" aria-label="Research categories"></div>
+        <div id="researchTypeTabs" class="researchSubtabs" role="tablist" aria-label="Technology types"></div>
+        <div id="researchTreeTabs" class="researchSubtabs" role="tablist" aria-label="Research trees"></div>
 
         <div class="researchLayout">
-          <div id="researchViewport" class="researchViewport" aria-label="Research tree canvas">
-            <div id="researchTree" class="researchTree"></div>
+          <div class="researchViewport" aria-label="Research tree">
+            <div id="researchTree" class="researchSkillTree"></div>
           </div>
 
-          <div class="researchInfo panel">
-            <div id="researchInfoTitle" class="titleSmall">Select a technology</div>
-            <div id="researchInfoCategory" class="muted small"></div>
-            <ul id="researchInfoList" class="infoList"></ul>
+          <div class="researchSidebar">
+            <div class="researchInfo panel">
+              <div id="researchInfoTitle" class="titleSmall">Select a research node</div>
+              <div id="researchInfoTree" class="muted small"></div>
+              <ul id="researchInfoList" class="infoList"></ul>
+            </div>
+            <div class="panel researchUnlockPanel">
+              <div class="titleSmall">Unlocks</div>
+              <div id="researchUnlockSummary" class="muted small">Level I and IV unlock item variants.</div>
+              <div id="researchUnlockRows" class="researchUnlockRows"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -46,6 +54,6 @@
 
     <script src="/static/js/auth.js?v=au1"></script>
     <script src="/static/js/clock.js?v=ti2"></script>
-    <script src="/static/js/research.js?v=rs1"></script>
+    <script src="/static/js/research.js?v=rs2"></script>
   </body>
 </html>

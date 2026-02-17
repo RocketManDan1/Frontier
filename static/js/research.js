@@ -1,272 +1,447 @@
 (function () {
-  const subtabsEl = document.getElementById("researchSubtabs");
-  const viewportEl = document.getElementById("researchViewport");
+  const typeTabsEl = document.getElementById("researchTypeTabs");
+  const treeTabsEl = document.getElementById("researchTreeTabs");
   const treeEl = document.getElementById("researchTree");
   const infoTitleEl = document.getElementById("researchInfoTitle");
-  const infoCategoryEl = document.getElementById("researchInfoCategory");
+  const infoTreeEl = document.getElementById("researchInfoTree");
   const infoListEl = document.getElementById("researchInfoList");
+  const unlockSummaryEl = document.getElementById("researchUnlockSummary");
+  const unlockRowsEl = document.getElementById("researchUnlockRows");
 
-  let researchPayload = { categories: [], trees: {} };
-  let activeCategory = "thrusters";
-  let selectedTechId = null;
-
-  const pan = { x: 60, y: 60, dragging: false, lastX: 0, lastY: 0 };
-
-  function nodeMetrics(tech) {
-    const kind = String(tech?.kind || "").toLowerCase();
-    if (kind === "upgrade") return { width: 164, height: 42 };
-    return { width: 216, height: 56 };
+  function slugify(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
   }
 
-  function setTreeSummary(tree) {
-    const categoryLabel = (researchPayload.categories || []).find((c) => c.id === activeCategory)?.label || "Research";
-    const meta = tree && typeof tree === "object" ? (tree.meta || {}) : {};
-    const connectivity = meta.connectivity && typeof meta.connectivity === "object" ? meta.connectivity : {};
-    const disconnected = Array.isArray(connectivity.disconnected_nodes) ? connectivity.disconnected_nodes : [];
-
-    infoTitleEl.textContent = "Select a technology";
-    infoCategoryEl.textContent = categoryLabel;
-    infoListEl.innerHTML = "";
-
-    const bullets = [
-      `Layout: ${meta.layout || "custom"}`,
-      `Connected: ${connectivity.connected === false ? "No" : "Yes"}`,
-      `Disconnected nodes: ${disconnected.length ? disconnected.join(", ") : "none"}`,
+  function makeTemplateTree(typeId, label) {
+    const treeId = `${typeId}_${slugify(label)}`;
+    const nodeIds = [
+      `${treeId}_core`,
+      `${treeId}_systems`,
+      `${treeId}_integration`,
+      `${treeId}_mastery`,
     ];
 
-    bullets.forEach((text) => {
-      const li = document.createElement("li");
-      li.textContent = text;
-      infoListEl.appendChild(li);
+    return {
+      id: treeId,
+      label,
+      description: `${label} research line. Placeholder template ready for detailed values.`,
+      nodes: [
+        {
+          id: nodeIds[0],
+          name: "Core Principles",
+          passive: { stat: "Research Speed", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: `${label} Mk I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+            4: { name: `${label} Mk II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+          },
+        },
+        {
+          id: nodeIds[1],
+          name: "Advanced Systems",
+          passive: { stat: "Efficiency", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: `${label} Variant I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+            4: { name: `${label} Variant II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+          },
+        },
+        {
+          id: nodeIds[2],
+          name: "Industrial Integration",
+          passive: { stat: "Output", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: `${label} Production I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+            4: { name: `${label} Production II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+          },
+        },
+        {
+          id: nodeIds[3],
+          name: "Field Mastery",
+          passive: { stat: "Reliability", perLevel: 1, unit: "%", sign: "+" },
+          unlocks: {
+            1: { name: `${label} Expert I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+            4: { name: `${label} Expert II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
+          },
+        },
+      ],
+      edges: [
+        [nodeIds[0], nodeIds[1]],
+        [nodeIds[1], nodeIds[2]],
+        [nodeIds[2], nodeIds[3]],
+      ],
+      isTemplate: true,
+    };
+  }
+
+  const RESEARCH_CATALOG = {
+    techTypes: [
+      {
+        id: "thrusters",
+        label: "Thrusters",
+        trees: [
+          {
+            id: "thrusters_nuclear_thermal",
+            label: "Nuclear Thermal",
+            description: "Generation path for high-performance NTR propulsion.",
+            nodes: [
+              {
+                id: "early_solid_core_ntr",
+                name: "Early Solid Core NTR",
+                passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
+                unlocks: {
+                  1: { name: "SCN-1 \"Pioneer\"", massT: 20, thrustKN: 250, ispS: 850, reactorLevelRequired: 2 },
+                  4: { name: "SCN-2 \"Frontier\"", massT: 28, thrustKN: 400, ispS: 900, reactorLevelRequired: 3 },
+                },
+              },
+              {
+                id: "advanced_solid_core_ntr",
+                name: "Advanced Solid Core NTR",
+                passive: { stat: "Thrust", perLevel: 2, unit: "%", sign: "+" },
+                unlocks: {
+                  1: { name: "ASCN-1 \"Venture\"", massT: 24, thrustKN: 350, ispS: 950, reactorLevelRequired: 4 },
+                  4: { name: "ASCN-2 \"Atlas\"", massT: 35, thrustKN: 600, ispS: 1000, reactorLevelRequired: 5 },
+                },
+              },
+              {
+                id: "closed_gas_cycle_ntr",
+                name: "Closed Gas Cycle NTR",
+                passive: { stat: "Mass", perLevel: 2, unit: "%", sign: "-" },
+                unlocks: {
+                  1: { name: "CGN-1 \"Helios\"", massT: 40, thrustKN: 500, ispS: 1400, reactorLevelRequired: 6 },
+                  4: { name: "CGN-2 \"Prometheus\"", massT: 55, thrustKN: 900, ispS: 1600, reactorLevelRequired: 7 },
+                },
+              },
+              {
+                id: "open_gas_cycle_ntr",
+                name: "Open Gas Cycle NTR",
+                passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
+                unlocks: {
+                  1: { name: "OGN-1 \"Icarus\"", massT: 60, thrustKN: 800, ispS: 2200, reactorLevelRequired: 8 },
+                  4: { name: "OGN-2 \"Daedalus\"", massT: 80, thrustKN: 1400, ispS: 2500, reactorLevelRequired: 9 },
+                },
+              },
+            ],
+            edges: [
+              ["early_solid_core_ntr", "advanced_solid_core_ntr"],
+              ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
+              ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"],
+            ],
+          },
+          makeTemplateTree("thrusters", "Cryo"),
+          makeTemplateTree("thrusters", "Solar"),
+          makeTemplateTree("thrusters", "Nuclear Pulse"),
+          makeTemplateTree("thrusters", "Electric"),
+        ],
+      },
+      {
+        id: "reactors",
+        label: "Reactors",
+        trees: [
+          makeTemplateTree("reactors", "Fission"),
+          makeTemplateTree("reactors", "Solar Concentrator"),
+          makeTemplateTree("reactors", "Direct Plasma"),
+          makeTemplateTree("reactors", "Z-Pinch"),
+        ],
+      },
+      {
+        id: "generators",
+        label: "Generators",
+        trees: [
+          makeTemplateTree("generators", "Thermoelectric to Advanced Solid-State Conversion"),
+          makeTemplateTree("generators", "Closed Brayton Cycle (Turbine)"),
+          makeTemplateTree("generators", "Thermionic (Direct Emission)"),
+          makeTemplateTree("generators", "Magnetohydrodynamic (MHD)"),
+        ],
+      },
+      {
+        id: "robonauts",
+        label: "Robonauts",
+        trees: [
+          makeTemplateTree("robonauts", "Raygun"),
+          makeTemplateTree("robonauts", "Missile"),
+          makeTemplateTree("robonauts", "Rover"),
+        ],
+      },
+      {
+        id: "constructors",
+        label: "Constructors",
+        trees: [
+          makeTemplateTree("constructors", "Gravity"),
+          makeTemplateTree("constructors", "Microgravity"),
+          makeTemplateTree("constructors", "Cryovolitile"),
+        ],
+      },
+      {
+        id: "refineries",
+        label: "Refineries",
+        trees: [
+          makeTemplateTree("refineries", "Lithic Processing"),
+          makeTemplateTree("refineries", "Metallurgy"),
+          makeTemplateTree("refineries", "Volatiles & Cryogenics"),
+          makeTemplateTree("refineries", "Nuclear & Exotic"),
+        ],
+      },
+      {
+        id: "radiators",
+        label: "Radiators",
+        trees: [
+          makeTemplateTree("radiators", "Rigid Panels"),
+          makeTemplateTree("radiators", "Liquid Sheet Radiators"),
+          makeTemplateTree("radiators", "Spinning Heat Sink Radiators"),
+          makeTemplateTree("radiators", "Phase Change Radiator"),
+        ],
+      },
+    ],
+  };
+
+  const roman = ["I", "II", "III", "IV", "V"];
+  const levelsByNode = {};
+
+  let activeTypeId = RESEARCH_CATALOG.techTypes[0]?.id || null;
+  let activeTreeId = RESEARCH_CATALOG.techTypes[0]?.trees?.[0]?.id || null;
+  let selectedNodeId = RESEARCH_CATALOG.techTypes[0]?.trees?.[0]?.nodes?.[0]?.id || null;
+
+  function activeType() {
+    return RESEARCH_CATALOG.techTypes.find((type) => type.id === activeTypeId) || RESEARCH_CATALOG.techTypes[0] || null;
+  }
+
+  function activeTree() {
+    const type = activeType();
+    if (!type) return null;
+    return type.trees.find((tree) => tree.id === activeTreeId) || type.trees[0] || null;
+  }
+
+  function selectedNode() {
+    const tree = activeTree();
+    if (!tree) return null;
+    return tree.nodes.find((node) => node.id === selectedNodeId) || tree.nodes[0] || null;
+  }
+
+  function initLevels() {
+    RESEARCH_CATALOG.techTypes.forEach((type) => {
+      type.trees.forEach((tree) => {
+        tree.nodes.forEach((node) => {
+          if (typeof levelsByNode[node.id] !== "number") levelsByNode[node.id] = 0;
+        });
+      });
     });
   }
 
-  function setInfo(tech) {
-    if (!tech) {
-      infoTitleEl.textContent = "Select a technology";
-      infoCategoryEl.textContent = "";
-      infoListEl.innerHTML = "";
-      return;
-    }
+  function formatPassive(passive, level) {
+    if (!passive) return "";
+    const value = Math.max(0, Number(passive.perLevel || 0) * Math.max(0, Number(level || 0)));
+    const sign = passive.sign === "-" ? "-" : "+";
+    return `${passive.stat} ${sign}${value}${passive.unit || ""}`;
+  }
 
-    const categoryLabel = (researchPayload.categories || []).find((c) => c.id === activeCategory)?.label || "Research";
-    infoTitleEl.textContent = tech.name;
-    infoCategoryEl.textContent = categoryLabel;
-    infoListEl.innerHTML = "";
-
-    const bullets = [];
-    bullets.push(`Tech ID: ${tech.id}`);
-    if (tech.kind) bullets.push(`Type: ${tech.kind}`);
-    if (typeof tech.tier === "number" && Number.isFinite(tech.tier)) bullets.push(`Tier: ${tech.tier}`);
-    const between = Array.isArray(tech.tier_between_main)
-      ? tech.tier_between_main
-      : (Array.isArray(tech.tier_between_engines) ? tech.tier_between_engines : []);
-    if (between.length === 2) {
-      bullets.push(`Between tiers: ${between[0]} → ${between[1]}`);
-    }
-
-    const requires = Array.isArray(tech.requires) ? tech.requires : [];
-    bullets.push(`Requires: ${requires.length ? requires.join(", ") : "none"}`);
-
-    (Array.isArray(tech.effects) ? tech.effects : []).forEach((effect) => bullets.push(`Effect: ${effect}`));
-    (Array.isArray(tech.tradeoffs) ? tech.tradeoffs : []).forEach((tradeoff) => bullets.push(`Tradeoff: ${tradeoff}`));
-
-    const details = tech.details && typeof tech.details === "object" ? tech.details : {};
-    Object.entries(details).forEach(([key, value]) => {
-      if (value == null || value === "") return;
-      if (Array.isArray(value)) {
-        if (!value.length) return;
-        bullets.push(`${key}: ${value.join(", ")}`);
-      } else if (typeof value === "object") {
-        bullets.push(`${key}: ${JSON.stringify(value)}`);
-      } else {
-        bullets.push(`${key}: ${value}`);
-      }
-    });
-
-    bullets.forEach((text) => {
-      const li = document.createElement("li");
-      li.textContent = text;
-      infoListEl.appendChild(li);
+  function renderTypeTabs() {
+    typeTabsEl.innerHTML = "";
+    RESEARCH_CATALOG.techTypes.forEach((type) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `tab researchSubtab ${type.id === activeTypeId ? "active" : ""}`;
+      tab.textContent = type.label;
+      tab.setAttribute("role", "tab");
+      tab.addEventListener("click", () => {
+        activeTypeId = type.id;
+        activeTreeId = type.trees[0]?.id || null;
+        selectedNodeId = type.trees[0]?.nodes?.[0]?.id || null;
+        renderTypeTabs();
+        renderTreeTabs();
+        renderTree();
+        renderInfo();
+      });
+      typeTabsEl.appendChild(tab);
     });
   }
 
-  function updatePanTransform() {
-    treeEl.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
+  function renderTreeTabs() {
+    const type = activeType();
+    treeTabsEl.innerHTML = "";
+    (type?.trees || []).forEach((tree) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `tab researchSubtab ${tree.id === activeTreeId ? "active" : ""}`;
+      tab.textContent = tree.label;
+      tab.setAttribute("role", "tab");
+      tab.addEventListener("click", () => {
+        activeTreeId = tree.id;
+        selectedNodeId = tree.nodes[0]?.id || null;
+        renderTreeTabs();
+        renderTree();
+        renderInfo();
+      });
+      treeTabsEl.appendChild(tab);
+    });
   }
 
-  function renderSubtabs() {
-    subtabsEl.innerHTML = "";
-    (researchPayload.categories || []).forEach((cat) => {
+  function renderEdges(tree, nodeById) {
+    (tree.edges || []).forEach(([fromId, toId]) => {
+      const fromNode = nodeById.get(fromId);
+      const toNode = nodeById.get(toId);
+      if (!fromNode || !toNode) return;
+
+      const edgeEl = document.createElement("div");
+      edgeEl.className = "researchSkillEdge";
+
+      const x1 = Number(fromNode.x) + 150;
+      const y1 = Number(fromNode.y) + 40;
+      const x2 = Number(toNode.x);
+      const y2 = Number(toNode.y) + 40;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const width = Math.max(1, Math.hypot(dx, dy));
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+      edgeEl.style.left = `${x1}px`;
+      edgeEl.style.top = `${y1}px`;
+      edgeEl.style.width = `${width}px`;
+      edgeEl.style.transform = `rotate(${angle}deg)`;
+      treeEl.appendChild(edgeEl);
+    });
+  }
+
+  function renderLevelButtons(node, nodeCardEl) {
+    const row = document.createElement("div");
+    row.className = "researchLevelRow";
+
+    roman.forEach((label, index) => {
+      const targetLevel = index + 1;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `tab researchSubtab ${cat.id === activeCategory ? "active" : ""}`;
-      btn.setAttribute("role", "tab");
-      btn.textContent = cat.label;
-      btn.addEventListener("click", () => {
-        activeCategory = cat.id;
-        selectedTechId = null;
-        renderSubtabs();
+      btn.className = `researchLevelBtn ${levelsByNode[node.id] >= targetLevel ? "isReached" : ""}`;
+      btn.textContent = label;
+      btn.title = `Set ${node.name} to Level ${label}`;
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        levelsByNode[node.id] = targetLevel;
+        selectedNodeId = node.id;
         renderTree();
+        renderInfo();
       });
-      subtabsEl.appendChild(btn);
+      row.appendChild(btn);
     });
+
+    nodeCardEl.appendChild(row);
+  }
+
+  function layoutTree(tree) {
+    return tree.nodes.map((node, index) => ({
+      ...node,
+      x: 40 + index * 210,
+      y: 72 + (index % 2 === 0 ? 0 : 124),
+    }));
   }
 
   function renderTree() {
-    const tree = (researchPayload.trees || {})[activeCategory] || { nodes: [], edges: [] };
-    const techs = Array.isArray(tree.nodes) ? tree.nodes : [];
-    const edges = Array.isArray(tree.edges) ? tree.edges : [];
-    const lanes = Array.isArray(tree?.meta?.lanes) ? tree.meta.lanes : [];
-    const byId = new Map(techs.map((t) => [t.id, t]));
+    const tree = activeTree();
+    if (!tree) return;
 
     treeEl.innerHTML = "";
+    const layoutNodes = layoutTree(tree);
+    const nodeById = new Map(layoutNodes.map((node) => [node.id, node]));
+    renderEdges(tree, nodeById);
 
-    lanes.forEach((lane) => {
-      const laneEl = document.createElement("div");
-      laneEl.className = `researchLane ${lane?.reserved ? "reserved" : ""}`;
-      laneEl.style.left = `${Number(lane?.x || 0)}px`;
-      laneEl.style.width = `${Math.max(1, Number(lane?.width || 420))}px`;
+    layoutNodes.forEach((node) => {
+      const nodeLevel = levelsByNode[node.id] || 0;
 
-      const labelEl = document.createElement("div");
-      labelEl.className = "researchLaneLabel";
-      labelEl.textContent = String(lane?.label || lane?.id || "Lane");
-      laneEl.appendChild(labelEl);
-
-      treeEl.appendChild(laneEl);
-    });
-
-    edges.forEach((edge) => {
-      const from = byId.get(edge.from);
-      const to = byId.get(edge.to);
-      if (!from || !to) return;
-      const fromMetrics = nodeMetrics(from);
-      const toMetrics = nodeMetrics(to);
-
-      const line = document.createElement("div");
-      line.className = "researchEdge";
-
-      const x1 = Number(from.x || 0) + Math.round(fromMetrics.width * 0.5);
-      const y1 = Number(from.y || 0) + Math.round(fromMetrics.height * 0.5);
-      const x2 = Number(to.x || 0) + Math.round(toMetrics.width * 0.5);
-      const y2 = Number(to.y || 0) + Math.round(toMetrics.height * 0.5);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const length = Math.max(1, Math.hypot(dx, dy));
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-      line.style.left = `${x1}px`;
-      line.style.top = `${y1}px`;
-      line.style.width = `${length}px`;
-      line.style.transform = `rotate(${angle}deg)`;
-      treeEl.appendChild(line);
-    });
-
-    if (!techs.length) {
-      setInfo(null);
-      infoTitleEl.textContent = "No technology entries yet";
-      infoCategoryEl.textContent = "This category has no loaded JSON data.";
-      return;
-    }
-
-    const maxX = Math.max(...techs.map((t) => Number(t.x || 0)), 0);
-    const maxY = Math.max(...techs.map((t) => Number(t.y || 0)), 0);
-    const laneRight = Math.max(...lanes.map((lane) => Number(lane?.x || 0) + Number(lane?.width || 0)), 0);
-    treeEl.style.width = `${Math.max(2200, maxX + 420, laneRight + 120)}px`;
-    treeEl.style.height = `${Math.max(1400, maxY + 420)}px`;
-
-    techs.forEach((tech) => {
-      const node = document.createElement("button");
-      node.type = "button";
-      const kind = String(tech.kind || "").toLowerCase();
-      const kindClass = kind === "upgrade" ? "researchNodeUpgrade" : "researchNodeMain";
-      node.className = `researchNode ${kindClass} ${selectedTechId === tech.id ? "active" : ""}`;
-      node.style.left = `${tech.x}px`;
-      node.style.top = `${tech.y}px`;
-      node.textContent = tech.name;
-      node.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectedTechId = tech.id;
-        setInfo(tech);
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `researchSkillNode ${selectedNodeId === node.id ? "isSelected" : ""}`;
+      card.style.left = `${node.x}px`;
+      card.style.top = `${node.y}px`;
+      card.addEventListener("click", () => {
+        selectedNodeId = node.id;
         renderTree();
+        renderInfo();
       });
-      treeEl.appendChild(node);
+
+      const name = document.createElement("div");
+      name.className = "researchSkillNodeName";
+      name.textContent = node.name;
+      card.appendChild(name);
+
+      const level = document.createElement("div");
+      level.className = "researchSkillNodeLevel";
+      level.textContent = `Level ${nodeLevel}/5`;
+      card.appendChild(level);
+
+      const passive = document.createElement("div");
+      passive.className = "researchSkillPassive";
+      passive.textContent = `Org Bonus: ${formatPassive(node.passive, nodeLevel) || "None"}`;
+      card.appendChild(passive);
+
+      renderLevelButtons(node, card);
+      treeEl.appendChild(card);
     });
-
-    const selected = byId.get(selectedTechId) || null;
-    if (selected) setInfo(selected);
-    else setTreeSummary(tree);
-    updatePanTransform();
   }
 
-  async function loadResearch() {
-    const resp = await fetch("/api/research/tree", { cache: "no-store" });
-    const data = await resp.json();
-    if (!resp.ok) {
-      throw new Error(data.detail || "Failed to load research tree.");
-    }
+  function renderUnlockRows(node, nodeLevel) {
+    unlockRowsEl.innerHTML = "";
 
-    researchPayload = {
-      categories: Array.isArray(data.categories) ? data.categories : [],
-      trees: data.trees && typeof data.trees === "object" ? data.trees : {},
-    };
+    [1, 4].forEach((unlockLevel) => {
+      const unlock = node.unlocks?.[unlockLevel];
+      if (!unlock) return;
 
-    if (!researchPayload.categories.length) {
-      researchPayload.categories = [
-        { id: "thrusters", label: "Thrusters" },
-        { id: "reactors", label: "Reactors" },
-        { id: "generators", label: "Generators" },
-        { id: "robonauts", label: "Robonauts" },
-        { id: "refineries", label: "Refineries" },
-        { id: "radiators", label: "Radiators" },
-      ];
-    }
+      const row = document.createElement("div");
+      row.className = `researchUnlockRow ${nodeLevel >= unlockLevel ? "isUnlocked" : ""}`;
 
-    if (!researchPayload.categories.some((c) => c.id === activeCategory)) {
-      activeCategory = researchPayload.categories[0].id;
-    }
+      const title = document.createElement("div");
+      title.className = "researchUnlockName";
+      title.textContent = `Level ${roman[unlockLevel - 1]}: ${unlock.name}`;
+      row.appendChild(title);
 
-    renderSubtabs();
-    renderTree();
+      const stats = document.createElement("div");
+      stats.className = "researchUnlockStats";
+      stats.textContent = `Mass ${unlock.massT} t · Thrust ${unlock.thrustKN} kN · ISP ${unlock.ispS} s · Reactor ${unlock.reactorLevelRequired}`;
+      row.appendChild(stats);
+
+      unlockRowsEl.appendChild(row);
+    });
   }
 
-  viewportEl.addEventListener("pointerdown", (event) => {
-    const clickedNode = event.target && event.target.closest && event.target.closest(".researchNode");
-    if (clickedNode) {
+  function renderInfo() {
+    const tree = activeTree();
+    const node = selectedNode();
+
+    if (!tree || !node) {
+      infoTitleEl.textContent = "No research tree loaded";
+      infoTreeEl.textContent = "";
+      infoListEl.innerHTML = "";
+      unlockRowsEl.innerHTML = "";
       return;
     }
-    pan.dragging = true;
-    pan.lastX = event.clientX;
-    pan.lastY = event.clientY;
-    viewportEl.setPointerCapture?.(event.pointerId);
-    viewportEl.classList.add("isPanning");
-  });
 
-  viewportEl.addEventListener("pointermove", (event) => {
-    if (!pan.dragging) return;
-    const dx = event.clientX - pan.lastX;
-    const dy = event.clientY - pan.lastY;
-    pan.x += dx;
-    pan.y += dy;
-    pan.lastX = event.clientX;
-    pan.lastY = event.clientY;
-    updatePanTransform();
-  });
+    const type = activeType();
+    const nodeLevel = levelsByNode[node.id] || 0;
+    const passivePerLevel = `${node.passive.sign}${node.passive.perLevel}${node.passive.unit} ${node.passive.stat}`;
 
-  function endPan(event) {
-    if (!pan.dragging) return;
-    pan.dragging = false;
-    viewportEl.releasePointerCapture?.(event.pointerId);
-    viewportEl.classList.remove("isPanning");
+    infoTitleEl.textContent = node.name;
+    infoTreeEl.textContent = `${type?.label || "Research"} · ${tree.label}`;
+    unlockSummaryEl.textContent = `Current Level ${nodeLevel}/5 · Unlocks at Level I and IV`;
+    infoListEl.innerHTML = "";
+
+    [
+      `Passive per level: ${passivePerLevel}`,
+      `Total organization bonus: ${formatPassive(node.passive, nodeLevel)}`,
+      "Each node has five levels and grants cumulative bonuses.",
+      tree.isTemplate ? "Template tree: replace TBD values as you define this line." : "Configured tree: values are live for this line.",
+      "Set node level directly from the level chips on each node card.",
+    ].forEach((text) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      infoListEl.appendChild(li);
+    });
+
+    renderUnlockRows(node, nodeLevel);
   }
 
-  viewportEl.addEventListener("pointerup", endPan);
-  viewportEl.addEventListener("pointercancel", endPan);
-  viewportEl.addEventListener("pointerleave", endPan);
-
-  loadResearch().catch((err) => {
-    infoTitleEl.textContent = "Research load error";
-    infoCategoryEl.textContent = err?.message || "Unknown error";
-    infoListEl.innerHTML = "";
-  });
+  initLevels();
+  renderTypeTabs();
+  renderTreeTabs();
+  renderTree();
+  renderInfo();
 })();

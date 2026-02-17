@@ -22,13 +22,21 @@
     const dd = String(d.getUTCDate()).padStart(2, "0");
     const hh = String(d.getUTCHours()).padStart(2, "0");
     const mi = String(d.getUTCMinutes()).padStart(2, "0");
-    const ss = String(d.getUTCSeconds()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} UTC`;
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi} UTC`;
   }
 
   function renderClock() {
     const status = paused ? "Paused" : "Running";
     root.innerHTML = `Game Time: ${fmtGameDate(serverNow())}<span class="muted">${status}</span>`;
+  }
+
+  function scheduleMinuteRender() {
+    const nowMs = Date.now();
+    const msUntilNextMinute = 60000 - (nowMs % 60000);
+    setTimeout(() => {
+      renderClock();
+      scheduleMinuteRender();
+    }, msUntilNextMinute + 10);
   }
 
   async function syncClock() {
@@ -50,6 +58,6 @@
 
   renderClock();
   syncClock();
-  setInterval(renderClock, 250);
-  setInterval(syncClock, 3000);
+  scheduleMinuteRender();
+  setInterval(syncClock, 10000);
 })();

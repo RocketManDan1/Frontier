@@ -21,7 +21,9 @@ from db import APP_DIR, connect_db
 from db_migrations import apply_migrations
 from sim_service import (
     effective_time_scale,
+    export_simulation_state,
     game_now_s,
+    import_simulation_state,
     reset_simulation_clock,
     set_simulation_paused,
     simulation_paused,
@@ -1712,11 +1714,56 @@ def settle_arrivals(conn: sqlite3.Connection, now_s: float) -> None:
     )
 
 
+SIM_CLOCK_META_REAL_ANCHOR = "sim_real_time_anchor_s"
+SIM_CLOCK_META_GAME_ANCHOR = "sim_game_time_anchor_s"
+SIM_CLOCK_META_PAUSED = "sim_paused"
+
+
+def _persist_simulation_clock_state(conn: sqlite3.Connection) -> None:
+    state = export_simulation_state()
+    kv_rows = [
+        (SIM_CLOCK_META_REAL_ANCHOR, str(float(state["real_time_anchor_s"]))),
+        (SIM_CLOCK_META_GAME_ANCHOR, str(float(state["game_time_anchor_s"]))),
+        (SIM_CLOCK_META_PAUSED, "1" if bool(state["paused"]) else "0"),
+    ]
+    conn.executemany(
+        "INSERT OR REPLACE INTO transfer_meta (key,value) VALUES (?,?)",
+        kv_rows,
+    )
+
+
+def _load_simulation_clock_state(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        "SELECT key,value FROM transfer_meta WHERE key IN (?,?,?)",
+        (SIM_CLOCK_META_REAL_ANCHOR, SIM_CLOCK_META_GAME_ANCHOR, SIM_CLOCK_META_PAUSED),
+    ).fetchall()
+    by_key = {str(r["key"]): str(r["value"]) for r in rows}
+
+    real_raw = by_key.get(SIM_CLOCK_META_REAL_ANCHOR)
+    game_raw = by_key.get(SIM_CLOCK_META_GAME_ANCHOR)
+    paused_raw = by_key.get(SIM_CLOCK_META_PAUSED)
+
+    if real_raw is None or game_raw is None or paused_raw is None:
+        _persist_simulation_clock_state(conn)
+        return
+
+    try:
+        real_anchor_s = float(real_raw)
+        game_anchor_s = float(game_raw)
+        paused = str(paused_raw).strip().lower() in {"1", "true", "yes", "on"}
+    except (TypeError, ValueError):
+        _persist_simulation_clock_state(conn)
+        return
+
+    import_simulation_state(real_anchor_s, game_anchor_s, paused)
+
+
 @app.on_event("startup")
 def _startup():
     conn = connect_db()
     try:
         apply_migrations(conn)
+        _load_simulation_clock_state(conn)
         ensure_default_admin_account(conn)
         seed_locations_and_edges_if_empty(conn)
         ensure_solar_system_expansion(conn)
@@ -2175,11 +2222,13 @@ def api_admin_toggle_pause(request: Request) -> Dict[str, Any]:
     conn = connect_db()
     try:
         require_admin(conn, request)
+        next_paused = not simulation_paused()
+        set_simulation_paused(next_paused)
+        _persist_simulation_clock_state(conn)
+        conn.commit()
     finally:
         conn.close()
 
-    next_paused = not simulation_paused()
-    set_simulation_paused(next_paused)
     return {
         "ok": True,
         "paused": simulation_paused(),
@@ -2203,11 +2252,12 @@ def api_admin_reset_game(request: Request) -> Dict[str, Any]:
         conn.execute("DELETE FROM sessions")
         conn.execute("DELETE FROM users")
         ensure_default_admin_account(conn, reset_password=True)
+
+        reset_simulation_clock()
+        _persist_simulation_clock_state(conn)
         conn.commit()
     finally:
         conn.close()
-
-    reset_simulation_clock()
 
     return {
         "ok": True,
