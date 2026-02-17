@@ -1366,7 +1366,7 @@ button:disabled {
   height: calc(100vh - 215px);
   min-height: 500px;
   border-radius: 2px;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid rgba(98, 130, 165, 0.5);
   background:
     linear-gradient(180deg, rgba(14, 19, 27, 0.98), rgba(8, 11, 17, 0.99)),
@@ -1382,8 +1382,9 @@ button:disabled {
 
 .researchSkillTree {
   position: relative;
-  width: 100%;
+  min-width: 100%;
   min-height: 100%;
+  padding: 0 24px 24px 0;
 }
 
 .researchSkillEdge {

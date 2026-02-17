@@ -434,6 +434,12 @@
     treeEl.innerHTML = "";
     const layoutNodes = layoutTree(tree);
     const nodeById = new Map(layoutNodes.map((node) => [node.id, node]));
+
+    const maxX = Math.max(0, ...layoutNodes.map((node) => Number(node.x || 0)));
+    const maxY = Math.max(0, ...layoutNodes.map((node) => Number(node.y || 0)));
+    treeEl.style.width = `${Math.max(980, maxX + RESEARCH_NODE_WIDTH + 80)}px`;
+    treeEl.style.height = `${Math.max(520, maxY + RESEARCH_NODE_HEIGHT + 80)}px`;
+
     renderEdges(tree, nodeById);
 
     layoutNodes.forEach((node) => {

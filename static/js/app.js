@@ -740,6 +740,8 @@
   let hoveredShipId = null;
   let shipInfoTab = "details";
   let shipInfoTabShipId = null;
+  let locationInfoTab = "details";
+  let locationInfoTabLocationId = null;
   let locationParentById = new Map();
   let overviewVisibleZoneIds = new Set();
   let cameraTweenToken = 0;
@@ -1194,9 +1196,18 @@
     hideContextMenu();
     selectedShipId = null;
     hoveredShipId = null;
+    shipInfoTabShipId = null;
+    shipInfoTab = "details";
     if (actions) actions.innerHTML = "";
 
-    if (ORBIT_IDS.has(loc.id)) {
+    const isOrbit = ORBIT_IDS.has(loc.id);
+    if (locationInfoTabLocationId !== loc.id) {
+      locationInfoTabLocationId = loc.id;
+      locationInfoTab = "details";
+    }
+    renderLocationInfoTabs(loc, isOrbit);
+
+    if (isOrbit && locationInfoTab === "inventory") {
       showOrbitalLocationInventory(loc);
       return;
     }
@@ -1217,6 +1228,11 @@
     hideContextMenu();
     selectedShipId = null;
     hoveredShipId = null;
+    shipInfoTabShipId = null;
+    shipInfoTab = "details";
+    locationInfoTabLocationId = null;
+    locationInfoTab = "details";
+    if (shipInfoTabsHost) shipInfoTabsHost.innerHTML = "";
     if (actions) actions.innerHTML = "";
     locationInventoryReqSeq += 1;
     setInfo(bodyDisplayName(bodyId), "Body", `Location: ${loc.id}`, []);
@@ -1710,6 +1726,17 @@
     `;
   }
 
+  function buildLocationInfoTabsHtml(activeTab) {
+    const detailsActive = activeTab === "details";
+    const inventoryActive = activeTab === "inventory";
+    return `
+      <div class="shipInfoTabs" role="tablist" aria-label="Location info tabs">
+        <button type="button" class="shipInfoTabBtn${detailsActive ? " isActive" : ""}" data-location-tab="details" role="tab" aria-selected="${detailsActive ? "true" : "false"}">Details</button>
+        <button type="button" class="shipInfoTabBtn${inventoryActive ? " isActive" : ""}" data-location-tab="inventory" role="tab" aria-selected="${inventoryActive ? "true" : "false"}">Inventory</button>
+      </div>
+    `;
+  }
+
   function renderShipInfoTabs() {
     if (!shipInfoTabsHost) return;
     if (!selectedShipId) {
@@ -1730,6 +1757,25 @@
         if (next !== "details" && next !== "inventory") return;
         shipInfoTab = next;
         showShipPanel();
+      });
+    });
+  }
+
+  function renderLocationInfoTabs(loc, hasInventory) {
+    if (!shipInfoTabsHost) return;
+    if (!loc || !hasInventory) {
+      shipInfoTabsHost.innerHTML = "";
+      return;
+    }
+
+    shipInfoTabsHost.innerHTML = buildLocationInfoTabsHtml(locationInfoTab);
+    const tabButtons = shipInfoTabsHost.querySelectorAll("[data-location-tab]");
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = String(btn.getAttribute("data-location-tab") || "details");
+        if (next !== "details" && next !== "inventory") return;
+        locationInfoTab = next;
+        showLocationInfo(loc);
       });
     });
   }
@@ -3628,9 +3674,14 @@
       clearRealWorldReference();
       shipInfoTabShipId = null;
       shipInfoTab = "details";
+      locationInfoTabLocationId = null;
+      locationInfoTab = "details";
       renderShipInfoTabs();
       return;
     }
+
+    locationInfoTabLocationId = null;
+    locationInfoTab = "details";
 
     if (shipInfoTabShipId !== ship.id) {
       shipInfoTabShipId = ship.id;
