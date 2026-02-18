@@ -399,6 +399,48 @@ body.embedMode .pagePanel {
   padding-right: 2px;
 }
 
+.mapPage .inventoryContainerGroupList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.mapPage .inventoryContainerGroup {
+  border: 1px solid rgba(120, 165, 214, 0.16);
+  background: rgba(7, 12, 20, 0.6);
+  border-radius: 5px;
+  padding: 7px;
+  display: grid;
+  gap: 6px;
+}
+
+.mapPage .inventoryContainerGroupHead {
+  border-bottom: 1px solid rgba(120, 165, 214, 0.12);
+  padding-bottom: 5px;
+}
+
+.mapPage .inventoryContainerGroupTitle {
+  font-size: 12px;
+  color: rgba(235, 245, 252, 0.95);
+}
+
+.mapPage .inventoryContainerGroupSub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mapPage .inventoryContainerItems {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+  gap: 8px;
+}
+
 .mapPage .stackItemStrip {
   display: grid;
   grid-template-columns: 1fr;
@@ -2264,6 +2306,61 @@ button:disabled {
   color: var(--muted);
   opacity: 0.62;
   cursor: default;
+}
+
+.inventoryAmountOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 8, 14, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.inventoryAmountDialog {
+  width: min(460px, calc(100vw - 28px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-solid);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.inventoryAmountTitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(235, 245, 252, 0.96);
+}
+
+.inventoryAmountSub,
+.inventoryAmountStatus {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.inventoryAmountSlider {
+  width: 100%;
+}
+
+.inventoryAmountInput {
+  width: 100%;
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  background: rgba(10, 16, 26, 0.86);
+  color: var(--text);
+  padding: 6px 8px;
+}
+
+.inventoryAmountActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 1020px) {

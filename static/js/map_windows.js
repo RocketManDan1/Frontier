@@ -350,6 +350,60 @@
     return card;
   }
 
+  function renderInventoryContainerGroups(selectedInventory) {
+    const groups = Array.isArray(selectedInventory?.container_groups) ? selectedInventory.container_groups : [];
+    const list = document.createElement("div");
+    list.className = "inventoryContainerGroupList";
+
+    if (!groups.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No cargo containers in this ship.";
+      list.appendChild(empty);
+      return list;
+    }
+
+    groups.forEach((group) => {
+      const section = document.createElement("section");
+      section.className = "inventoryContainerGroup";
+
+      const head = document.createElement("div");
+      head.className = "inventoryContainerGroupHead";
+
+      const title = document.createElement("div");
+      title.className = "inventoryContainerGroupTitle";
+      title.textContent = String(group?.name || "Container");
+
+      const phase = String(group?.phase || "solid");
+      const used = Math.max(0, Number(group?.used_m3) || 0);
+      const cap = Math.max(0, Number(group?.capacity_m3) || 0);
+      const sub = document.createElement("div");
+      sub.className = "inventoryContainerGroupSub";
+      sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} tank · ${fmtM3(used)} / ${fmtM3(cap)}`;
+
+      head.append(title, sub);
+
+      const itemsWrap = document.createElement("div");
+      itemsWrap.className = "inventoryContainerItems";
+      const items = Array.isArray(group?.items) ? group.items : [];
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted small";
+        empty.textContent = "Container empty";
+        itemsWrap.appendChild(empty);
+      } else {
+        items.forEach((item) => {
+          itemsWrap.appendChild(renderInventoryItemCard(item));
+        });
+      }
+
+      section.append(head, itemsWrap);
+      list.appendChild(section);
+    });
+
+    return list;
+  }
+
   function renderInventoryCapacitySummary(summary) {
     const payload = summary && typeof summary === "object" ? summary : null;
     if (!payload) return null;
@@ -429,6 +483,157 @@
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Inventory transfer failed"));
     return data;
+  }
+
+  function maybeWarnDestroyedTransfer(result) {
+    const destroyed = Math.max(0, Number(result?.destroyed_mass_kg) || 0);
+    if (destroyed <= 1e-9) return;
+    const resourceId = String(result?.resource_id || "resource").trim() || "resource";
+    window.alert(`${fmtKg(destroyed)} of ${resourceId} was lost in space (not containerized).`);
+  }
+
+  function transferAmountStep(maxAmount) {
+    const max = Math.max(0, Number(maxAmount) || 0);
+    if (max <= 1) return 0.01;
+    if (max <= 10) return 0.05;
+    if (max <= 100) return 0.1;
+    if (max <= 1000) return 1;
+    if (max <= 10000) return 10;
+    return 100;
+  }
+
+  function clampTransferAmount(value, maxAmount) {
+    const max = Math.max(0, Number(maxAmount) || 0);
+    const n = Number(value);
+    if (!Number.isFinite(n)) return max;
+    return Math.max(0, Math.min(max, n));
+  }
+
+  function shouldPromptInventoryTransferAmount(payload) {
+    const sourceKind = String(payload?.source_kind || "").trim().toLowerCase();
+    if (!sourceKind) return false;
+    if (!new Set(["ship_container", "ship_resource", "location_resource"]).has(sourceKind)) return false;
+    const maxAmount = Math.max(0, Number(payload?.amount) || 0);
+    return maxAmount > 1e-9;
+  }
+
+  function amountDecimals(step) {
+    const s = Math.max(0.000001, Number(step) || 1);
+    if (s >= 1) return 0;
+    if (s >= 0.1) return 1;
+    if (s >= 0.01) return 2;
+    return 3;
+  }
+
+  async function requestInventoryTransferAmount(payload, targetKind, targetId) {
+    if (!shouldPromptInventoryTransferAmount(payload)) {
+      return Math.max(0, Number(payload?.amount) || 0);
+    }
+
+    const sourceKind = String(payload?.source_kind || "").trim().toLowerCase();
+    const maxAmount = Math.max(0, Number(payload?.amount) || 0);
+    const step = transferAmountStep(maxAmount);
+    const decimals = amountDecimals(step);
+
+    const sourceLabel = sourceKind === "location_resource"
+      ? "Site inventory"
+      : "Ship cargo";
+    const targetLabel = String(targetKind || "").trim().toLowerCase() === "location"
+      ? "Site inventory"
+      : "Ship cargo";
+
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "inventoryAmountOverlay";
+
+      const dialog = document.createElement("div");
+      dialog.className = "inventoryAmountDialog";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+
+      const title = document.createElement("div");
+      title.className = "inventoryAmountTitle";
+      title.textContent = "Transfer amount";
+
+      const sub = document.createElement("div");
+      sub.className = "inventoryAmountSub";
+      sub.textContent = `${sourceLabel} → ${targetLabel} (${String(targetId || "").trim() || "target"})`;
+
+      const status = document.createElement("div");
+      status.className = "inventoryAmountStatus";
+
+      const slider = document.createElement("input");
+      slider.className = "inventoryAmountSlider";
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = String(maxAmount);
+      slider.step = String(step);
+      slider.value = String(maxAmount);
+
+      const input = document.createElement("input");
+      input.className = "inventoryAmountInput";
+      input.type = "number";
+      input.min = "0";
+      input.max = String(maxAmount);
+      input.step = String(step);
+      input.value = maxAmount.toFixed(decimals);
+
+      const actions = document.createElement("div");
+      actions.className = "inventoryAmountActions";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn btnGhost";
+      cancelBtn.textContent = "Cancel";
+
+      const moveBtn = document.createElement("button");
+      moveBtn.type = "button";
+      moveBtn.className = "btn";
+      moveBtn.textContent = "Transfer";
+
+      let amount = maxAmount;
+      const sync = (next, fromSlider = false) => {
+        amount = clampTransferAmount(next, maxAmount);
+        status.textContent = `${fmtKg(amount)} selected of ${fmtKg(maxAmount)} available`;
+        if (!fromSlider) slider.value = String(amount);
+        input.value = amount.toFixed(decimals);
+        moveBtn.disabled = amount <= 1e-9;
+      };
+
+      const finish = (value) => {
+        document.removeEventListener("keydown", onKeyDown, true);
+        overlay.remove();
+        resolve(value);
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        finish(null);
+      };
+
+      slider.addEventListener("input", (event) => {
+        sync(Number(event?.target?.value), true);
+      });
+      input.addEventListener("input", (event) => {
+        sync(Number(event?.target?.value), false);
+      });
+      cancelBtn.addEventListener("click", () => finish(null));
+      moveBtn.addEventListener("click", () => finish(amount));
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) finish(null);
+      });
+
+      actions.append(cancelBtn, moveBtn);
+      dialog.append(title, sub, status, slider, input, actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      document.addEventListener("keydown", onKeyDown, true);
+      sync(maxAmount, false);
+      input.focus({ preventScroll: true });
+      input.select();
+    });
   }
 
   function currentAnchorTarget(record) {
@@ -551,7 +756,10 @@
       });
 
       setDropZoneBehavior(row, async (payload) => {
-        await runInventoryTransfer(payload, entryKind, entryId);
+        const chosenAmount = await requestInventoryTransferAmount(payload, entryKind, entryId);
+        if (chosenAmount == null) return;
+        const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, entryKind, entryId);
+        maybeWarnDestroyedTransfer(result);
         await refreshAllInventoryWindows();
       });
 
@@ -573,32 +781,43 @@
     const hSub = document.createElement("div");
     hSub.className = "inventoryMainSub";
     const locName = String(context?.location?.name || context?.location?.id || "Unknown location");
+    const containerGroups = Array.isArray(selectedInventory?.container_groups) ? selectedInventory.container_groups : [];
+    const useContainerGroups = String(selectedInventory?.inventory_kind || "").toLowerCase() === "ship" && containerGroups.length > 0;
     const itemCount = Array.isArray(selectedInventory?.items) ? selectedInventory.items.length : 0;
-    hSub.textContent = `${locName} · ${itemCount} items`;
+    hSub.textContent = useContainerGroups
+      ? `${locName} · ${containerGroups.length} containers`
+      : `${locName} · ${itemCount} items`;
 
     mainHead.append(hTitle, hSub);
     const capSummaryEl = renderInventoryCapacitySummary(selectedInventory?.capacity_summary);
     if (capSummaryEl) mainHead.appendChild(capSummaryEl);
 
-    const grid = document.createElement("div");
-    grid.className = "inventoryItemGrid";
-    const items = Array.isArray(selectedInventory?.items) ? selectedInventory.items : [];
-    if (!items.length) {
-      const empty = document.createElement("div");
-      empty.className = "muted";
-      empty.textContent = "No items in this inventory.";
-      grid.appendChild(empty);
-    } else {
-      items.forEach((item) => {
-        grid.appendChild(renderInventoryItemCard(item));
-      });
+    const grid = useContainerGroups
+      ? renderInventoryContainerGroups(selectedInventory)
+      : document.createElement("div");
+    if (!useContainerGroups) {
+      grid.className = "inventoryItemGrid";
+      const items = Array.isArray(selectedInventory?.items) ? selectedInventory.items : [];
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No items in this inventory.";
+        grid.appendChild(empty);
+      } else {
+        items.forEach((item) => {
+          grid.appendChild(renderInventoryItemCard(item));
+        });
+      }
     }
 
     const anchor = currentAnchorTarget(record);
     mainPane.dataset.targetKind = anchor.kind;
     mainPane.dataset.targetId = anchor.id;
     setDropZoneBehavior(mainPane, async (payload) => {
-      await runInventoryTransfer(payload, anchor.kind, anchor.id);
+      const chosenAmount = await requestInventoryTransferAmount(payload, anchor.kind, anchor.id);
+      if (chosenAmount == null) return;
+      const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, anchor.kind, anchor.id);
+      maybeWarnDestroyedTransfer(result);
       await refreshAllInventoryWindows();
     });
 

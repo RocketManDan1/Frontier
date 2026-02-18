@@ -1114,10 +1114,14 @@ def normalize_parts(
         if isinstance(entry, dict):
             raw_item_id = str(entry.get("item_id") or entry.get("id") or "").strip()
             if raw_item_id and raw_item_id in thruster_catalog:
-                normalized.append(dict(thruster_catalog[raw_item_id]))
+                merged = dict(thruster_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
                 continue
             if raw_item_id and raw_item_id in storage_catalog:
-                normalized.append(dict(storage_catalog[raw_item_id]))
+                merged = dict(storage_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
                 continue
 
             name = str(entry.get("name") or entry.get("type") or "part").strip()
