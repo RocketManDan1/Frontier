@@ -1,0 +1,22 @@
+{
+  "recipe_id": "ogn_1_icarus",
+  "name": "Assemble OGN-1 \"Icarus\"",
+  "output_item_id": "ogn_1_icarus",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "advanced_aerospace_alloys",   "qty": 19 },
+    { "item_id": "advanced_ceramics",           "qty": 16 },
+    { "item_id": "carbon_composites",           "qty": 19 },
+    { "item_id": "radiation_composite_armor",   "qty": 10 },
+    { "item_id": "high_grade_reactor_pellets",  "qty": 8 },
+    { "item_id": "superconductors",             "qty": 6 },
+    { "item_id": "strategic_elements",          "qty": 2 },
+    { "item_id": "precious_rare_metals",        "qty": 1 }
+  ],
+  "build_time_s": 21600,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 7,
+  "power_kw": 2500,
+  "byproducts": []
+}

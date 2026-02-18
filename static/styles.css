@@ -271,6 +271,10 @@ body.embedMode .pagePanel {
   background: rgba(8, 13, 20, 0.78);
 }
 
+.mapPage .inventoryWindow.stackWindow .inventoryWindowBody {
+  background: rgba(6, 18, 30, 0.84);
+}
+
 .mapPage .inventoryWindowMeta {
   margin-bottom: 8px;
   color: var(--muted);
@@ -350,6 +354,24 @@ body.embedMode .pagePanel {
 .mapPage .inventoryMainHead {
   padding: 2px 2px 6px;
   border-bottom: 1px solid rgba(120, 165, 214, 0.14);
+}
+
+.mapPage .stackWorkspace .inventoryMainHead {
+  border-bottom-color: rgba(121, 196, 255, 0.3);
+}
+
+.mapPage .stackModeBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(121, 196, 255, 0.42);
+  background: rgba(44, 120, 176, 0.24);
+  color: rgba(221, 240, 255, 0.95);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .mapPage .inventoryMainTitle {

@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import time
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -1173,12 +1174,85 @@ def classify_resource_phase(resource_id: str, resource_name: str, density_kg_m3:
     return "solid"
 
 
+def _is_storage_part(part: Dict[str, Any]) -> bool:
+    capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+    if capacity_m3 > 0.0:
+        return True
+    ptype = str(part.get("type") or "").strip().lower()
+    pcat = str(part.get("category_id") or "").strip().lower()
+    return ptype in {"storage", "cargo"} or pcat in {"storage", "cargo"}
+
+
+def _has_explicit_container_fill(part: Dict[str, Any]) -> bool:
+    if not isinstance(part, dict):
+        return False
+    for key in (
+        "cargo_used_m3",
+        "used_m3",
+        "fill_m3",
+        "stored_m3",
+        "current_m3",
+        "cargo_mass_kg",
+        "contents_mass_kg",
+        "stored_mass_kg",
+        "current_mass_kg",
+    ):
+        if key in part:
+            return True
+    return False
+
+
+def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[List[Dict[str, Any]], bool]:
+    hardened: List[Dict[str, Any]] = []
+    changed = False
+    resources = load_resource_catalog()
+
+    legacy_water_rows: List[Dict[str, Any]] = []
+    legacy_total_capacity_kg = 0.0
+
+    for raw_part in parts or []:
+        part = dict(raw_part or {})
+        if _is_storage_part(part):
+            if not str(part.get("container_uid") or "").strip():
+                part["container_uid"] = str(uuid.uuid4())
+                changed = True
+
+            resource_id = str(part.get("resource_id") or "").strip().lower()
+            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+            if resource_id == "water" and capacity_m3 > 0.0 and not _has_explicit_container_fill(part):
+                density = max(
+                    0.0,
+                    float(part.get("mass_per_m3_kg") or (resources.get(resource_id) or {}).get("mass_per_m3_kg") or 0.0),
+                )
+                if density > 0.0:
+                    legacy_water_rows.append(part)
+                    legacy_total_capacity_kg += capacity_m3 * density
+
+        hardened.append(part)
+
+    if legacy_water_rows and legacy_total_capacity_kg > 0.0:
+        ratio = min(1.0, max(0.0, float(fuel_kg or 0.0)) / legacy_total_capacity_kg)
+        for part in legacy_water_rows:
+            density = max(
+                0.0,
+                float(part.get("mass_per_m3_kg") or (resources.get("water") or {}).get("mass_per_m3_kg") or 0.0),
+            )
+            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+            used_m3 = capacity_m3 * ratio
+            cargo_mass = used_m3 * density
+
+            for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
+                part[key] = used_m3
+            for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
+                part[key] = cargo_mass
+            changed = True
+
+    return hardened, changed
+
+
 def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_kg: float) -> List[Dict[str, Any]]:
     resources = load_resource_catalog()
     rows: List[Dict[str, Any]] = []
-
-    water_rows: List[Dict[str, Any]] = []
-    total_water_capacity_kg = 0.0
 
     for idx, part in enumerate(parts):
         capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
@@ -1206,15 +1280,12 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
 
         used_m3 = 0.0
         cargo_mass_kg = 0.0
-        is_implicit = True
         if explicit_m3 > 0.0:
             used_m3 = min(capacity_m3, explicit_m3) if capacity_m3 > 0.0 else explicit_m3
             cargo_mass_kg = used_m3 * density if density > 0.0 else explicit_mass_kg
-            is_implicit = False
         elif explicit_mass_kg > 0.0 and density > 0.0:
             cargo_mass_kg = explicit_mass_kg
             used_m3 = min(capacity_m3, cargo_mass_kg / density) if capacity_m3 > 0.0 else cargo_mass_kg / density
-            is_implicit = False
 
         dry_mass_kg = max(0.0, float(part.get("mass_kg") or 0.0))
 
@@ -1225,6 +1296,7 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
 
         row = {
             "container_index": idx,
+            "container_uid": str(part.get("container_uid") or ""),
             "name": str(part.get("name") or f"Container {idx + 1}"),
             "resource_id": resource_id,
             "resource_name": resource_name,
@@ -1240,19 +1312,6 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
         }
 
         rows.append(row)
-        if is_implicit and resource_id.lower() == "water" and density > 0.0 and capacity_m3 > 0.0:
-            water_rows.append(row)
-            total_water_capacity_kg += capacity_m3 * density
-
-    if water_rows and total_water_capacity_kg > 0.0:
-        fuel = max(0.0, float(current_fuel_kg or 0.0))
-        ratio = min(1.0, fuel / total_water_capacity_kg)
-        for row in water_rows:
-            used = row["capacity_m3"] * ratio
-            cargo_mass = used * row["density_kg_m3"]
-            row["used_m3"] = used
-            row["cargo_mass_kg"] = cargo_mass
-            row["total_mass_kg"] = row["dry_mass_kg"] + cargo_mass
 
     return rows
 
@@ -1639,6 +1698,12 @@ def _load_ship_inventory_state(conn: sqlite3.Connection, ship_id: str) -> Dict[s
 
     parts = normalize_parts(json.loads(row["parts_json"] or "[]"))
     fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
+    parts, hardened_changed = _harden_ship_parts(parts, fuel_kg)
+    if hardened_changed:
+        conn.execute(
+            "UPDATE ships SET parts_json=? WHERE id=?",
+            (json.dumps(parts), sid),
+        )
     containers = compute_ship_inventory_containers(parts, fuel_kg)
     resources = compute_ship_inventory_resources(sid, containers)
     capacity_summary = compute_ship_capacity_summary(containers)
@@ -2529,7 +2594,7 @@ def api_ship_inventory(ship_id: str, request: Request) -> Dict[str, Any]:
         settle_arrivals(conn, game_now_s())
         state = _load_ship_inventory_state(conn, ship_id)
         row = state["row"]
-        return {
+        payload = {
             "ship_id": str(row["id"]),
             "ship_name": str(row["name"]),
             "location_id": state["location_id"],
@@ -2539,6 +2604,8 @@ def api_ship_inventory(ship_id: str, request: Request) -> Dict[str, Any]:
             "capacity_summary": state["capacity_summary"],
             "containers": state["containers"],
         }
+        conn.commit()
+        return payload
     finally:
         conn.close()
 
@@ -2626,7 +2693,7 @@ def api_inventory_context(kind: str, entity_id: str, request: Request) -> Dict[s
                 }
             )
 
-        return {
+        payload = {
             "anchor": {
                 "kind": inventory_kind,
                 "id": inv_id,
@@ -2639,6 +2706,8 @@ def api_inventory_context(kind: str, entity_id: str, request: Request) -> Dict[s
             },
             "inventories": inventories,
         }
+        conn.commit()
+        return payload
     finally:
         conn.close()
 
@@ -2698,7 +2767,7 @@ def api_stack_context_ship(ship_id: str, request: Request) -> Dict[str, Any]:
                 }
             )
 
-        return {
+        payload = {
             "anchor": {
                 "kind": "ship",
                 "id": sid,
@@ -2711,6 +2780,8 @@ def api_stack_context_ship(ship_id: str, request: Request) -> Dict[str, Any]:
             },
             "stacks": stacks,
         }
+        conn.commit()
+        return payload
     finally:
         conn.close()
 
@@ -2719,8 +2790,9 @@ class InventoryTransferReq(BaseModel):
     source_kind: Literal["ship_container", "ship_resource", "location_resource"]
     source_id: str
     source_key: str
-    target_kind: Literal["ship", "location"]
+    target_kind: Literal["ship", "location", "ship_container"]
     target_id: str
+    target_key: Optional[str] = None
     amount: Optional[float] = None
 
 
@@ -2739,13 +2811,18 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
     source_key = str(req.source_key or "").strip()
     target_kind = str(req.target_kind or "").strip().lower()
     target_id = str(req.target_id or "").strip()
+    target_key = str(req.target_key or "").strip()
 
     if source_kind not in {"ship_container", "ship_resource", "location_resource"}:
         raise HTTPException(status_code=400, detail="source_kind must be ship_container, ship_resource, or location_resource")
+    if target_kind not in {"ship", "location", "ship_container"}:
+        raise HTTPException(status_code=400, detail="target_kind must be ship, location, or ship_container")
     if not source_id or not source_key:
         raise HTTPException(status_code=400, detail="source_id and source_key are required")
     if not target_id:
         raise HTTPException(status_code=400, detail="target_id is required")
+    if target_kind == "ship_container" and not target_key:
+        raise HTTPException(status_code=400, detail="target_key is required for target_kind=ship_container")
 
     conn = connect_db()
     try:
@@ -2756,6 +2833,7 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
 
         target_location_id = ""
         target_ship_state: Optional[Dict[str, Any]] = None
+        target_container_idx: Optional[int] = None
         if target_kind == "location":
             loc = _get_location_row(conn, target_id)
             target_location_id = str(loc["id"])
@@ -2764,12 +2842,18 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
             if not target_ship_state["is_docked"]:
                 raise HTTPException(status_code=400, detail="Target ship must be docked")
             target_location_id = str(target_ship_state["location_id"])
+            if target_kind == "ship_container":
+                try:
+                    target_container_idx = int(target_key)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="target_key must be a ship container index") from exc
 
         source_location_id = ""
         move_resource_id = ""
         move_mass_kg = max(0.0, float(req.amount or 0.0))
         source_ship_state: Optional[Dict[str, Any]] = None
         source_resource_row: Optional[sqlite3.Row] = None
+        source_container_idx: Optional[int] = None
 
         if source_kind in {"ship_container", "ship_resource"}:
             source_ship_state = _load_ship_inventory_state(conn, source_id)
@@ -2779,12 +2863,12 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
 
             if source_kind == "ship_container":
                 try:
-                    src_idx = int(source_key)
+                    source_container_idx = int(source_key)
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail="source_key must be a ship container index") from exc
 
                 src_container = next(
-                    (c for c in source_ship_state["containers"] if int(c.get("container_index") or -1) == src_idx),
+                    (c for c in source_ship_state["containers"] if int(c.get("container_index") or -1) == source_container_idx),
                     None,
                 )
                 if not src_container:
@@ -2834,6 +2918,128 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
 
         if source_kind in {"ship_container", "ship_resource"} and target_kind == "ship" and source_id == target_id:
             raise HTTPException(status_code=400, detail="Cannot transfer cargo to the same ship")
+        if source_kind == "ship_resource" and target_kind == "ship_container" and source_id == target_id:
+            raise HTTPException(status_code=400, detail="Use a specific source container for intra-ship container transfer")
+
+        if source_kind == "ship_container" and target_kind == "ship_container" and source_id == target_id:
+            if not source_ship_state:
+                raise HTTPException(status_code=500, detail="Source ship state unavailable")
+            if source_container_idx is None or target_container_idx is None:
+                raise HTTPException(status_code=400, detail="Source and target container indices are required")
+            if source_container_idx == target_container_idx:
+                raise HTTPException(status_code=400, detail="Cannot transfer cargo to the same container")
+
+            ship_parts = list(source_ship_state["parts"])
+            ship_containers = list(source_ship_state["containers"])
+
+            src_container = next(
+                (c for c in ship_containers if int(c.get("container_index") or -1) == source_container_idx),
+                None,
+            )
+            dst_container = next(
+                (c for c in ship_containers if int(c.get("container_index") or -1) == target_container_idx),
+                None,
+            )
+            if not src_container:
+                raise HTTPException(status_code=404, detail="Source container not found")
+            if not dst_container:
+                raise HTTPException(status_code=404, detail="Target container not found")
+
+            src_mass = max(0.0, float(src_container.get("cargo_mass_kg") or 0.0))
+            if src_mass <= 1e-9:
+                raise HTTPException(status_code=400, detail="Source container has no transferable cargo")
+
+            resource_meta = resources.get(move_resource_id) or {}
+            resource_phase = classify_resource_phase(
+                move_resource_id,
+                str(resource_meta.get("name") or move_resource_id),
+                float(resource_meta.get("mass_per_m3_kg") or 0.0),
+            )
+
+            dst_cap = max(0.0, float(dst_container.get("capacity_m3") or 0.0))
+            dst_used = max(0.0, float(dst_container.get("used_m3") or 0.0))
+            dst_free = max(0.0, dst_cap - dst_used)
+            if dst_free <= 1e-9:
+                raise HTTPException(status_code=400, detail="Target container has no free capacity")
+
+            dst_phase = str(dst_container.get("tank_phase") or dst_container.get("phase") or "solid").strip().lower()
+            if dst_phase not in {"solid", "liquid", "gas"}:
+                dst_phase = "solid"
+            if dst_phase != resource_phase:
+                raise HTTPException(status_code=400, detail="Target container phase is not compatible")
+
+            dst_resource = str(dst_container.get("resource_id") or "").strip()
+            if dst_resource and dst_resource != move_resource_id:
+                raise HTTPException(status_code=400, detail="Target container already stores a different resource")
+
+            resolved_density = max(
+                0.0,
+                float(
+                    dst_container.get("density_kg_m3")
+                    or src_container.get("density_kg_m3")
+                    or (resource_meta.get("mass_per_m3_kg") or 0.0)
+                ),
+            )
+            if resolved_density <= 0.0:
+                raise HTTPException(status_code=400, detail="Resource density is unavailable for transfer")
+
+            max_target_mass = dst_free * resolved_density
+            accepted_mass_kg = min(move_mass_kg, src_mass, max_target_mass)
+            if accepted_mass_kg <= 1e-9:
+                raise HTTPException(status_code=400, detail="Target container rejected transfer")
+
+            src_density = max(1e-9, float(src_container.get("density_kg_m3") or resolved_density))
+            src_used = max(0.0, float(src_container.get("used_m3") or 0.0))
+            src_next_mass = max(0.0, src_mass - accepted_mass_kg)
+            src_next_used = max(0.0, src_used - (accepted_mass_kg / src_density))
+
+            dst_mass = max(0.0, float(dst_container.get("cargo_mass_kg") or 0.0))
+            dst_next_mass = dst_mass + accepted_mass_kg
+            dst_next_used = dst_used + (accepted_mass_kg / resolved_density)
+
+            if source_container_idx < 0 or source_container_idx >= len(ship_parts):
+                raise HTTPException(status_code=400, detail="Source container index is invalid")
+            if target_container_idx < 0 or target_container_idx >= len(ship_parts):
+                raise HTTPException(status_code=400, detail="Target container index is invalid")
+
+            ship_parts[source_container_idx] = _apply_ship_container_fill(
+                ship_parts[source_container_idx],
+                resource_id=move_resource_id,
+                cargo_mass_kg=src_next_mass,
+                used_m3=src_next_used,
+                density_kg_m3=src_density,
+            )
+            ship_parts[target_container_idx] = _apply_ship_container_fill(
+                ship_parts[target_container_idx],
+                resource_id=move_resource_id,
+                cargo_mass_kg=dst_next_mass,
+                used_m3=dst_next_used,
+                density_kg_m3=resolved_density,
+            )
+
+            source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(source_ship_state["row"]["id"]),
+                parts=ship_parts,
+                fuel_kg=source_fuel_kg,
+            )
+
+            conn.commit()
+            return {
+                "ok": True,
+                "source_kind": source_kind,
+                "source_id": source_id,
+                "source_key": source_key,
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "target_key": target_key,
+                "resource_id": move_resource_id,
+                "moved_mass_kg": accepted_mass_kg,
+                "destroyed_mass_kg": 0.0,
+                "destroyed_in_space": False,
+                "location_id": source_location_id,
+            }
 
         accepted_mass_kg = move_mass_kg
         destroyed_mass_kg = 0.0
@@ -2858,6 +3064,8 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
             compatible: List[Tuple[Dict[str, Any], float, float]] = []
             total_free_mass_kg = 0.0
             for container in target_containers:
+                if target_container_idx is not None and int(container.get("container_index") or -1) != target_container_idx:
+                    continue
                 cap = max(0.0, float(container.get("capacity_m3") or 0.0))
                 used = max(0.0, float(container.get("used_m3") or 0.0))
                 free = max(0.0, cap - used)
@@ -3016,6 +3224,7 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[
             "source_key": source_key,
             "target_kind": target_kind,
             "target_id": target_id,
+            "target_key": target_key,
             "resource_id": move_resource_id,
             "moved_mass_kg": accepted_mass_kg,
             "destroyed_mass_kg": destroyed_mass_kg,

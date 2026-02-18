@@ -5,20 +5,15 @@
   "display_name": "Nuclear Thermal Rocket",
   "notes": [
     "One active engine per vessel.",
-    "Reactor thermal power curve: P_th(MW) = 50 * R^2, where R is Reactor Rating 1..10.",
-    "If reactor can't supply an item's P_req, throttle is capped: maxThrottle = min(1, P_th(R)/item.P_req_mw_th).",
-    "ActualThrust = maxThrust * throttle.",
-    "Robotic shielding/hardening mass (optional ship rule): m_shield_t = 0.2 * R."
+    "Throttle is capped if the reactor cannot supply the engine's required thermal_mw: maxThrottle = min(1, P_th_available / engine.thermal_mw).",
+    "ActualThrust = maxThrust * throttle."
   ],
   "constraints": {
     "one_active_main_per_vessel": true
   },
   "power_interface": {
     "model": "reactor_thermal",
-    "rating_min": 1,
-    "rating_max": 10,
-    "power_formula": "50 * R^2",
-    "throttle_cap_formula": "min(1, P_th(R) / main.P_req_mw_th)"
+    "required_field": "thermal_mw"
   },
   "resource_interfaces": {
     "propellant": {
@@ -38,18 +33,14 @@
     }
   },
   "mainline_files": [
-    "main/ntr_m1_nerva_solid_core.json",
-    "main/ntr_m2_dumbo_folded_flow.json",
-    "main/ntr_m3_particle_bed.json",
-    "main/ntr_m4_advanced_carbide_cermet.json",
-    "main/ntr_m5_closed_cycle_gas_core.json",
-    "main/ntr_m6_open_cycle_gas_core.json"
+    "main/scn_1_pioneer.json",
+    "main/scn_2_frontier.json",
+    "main/ascn_1_venture.json",
+    "main/ascn_2_atlas.json",
+    "main/cgn_1_helios.json",
+    "main/cgn_2_prometheus.json",
+    "main/ogn_1_icarus.json",
+    "main/ogn_2_daedalus.json"
   ],
-  "upgrade_files": [
-    "upgrades/ntr_u1_high_temp_fuel_elements.json",
-    "upgrades/ntr_u2_neutronics_optimization.json",
-    "upgrades/ntr_u3_erosion_control.json",
-    "upgrades/ntr_u4_crack_resistant_nozzles.json",
-    "upgrades/ntr_u5_plasma_stability_control.json"
-  ]
+  "upgrade_files": []
 }

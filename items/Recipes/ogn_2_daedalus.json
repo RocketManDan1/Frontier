@@ -1,0 +1,22 @@
+{
+  "recipe_id": "ogn_2_daedalus",
+  "name": "Assemble OGN-2 \"Daedalus\"",
+  "output_item_id": "ogn_2_daedalus",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "advanced_aerospace_alloys",   "qty": 25 },
+    { "item_id": "advanced_ceramics",           "qty": 18 },
+    { "item_id": "carbon_composites",           "qty": 25 },
+    { "item_id": "radiation_composite_armor",   "qty": 15 },
+    { "item_id": "high_grade_reactor_pellets",  "qty": 10 },
+    { "item_id": "superconductors",             "qty": 5 },
+    { "item_id": "strategic_elements",          "qty": 1.5 },
+    { "item_id": "precious_rare_metals",        "qty": 1.5 }
+  ],
+  "build_time_s": 28800,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 8,
+  "power_kw": 3200,
+  "byproducts": []
+}

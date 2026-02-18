@@ -1,0 +1,17 @@
+{
+  "id": "phoebus2a_colossus",
+  "name": "Phoebus-2A \"Colossus\"",
+  "research_node": "high_power_solid_core_fission",
+  "research_unlock_level": 4,
+  "branch": "solid_core",
+  "mass_t": 2.27,
+  "output": {
+    "thermal_mw": 4000
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "large_bore_graphite_matrix_elements"
+  },
+  "description": "The most powerful solid-core NTR reactor ever test-fired. The Phoebus-2A ran for over 32 minutes at full power in 1968. Its large-bore graphite matrix core sustains extreme mass-flow rates demanded by high-thrust engines.",
+  "ui_tags": ["solid_core", "high_power"]
+}

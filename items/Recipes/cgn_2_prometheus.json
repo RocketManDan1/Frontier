@@ -1,0 +1,21 @@
+{
+  "recipe_id": "cgn_2_prometheus",
+  "name": "Assemble CGN-2 \"Prometheus\"",
+  "output_item_id": "cgn_2_prometheus",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "advanced_aerospace_alloys",   "qty": 17 },
+    { "item_id": "advanced_ceramics",           "qty": 17 },
+    { "item_id": "carbon_composites",           "qty": 17 },
+    { "item_id": "radiation_composite_armor",   "qty": 13 },
+    { "item_id": "high_grade_reactor_pellets",  "qty": 10 },
+    { "item_id": "superconductors",             "qty": 4 },
+    { "item_id": "strategic_elements",          "qty": 1 }
+  ],
+  "build_time_s": 18000,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 6,
+  "power_kw": 2000,
+  "byproducts": []
+}

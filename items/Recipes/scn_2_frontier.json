@@ -1,0 +1,18 @@
+{
+  "recipe_id": "scn_2_frontier",
+  "name": "Assemble SCN-2 \"Frontier\"",
+  "output_item_id": "scn_2_frontier",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys",           "qty": 19 },
+    { "item_id": "advanced_aerospace_alloys",   "qty": 24 },
+    { "item_id": "low_grade_reactor_pellets",   "qty": 8 },
+    { "item_id": "semiconductor_materials",     "qty": 5 }
+  ],
+  "build_time_s": 5400,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 2,
+  "power_kw": 700,
+  "byproducts": []
+}

@@ -1,0 +1,26 @@
+{
+  "id": "ogn_2_daedalus",
+  "name": "OGN-2 \"Daedalus\"",
+  "research_node": "open_gas_cycle_ntr",
+  "research_unlock_level": 4,
+  "branch": "gas_core_open",
+  "mass_t": 80.0,
+  "performance": {
+    "max_thrust_kN": 1400,
+    "isp_s": 2500
+  },
+  "power_requirements": {
+    "thermal_mw": 4050
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "description": "The most powerful NTR in the tech tree. A full open-cycle plasma engine operating at the edge of controlled fission. Capable of moving massive.",
+  "ui_tags": ["gas_core_open"]
+}

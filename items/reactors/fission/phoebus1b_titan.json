@@ -1,0 +1,17 @@
+{
+  "id": "phoebus1b_titan",
+  "name": "Phoebus-1B \"Titan\"",
+  "research_node": "advanced_solid_core_fission",
+  "research_unlock_level": 4,
+  "branch": "solid_core",
+  "mass_t": 1.02,
+  "output": {
+    "thermal_mw": 1500
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "large_bore_graphite_matrix_elements"
+  },
+  "description": "A large, high-output solid-core reactor from the Phoebus program. Capable of sustaining the thermal demands of advanced solid-core NTR engines on long-duration burns. The benchmark for tier-2 fission propulsion.",
+  "ui_tags": ["solid_core", "advanced"]
+}

@@ -406,7 +406,9 @@ def _validate_string_list(entry: Dict[str, Any], key: str, file_path: Path, erro
 def _validate_thruster_main_entry(entry: Dict[str, Any], file_path: Path, errors: List[str]) -> None:
     _validate_non_empty_str(entry, "id", file_path, errors)
     _validate_non_empty_str(entry, "name", file_path, errors)
-    _validate_number(entry, "tier", file_path, errors)
+    tier_value = entry.get("tier")
+    if tier_value is not None and not isinstance(tier_value, (int, float)):
+        errors.append(f"{file_path}: 'tier' must be a number when provided")
     _validate_number(entry, "mass_t", file_path, errors)
 
     performance = entry.get("performance")
@@ -421,7 +423,6 @@ def _validate_thruster_main_entry(entry: Dict[str, Any], file_path: Path, errors
         errors.append(f"{file_path}: 'power_requirements' must be an object")
     else:
         _validate_number(power, "thermal_mw", file_path, errors)
-        _validate_number(power, "min_reactor_rating", file_path, errors)
 
 
 def _validate_thruster_upgrade_entry(entry: Dict[str, Any], file_path: Path, errors: List[str]) -> None:
@@ -619,7 +620,6 @@ def load_thruster_main_catalog() -> Dict[str, Dict[str, Any]]:
                 "isp_s": max(0.0, float(main.get("isp_s") or 0.0)),
                 "thrust_kn": max(0.0, float(main.get("max_thrust_kN") or 0.0)),
                 "thermal_mw": float(main.get("P_req_mw_th") or 0.0),
-                "min_reactor_rating": int(main.get("min_reactor_rating") or 0),
                 "reaction_mass": str((main.get("consumables") or {}).get("reaction_mass") or ""),
             }
 

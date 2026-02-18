@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "reactors_fission",
+  "display_name": "Fission Reactor",
+  "notes": [
+    "Provides thermal power (thermal_mw) to coupled NTR engines.",
+    "Throttle on the engine side caps at min(1, reactor.thermal_mw / engine.thermal_mw).",
+    "One reactor per vessel."
+  ],
+  "constraints": {
+    "one_per_vessel": true
+  },
+  "output_interface": {
+    "model": "reactor_thermal",
+    "field": "thermal_mw"
+  },
+  "mainline_files": [
+    "rd0410_igrit.json",
+    "kiwi_b4e_bison.json",
+    "pewee1_sparrow.json",
+    "phoebus1b_titan.json",
+    "nerva2_aegis.json",
+    "phoebus2a_colossus.json",
+    "gcnr200_alcyone.json",
+    "gcnr4000_hyperion.json"
+  ]
+}

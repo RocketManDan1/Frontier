@@ -1,0 +1,17 @@
+{
+  "id": "pewee1_sparrow",
+  "name": "PEWEE-1 \"Sparrow\"",
+  "research_node": "advanced_solid_core_fission",
+  "research_unlock_level": 1,
+  "branch": "solid_core",
+  "mass_t": 0.647,
+  "output": {
+    "thermal_mw": 503
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "composite_carbide_hexagonal_elements"
+  },
+  "description": "A compact high-temperature reactor developed to validate advanced fuel element geometries. The PEWEE-1 achieves an outstanding power-to-mass ratio by running fuel elements at the limits of solid-phase thermal tolerance.",
+  "ui_tags": ["solid_core", "advanced"]
+}

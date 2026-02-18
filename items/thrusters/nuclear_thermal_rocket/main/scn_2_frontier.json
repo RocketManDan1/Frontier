@@ -1,0 +1,26 @@
+{
+  "id": "scn_2_frontier",
+  "name": "SCN-2 \"Frontier\"",
+  "research_node": "early_solid_core_ntr",
+  "research_unlock_level": 4,
+  "branch": "solid_core",
+  "mass_t": 28.0,
+  "performance": {
+    "max_thrust_kN": 400,
+    "isp_s": 900
+  },
+  "power_requirements": {
+    "thermal_mw": 450
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "description": "An improved solid-core design with a higher-flow nozzle assembly and upgraded fuel element geometry. Offers meaningfully better thrust at modest additional mass.",
+  "ui_tags": ["solid_core", "early"]
+}

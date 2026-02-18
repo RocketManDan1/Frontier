@@ -147,7 +147,55 @@
           id: "reactors",
           label: "Reactors",
           trees: [
-            makeTemplateTree("reactors", "Fission"),
+            {
+              id: "reactors_fission",
+              label: "Fission",
+              description: "Solid-core fission reactor progression supplying thermal power to NTR engines.",
+              nodes: [
+                {
+                  id: "early_solid_core_fission",
+                  name: "Early Solid-Core Fission",
+                  passive: { stat: "Thermal Output", perLevel: 1, unit: "%", sign: "+" },
+                  unlocks: {
+                    1: { name: 'RD-0410 "Igrit"',    mass_t: 0.52,  thermal_mw: 196  },
+                    4: { name: 'KIWI-B4E "Bison"',   mass_t: 0.95,  thermal_mw: 937  },
+                  },
+                },
+                {
+                  id: "advanced_solid_core_fission",
+                  name: "Advanced Solid-Core Fission",
+                  passive: { stat: "Thermal Output", perLevel: 2, unit: "%", sign: "+" },
+                  unlocks: {
+                    1: { name: 'PEWEE-1 "Sparrow"',   mass_t: 0.647, thermal_mw: 503  },
+                    4: { name: 'Phoebus-1B "Titan"',  mass_t: 1.02,  thermal_mw: 1500 },
+                  },
+                },
+                {
+                  id: "high_power_solid_core_fission",
+                  name: "High-Power Solid-Core Fission",
+                  passive: { stat: "Thermal Output", perLevel: 2, unit: "%", sign: "+" },
+                  unlocks: {
+                    1: { name: 'NERVA-2 "Aegis"',       mass_t: 1.8,  thermal_mw: 2400 },
+                    4: { name: 'Phoebus-2A "Colossus"', mass_t: 2.27, thermal_mw: 4000 },
+                  },
+                },
+                {
+                  id: "gas_core_fission",
+                  name: "Gas-Core Fission",
+                  passive: { stat: "Thermal Output", perLevel: 3, unit: "%", sign: "+" },
+                  unlocks: {
+                    1: { name: 'GCNR-200 "Alcyone"',   mass_t: 3.8, thermal_mw: 5200  },
+                    4: { name: 'GCNR-4000 "Hyperion"', mass_t: 7.5, thermal_mw: 10000 },
+                  },
+                },
+              ],
+              edges: [
+                ["early_solid_core_fission", "advanced_solid_core_fission"],
+                ["advanced_solid_core_fission", "high_power_solid_core_fission"],
+                ["high_power_solid_core_fission", "gas_core_fission"],
+              ],
+              isTemplate: false,
+            },
             makeTemplateTree("reactors", "Solar Concentrator"),
             makeTemplateTree("reactors", "Direct Plasma"),
             makeTemplateTree("reactors", "Z-Pinch"),
@@ -493,7 +541,12 @@
 
       const stats = document.createElement("div");
       stats.className = "researchUnlockStats";
-      stats.textContent = `Mass ${unlock.massT} t · Thrust ${unlock.thrustKN} kN · ISP ${unlock.ispS} s · Reactor ${unlock.reactorLevelRequired}`;
+      // Support both thruster fields (massT/thrustKN/ispS) and reactor fields (mass_t/thermal_mw)
+      if (unlock.thermal_mw !== undefined) {
+        stats.textContent = `Mass ${unlock.mass_t} t · Thermal ${unlock.thermal_mw} MWth`;
+      } else {
+        stats.textContent = `Mass ${unlock.massT} t · Thrust ${unlock.thrustKN} kN · ISP ${unlock.ispS} s`;
+      }
       row.appendChild(stats);
 
       unlockRowsEl.appendChild(row);

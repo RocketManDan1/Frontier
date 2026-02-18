@@ -1,0 +1,17 @@
+{
+  "id": "nerva2_aegis",
+  "name": "NERVA-2 \"Aegis\"",
+  "research_node": "high_power_solid_core_fission",
+  "research_unlock_level": 1,
+  "branch": "solid_core",
+  "mass_t": 1.8,
+  "output": {
+    "thermal_mw": 2400
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "composite_carbide_twisted_tape_elements"
+  },
+  "description": "A second-generation solid-core reactor based on the Phase 2 NERVA programme roadmap. Higher operating temperatures and an upgraded reflector assembly push thermal output well beyond first-generation designs while keeping the core compact.",
+  "ui_tags": ["solid_core", "high_power"]
+}

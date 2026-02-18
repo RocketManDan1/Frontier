@@ -1,0 +1,20 @@
+{
+  "recipe_id": "cgn_1_helios",
+  "name": "Assemble CGN-1 \"Helios\"",
+  "output_item_id": "cgn_1_helios",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "advanced_aerospace_alloys",   "qty": 13 },
+    { "item_id": "advanced_ceramics",           "qty": 11 },
+    { "item_id": "carbon_composites",           "qty": 13 },
+    { "item_id": "radiation_composite_armor",   "qty": 11 },
+    { "item_id": "high_grade_reactor_pellets",  "qty": 6 },
+    { "item_id": "superconductors",             "qty": 3 }
+  ],
+  "build_time_s": 14400,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 5,
+  "power_kw": 1600,
+  "byproducts": []
+}

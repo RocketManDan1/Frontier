@@ -1,0 +1,26 @@
+{
+  "id": "ogn_1_icarus",
+  "name": "OGN-1 \"Icarus\"",
+  "research_node": "open_gas_cycle_ntr",
+  "research_unlock_level": 1,
+  "branch": "gas_core_open",
+  "mass_t": 60.0,
+  "performance": {
+    "max_thrust_kN": 800,
+    "isp_s": 2200
+  },
+  "power_requirements": {
+    "thermal_mw": 3200
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "description": "An open-cycle gas-core NTR that exhausts fissile plasma directly with the propellant. Extraordinary specific impulse, but fissile material is consumed with every burn. Not for the cost-conscious.",
+  "ui_tags": ["gas_core_open"]
+}
