@@ -26,6 +26,7 @@
   const dustParticles = [];
   const MAP_WINDOW_LAYOUT_KEY = "earthmoon.mapWindowLayout.v1";
   let mapWindowZIndex = 20;
+  let mapPanelControllers = null;
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -495,6 +496,7 @@
 
     setupPanel(overviewPanelEl, "overview", 240, 220);
     setupPanel(infoPanelEl, "info", 260, 280);
+    mapPanelControllers = panelRecords;
 
     if (mapDockEl) {
       mapDockEl.addEventListener("click", (event) => {
@@ -540,6 +542,34 @@
       });
       saveWindowLayoutState(layoutState);
     });
+  }
+
+  function ensureInfoPanelVisible() {
+    const record = mapPanelControllers?.get?.("info");
+    if (record) {
+      record.setMinimized(false);
+      record.showPanel();
+      return;
+    }
+
+    if (infoPanelEl) {
+      infoPanelEl.style.display = "block";
+      infoPanelEl.dataset.minimized = "false";
+      infoPanelEl.classList.remove("isMinimized");
+      infoPanelEl.querySelectorAll(".mapWindowBody, .mapWindowResize").forEach((el) => {
+        el.style.display = "";
+      });
+      infoPanelEl.style.height = "";
+      mapWindowZIndex += 1;
+      infoPanelEl.style.zIndex = String(mapWindowZIndex);
+      infoPanelEl.classList.add("isSelected");
+    }
+
+    const infoDockBtn = document.querySelector(".mapPage .mapDock [data-map-window='info']");
+    if (infoDockBtn) {
+      infoDockBtn.classList.add("isOpen");
+      infoDockBtn.setAttribute("aria-pressed", "true");
+    }
   }
 
   const wikiSummaryCache = new Map();
@@ -979,6 +1009,7 @@
   let contextMenuEl = null;
   let syncStatePromise = null;
   const INVENTORY_WINDOW_EVENT = "earthmoon:open-inventory-window";
+  const STACK_WINDOW_EVENT = "earthmoon:open-stack-window";
 
   function selectedShip() {
     if (!selectedShipId) return null;
@@ -1146,6 +1177,11 @@
     window.dispatchEvent(new CustomEvent(INVENTORY_WINDOW_EVENT, { detail }));
   }
 
+  function requestStackWindow(detail) {
+    if (!detail) return;
+    window.dispatchEvent(new CustomEvent(STACK_WINDOW_EVENT, { detail }));
+  }
+
   function openShipInventoryWindow(ship) {
     if (!ship) return;
     requestInventoryWindow({
@@ -1167,6 +1203,17 @@
     });
   }
 
+  function openShipStackWindow(ship) {
+    if (!ship) return;
+    requestStackWindow({
+      kind: "ship",
+      id: String(ship.id || ""),
+      name: String(ship.name || ship.id || "Ship"),
+      location_id: String(ship.location_id || ""),
+      status: String(ship.status || ""),
+    });
+  }
+
   function openShipContextMenu(ship, e) {
     if (!ship) return;
     const pt = contextPointerFromEvent(e);
@@ -1182,6 +1229,7 @@
       {
         label: "View ship details",
         onClick: () => {
+          ensureInfoPanelVisible();
           selectedShipId = ship.id;
           showShipPanel();
         },
@@ -1189,6 +1237,10 @@
       {
         label: "Open inventory",
         onClick: () => openShipInventoryWindow(ship),
+      },
+      {
+        label: "View stack",
+        onClick: () => openShipStackWindow(ship),
       },
     ];
 
@@ -1224,7 +1276,10 @@
     if (!isOrbit) {
       actionsList.push({
         label: "View location details",
-        onClick: () => showLocationInfo(loc),
+        onClick: () => {
+          ensureInfoPanelVisible();
+          showLocationInfo(loc);
+        },
       });
     }
 
@@ -1247,7 +1302,10 @@
     const actionsList = [
       {
         label: "View body details",
-        onClick: () => showBodyInfo(bodyId),
+        onClick: () => {
+          ensureInfoPanelVisible();
+          showBodyInfo(bodyId);
+        },
       },
     ];
 
@@ -3115,6 +3173,8 @@
       });
       dot.on("pointertap", (e) => {
         if (isSecondaryPointerEvent(e)) return;
+        const clickCount = Number(e?.data?.originalEvent?.detail || 1);
+        if (clickCount >= 2) ensureInfoPanelVisible();
         showLocationInfo(loc);
       });
       dot.on("rightclick", (e) => {
@@ -3440,6 +3500,8 @@
 
     c.on("pointertap", (e) => {
       if (isSecondaryPointerEvent(e)) return;
+      const clickCount = Number(e?.data?.originalEvent?.detail || 1);
+      if (clickCount >= 2) ensureInfoPanelVisible();
       hideContextMenu();
       selectedShipId = ship.id;
       showShipPanel();

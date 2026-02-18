@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+import os
 import re
 import sqlite3
 import time
@@ -1115,6 +1116,13 @@ def purge_test_ships(conn: sqlite3.Connection) -> None:
     )
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
     return catalog_service.normalize_parts(
         raw_parts,
@@ -1744,6 +1752,47 @@ def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]
     return rows
 
 
+def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    ship_row = ship_state.get("row") or {}
+    ship_id = str(ship_row.get("id") or "")
+    can_transfer = bool(ship_state.get("is_docked"))
+    rows: List[Dict[str, Any]] = []
+
+    for idx, part in enumerate(ship_state.get("parts") or []):
+        part_payload = part if isinstance(part, dict) else {}
+        item_id = str(part_payload.get("item_id") or part_payload.get("id") or part_payload.get("type") or f"part_{idx}")
+        label = str(part_payload.get("name") or item_id or f"Part {idx + 1}")
+        ptype = str(part_payload.get("type") or part_payload.get("category_id") or "module")
+        mass_kg = max(0.0, float(part_payload.get("mass_kg") or 0.0))
+        transfer = None
+        if can_transfer and ship_id:
+            transfer = {
+                "source_kind": "ship_part",
+                "source_id": ship_id,
+                "source_key": str(idx),
+                "amount": 1.0,
+            }
+
+        rows.append(
+            {
+                "item_uid": f"ship:{ship_id}:part:{idx}",
+                "item_kind": "part",
+                "part_index": idx,
+                "item_id": item_id,
+                "label": label,
+                "subtitle": ptype,
+                "resource_id": "",
+                "mass_kg": mass_kg,
+                "volume_m3": 0.0,
+                "quantity": 1.0,
+                "icon_seed": f"ship_part::{item_id}::{idx}",
+                "transfer": transfer,
+            }
+        )
+
+    return rows
+
+
 def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     location_id = str(location_payload.get("location_id") or "")
     rows: List[Dict[str, Any]] = []
@@ -2059,7 +2108,8 @@ def _startup():
         ensure_default_admin_account(conn)
         seed_locations_and_edges_if_empty(conn)
         ensure_solar_system_expansion(conn)
-        purge_test_ships(conn)
+        if _env_flag("EARTHMOON_PURGE_TEST_SHIPS_ON_STARTUP", default=False):
+            purge_test_ships(conn)
         ensure_inventory_baseline_ship(conn)
         regenerate_matrix_if_needed(conn)
         conn.commit()
@@ -2360,8 +2410,100 @@ def api_inventory_context(kind: str, entity_id: str, request: Request) -> Dict[s
         conn.close()
 
 
+@app.get("/api/stack/context/ship/{ship_id}")
+def api_stack_context_ship(ship_id: str, request: Request) -> Dict[str, Any]:
+    sid = str(ship_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="ship_id is required")
+
+    conn = connect_db()
+    try:
+        require_login(conn, request)
+        settle_arrivals(conn, game_now_s())
+        conn.commit()
+
+        anchor_ship = _load_ship_inventory_state(conn, sid)
+        if not anchor_ship["is_docked"]:
+            raise HTTPException(status_code=400, detail="Ship must be docked to view transferable stack")
+
+        location_id = str(anchor_ship["location_id"])
+        loc_row = _get_location_row(conn, location_id)
+        location_name = str(loc_row["name"])
+
+        stacks: List[Dict[str, Any]] = []
+        location_payload = get_location_inventory_payload(conn, location_id)
+        loc_items = [
+            item for item in _inventory_items_for_location(location_payload)
+            if str(item.get("item_kind") or "").lower() == "part"
+        ]
+        stacks.append(
+            {
+                "stack_kind": "location",
+                "id": location_id,
+                "name": f"{location_name} Site Inventory",
+                "location_id": location_id,
+                "items": loc_items,
+            }
+        )
+
+        ship_rows = conn.execute(
+            """
+            SELECT id,name
+            FROM ships
+            WHERE location_id=? AND arrives_at IS NULL
+            ORDER BY name, id
+            """,
+            (location_id,),
+        ).fetchall()
+
+        for row in ship_rows:
+            ship_state = _load_ship_inventory_state(conn, str(row["id"]))
+            stacks.append(
+                {
+                    "stack_kind": "ship",
+                    "id": str(row["id"]),
+                    "name": str(row["name"]),
+                    "location_id": location_id,
+                    "items": _stack_items_for_ship(ship_state),
+                }
+            )
+
+        return {
+            "anchor": {
+                "kind": "ship",
+                "id": sid,
+                "name": str(anchor_ship["row"]["name"]),
+                "location_id": location_id,
+            },
+            "location": {
+                "id": location_id,
+                "name": location_name,
+            },
+            "stacks": stacks,
+        }
+    finally:
+        conn.close()
+
+
+class InventoryTransferReq(BaseModel):
+    source_kind: Literal["ship_container", "ship_resource", "location_resource"]
+    source_id: str
+    source_key: str
+    target_kind: Literal["ship", "location"]
+    target_id: str
+    amount: Optional[float] = None
+
+
+class StackTransferReq(BaseModel):
+    source_kind: Literal["ship_part"]
+    source_id: str
+    source_key: str
+    target_kind: Literal["ship", "location"]
+    target_id: str
+
+
 @app.post("/api/inventory/transfer")
-def api_inventory_transfer(req: "InventoryTransferReq", request: Request) -> Dict[str, Any]:
+def api_inventory_transfer(req: InventoryTransferReq, request: Request) -> Dict[str, Any]:
     source_kind = str(req.source_kind or "").strip().lower()
     source_id = str(req.source_id or "").strip()
     source_key = str(req.source_key or "").strip()
@@ -2651,6 +2793,107 @@ def api_inventory_transfer(req: "InventoryTransferReq", request: Request) -> Dic
         conn.close()
 
 
+@app.post("/api/stack/transfer")
+def api_stack_transfer(req: StackTransferReq, request: Request) -> Dict[str, Any]:
+    source_id = str(req.source_id or "").strip()
+    source_key = str(req.source_key or "").strip()
+    target_kind = str(req.target_kind or "").strip().lower()
+    target_id = str(req.target_id or "").strip()
+
+    if not source_id or not source_key:
+        raise HTTPException(status_code=400, detail="source_id and source_key are required")
+    if target_kind not in {"ship", "location"}:
+        raise HTTPException(status_code=400, detail="target_kind must be ship or location")
+    if not target_id:
+        raise HTTPException(status_code=400, detail="target_id is required")
+
+    conn = connect_db()
+    try:
+        require_login(conn, request)
+        settle_arrivals(conn, game_now_s())
+
+        source_ship = _load_ship_inventory_state(conn, source_id)
+        if not source_ship["is_docked"]:
+            raise HTTPException(status_code=400, detail="Source ship must be docked")
+
+        try:
+            src_idx = int(source_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="source_key must be a ship part index") from exc
+
+        source_parts = list(source_ship.get("parts") or [])
+        if src_idx < 0 or src_idx >= len(source_parts):
+            raise HTTPException(status_code=404, detail="Source part not found")
+
+        source_location_id = str(source_ship["location_id"])
+
+        if target_kind == "ship":
+            if target_id == source_id:
+                raise HTTPException(status_code=400, detail="Cannot transfer a part to the same ship")
+
+            target_ship = _load_ship_inventory_state(conn, target_id)
+            if not target_ship["is_docked"]:
+                raise HTTPException(status_code=400, detail="Target ship must be docked")
+
+            target_location_id = str(target_ship["location_id"])
+            if target_location_id != source_location_id:
+                raise HTTPException(status_code=400, detail="Stacks must be at the same location")
+
+            target_parts = list(target_ship.get("parts") or [])
+            moved_part = dict(source_parts[src_idx]) if isinstance(source_parts[src_idx], dict) else {"item_id": "part"}
+            source_parts.pop(src_idx)
+            target_parts.append(moved_part)
+
+            source_fuel_kg = max(0.0, float(source_ship.get("fuel_kg") or 0.0))
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(source_ship["row"]["id"]),
+                parts=source_parts,
+                fuel_kg=source_fuel_kg,
+            )
+
+            target_fuel_kg = max(0.0, float(target_ship.get("fuel_kg") or 0.0))
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(target_ship["row"]["id"]),
+                parts=target_parts,
+                fuel_kg=target_fuel_kg,
+            )
+            destination_location_id = target_location_id
+        else:
+            loc_row = _get_location_row(conn, target_id)
+            destination_location_id = str(loc_row["id"])
+            if destination_location_id != source_location_id:
+                raise HTTPException(status_code=400, detail="Stacks must be at the same location")
+
+            moved_part = dict(source_parts[src_idx]) if isinstance(source_parts[src_idx], dict) else {"item_id": "part"}
+            source_parts.pop(src_idx)
+
+            source_fuel_kg = max(0.0, float(source_ship.get("fuel_kg") or 0.0))
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(source_ship["row"]["id"]),
+                parts=source_parts,
+                fuel_kg=source_fuel_kg,
+            )
+
+            add_part_to_location_inventory(conn, destination_location_id, moved_part, count=1.0)
+
+        conn.commit()
+        return {
+            "ok": True,
+            "source_id": source_id,
+            "source_key": source_key,
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "location_id": source_location_id,
+            "moved_part_item_id": str(moved_part.get("item_id") or moved_part.get("id") or moved_part.get("type") or "part"),
+            "moved_part_name": str(moved_part.get("name") or moved_part.get("item_id") or "Part"),
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/api/transfer_quote")
 def api_transfer_quote(from_id: str, to_id: str, request: Request) -> Dict[str, Any]:
     conn = connect_db()
@@ -2899,15 +3142,6 @@ class TransferReq(BaseModel):
 
 class InventoryContainerReq(BaseModel):
     container_index: int
-
-
-class InventoryTransferReq(BaseModel):
-    source_kind: Literal["ship_container", "ship_resource", "location_resource"]
-    source_id: str
-    source_key: str
-    target_kind: Literal["ship", "location"]
-    target_id: str
-    amount: Optional[float] = None
 
 
 class SpawnShipReq(BaseModel):

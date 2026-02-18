@@ -9,6 +9,7 @@
   const MIN_HEIGHT = 300;
   const TOP_OFFSET = 12;
   const INVENTORY_WINDOW_EVENT = "earthmoon:open-inventory-window";
+  const STACK_WINDOW_EVENT = "earthmoon:open-stack-window";
 
   const APP_CONFIG = {
     fleet: { title: "Fleet", url: "/fleet", icon: "/static/img/dock/fleet.png" },
@@ -23,8 +24,13 @@
   let zIndex = 80;
   let inventoryLoadSeq = 0;
   const inventoryWindowState = new Map();
+  let stackLoadSeq = 0;
+  const stackWindowState = new Map();
   const DRAG_TRANSFER_MIME = "application/x-earthmoon-inventory-transfer";
   let inventoryContextMenuEl = null;
+  const inventoryIconCache = new Map();
+  let inventoryRefreshInFlight = null;
+  let inventoryRefreshQueued = false;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -51,8 +57,9 @@
         if (typeof entry === "string") return entry;
         if (entry && typeof entry === "object") {
           const msg = String(entry.msg || entry.message || "").trim();
-          if (msg) return msg;
           const loc = Array.isArray(entry.loc) ? entry.loc.join(".") : "";
+          if (msg && loc) return `${loc}: ${msg}`;
+          if (msg) return msg;
           return loc ? `Invalid field: ${loc}` : "Invalid request";
         }
         return "";
@@ -92,7 +99,15 @@
     return `inventory:${String(kind || "").toLowerCase()}:${String(id || "")}`;
   }
 
+  function stackWindowId(kind, id) {
+    return `stack:${String(kind || "").toLowerCase()}:${String(id || "")}`;
+  }
+
   function inventoryKey(kind, id) {
+    return `${String(kind || "").toLowerCase()}:${String(id || "")}`;
+  }
+
+  function stackKey(kind, id) {
     return `${String(kind || "").toLowerCase()}:${String(id || "")}`;
   }
 
@@ -117,6 +132,10 @@
   }
 
   function iconDataUri(seed, label) {
+    const cacheKey = `${String(seed || "")}::${String(label || "")}`;
+    const cached = inventoryIconCache.get(cacheKey);
+    if (cached) return cached;
+
     const hash = hashCode(seed || label || "item");
     const hue = hash % 360;
     const hue2 = (hue + 52) % 360;
@@ -134,7 +153,9 @@
         <text x='32' y='38' text-anchor='middle' font-family='Segoe UI,Roboto,sans-serif' font-size='20' fill='rgba(243,250,255,0.98)' font-weight='700'>${escapeHtml(glyph)}</text>
       </svg>
     `;
-    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    inventoryIconCache.set(cacheKey, uri);
+    return uri;
   }
 
   function parseTransferPayload(raw) {
@@ -377,16 +398,32 @@
   }
 
   async function runInventoryTransfer(payload, targetKind, targetId) {
+    const sourceKind = String(payload?.source_kind || "").trim();
+    const sourceId = String(payload?.source_id || "").trim();
+    const sourceKey = String(payload?.source_key || "").trim();
+    const destKind = String(targetKind || "").trim();
+    const destId = String(targetId || "").trim();
+
+    const missing = [];
+    if (!sourceKind) missing.push("source_kind");
+    if (!sourceId) missing.push("source_id");
+    if (!sourceKey) missing.push("source_key");
+    if (!destKind) missing.push("target_kind");
+    if (!destId) missing.push("target_id");
+    if (missing.length) {
+      throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
+    }
+
     const resp = await fetch("/api/inventory/transfer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        source_kind: String(payload?.source_kind || ""),
-        source_id: String(payload?.source_id || ""),
-        source_key: String(payload?.source_key || ""),
+        source_kind: sourceKind,
+        source_id: sourceId,
+        source_key: sourceKey,
         amount: Math.max(0, Number(payload?.amount) || 0),
-        target_kind: String(targetKind || ""),
-        target_id: String(targetId || ""),
+        target_kind: destKind,
+        target_id: destId,
       }),
     });
     const data = await resp.json().catch(() => ({}));
@@ -581,7 +618,10 @@
     if (!body) return;
     const requestId = ++inventoryLoadSeq;
     panel.dataset.inventoryRequestId = String(requestId);
-    body.innerHTML = '<div class="muted">Loading inventory…</div>';
+    const hasRenderedContext = !!record.context;
+    if (!hasRenderedContext) {
+      body.innerHTML = '<div class="muted">Loading inventory…</div>';
+    }
 
     try {
       const context = await requestInventoryContext(record.anchorKind, record.anchorId);
@@ -598,8 +638,235 @@
   }
 
   async function refreshAllInventoryWindows() {
-    const ids = Array.from(inventoryWindowState.keys());
-    await Promise.all(ids.map((windowId) => refreshInventoryWindow(windowId)));
+    if (inventoryRefreshInFlight) {
+      inventoryRefreshQueued = true;
+      return inventoryRefreshInFlight;
+    }
+
+    inventoryRefreshInFlight = (async () => {
+      do {
+        inventoryRefreshQueued = false;
+        const ids = Array.from(inventoryWindowState.keys());
+        await Promise.all(ids.map((windowId) => refreshInventoryWindow(windowId)));
+      } while (inventoryRefreshQueued);
+    })().finally(() => {
+      inventoryRefreshInFlight = null;
+    });
+
+    return inventoryRefreshInFlight;
+  }
+
+  async function requestStackContext(shipId) {
+    const resp = await fetch(`/api/stack/context/ship/${encodeURIComponent(String(shipId || ""))}`, {
+      cache: "no-store",
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(errorDetailText(data?.detail, "Failed to load stack context"));
+    }
+    return data;
+  }
+
+  async function runStackTransfer(payload, targetKind, targetId) {
+    const sourceKind = String(payload?.source_kind || "").trim();
+    const sourceId = String(payload?.source_id || "").trim();
+    const sourceKey = String(payload?.source_key || "").trim();
+    const destKind = String(targetKind || "").trim();
+    const destId = String(targetId || "").trim();
+
+    const missing = [];
+    if (!sourceKind) missing.push("source_kind");
+    if (!sourceId) missing.push("source_id");
+    if (!sourceKey) missing.push("source_key");
+    if (!destKind) missing.push("target_kind");
+    if (!destId) missing.push("target_id");
+    if (missing.length) {
+      throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
+    }
+
+    const resp = await fetch("/api/stack/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_kind: sourceKind,
+        source_id: sourceId,
+        source_key: sourceKey,
+        target_kind: destKind,
+        target_id: destId,
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Stack transfer failed"));
+    return data;
+  }
+
+  function selectedStackFromRecord(record) {
+    const context = record?.context;
+    const stacks = Array.isArray(context?.stacks) ? context.stacks : [];
+    if (!stacks.length) return null;
+
+    const selectedKey = String(record?.selectedStackKey || "");
+    const selected = stacks.find((entry) => stackKey(entry?.stack_kind, entry?.id) === selectedKey);
+    return selected || stacks[0] || null;
+  }
+
+  function renderStackItemCard(item) {
+    const card = renderInventoryItemCard(item);
+    card.classList.add("stackItemCard");
+    return card;
+  }
+
+  function buildStackWorkspace(panel, windowId) {
+    const record = stackWindowState.get(windowId);
+    if (!record) return;
+    const body = panel.querySelector("[data-window-body='true']");
+    if (!body) return;
+    const context = record.context;
+
+    const selectedStack = selectedStackFromRecord(record);
+    if (!selectedStack) {
+      body.innerHTML = '<div class="muted">No stack found in this context.</div>';
+      return;
+    }
+
+    const layout = document.createElement("div");
+    layout.className = "inventoryWorkspace";
+
+    const indexPane = document.createElement("aside");
+    indexPane.className = "inventoryIndexPane";
+
+    const indexTitle = document.createElement("div");
+    indexTitle.className = "inventoryIndexTitle";
+    indexTitle.textContent = "Stack Targets";
+    indexPane.appendChild(indexTitle);
+
+    const indexList = document.createElement("div");
+    indexList.className = "inventoryIndexList";
+
+    const stacks = Array.isArray(context?.stacks) ? context.stacks : [];
+    stacks.forEach((entry) => {
+      const entryKind = String(entry?.stack_kind || "").toLowerCase();
+      const entryId = String(entry?.id || "");
+      const key = stackKey(entryKind, entryId);
+
+      const row = document.createElement("div");
+      row.className = "inventoryIndexRow inventoryDropZone";
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      row.dataset.targetKind = entryKind;
+      row.dataset.targetId = entryId;
+      if (key === record.selectedStackKey) row.classList.add("isActive");
+
+      const rowTitle = document.createElement("div");
+      rowTitle.className = "inventoryIndexRowTitle";
+      rowTitle.textContent = String(entry?.name || entryId || "Stack");
+
+      const rowSub = document.createElement("div");
+      rowSub.className = "inventoryIndexRowSub";
+      rowSub.textContent = entryKind === "ship" ? "Ship stack" : "Location inventory";
+
+      row.append(rowTitle, rowSub);
+      row.addEventListener("click", () => {
+        record.selectedStackKey = key;
+        buildStackWorkspace(panel, windowId);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        record.selectedStackKey = key;
+        buildStackWorkspace(panel, windowId);
+      });
+
+      setDropZoneBehavior(row, async (payload) => {
+        await runStackTransfer(payload, entryKind, entryId);
+        await refreshAllStackWindows();
+        await refreshAllInventoryWindows();
+      });
+
+      indexList.appendChild(row);
+    });
+
+    indexPane.appendChild(indexList);
+
+    const mainPane = document.createElement("section");
+    mainPane.className = "inventoryMainPane inventoryDropZone";
+
+    const mainHead = document.createElement("div");
+    mainHead.className = "inventoryMainHead";
+
+    const hTitle = document.createElement("div");
+    hTitle.className = "inventoryMainTitle";
+    hTitle.textContent = String(selectedStack?.name || "Stack");
+
+    const hSub = document.createElement("div");
+    hSub.className = "inventoryMainSub";
+    const locName = String(context?.location?.name || context?.location?.id || "Unknown location");
+    const itemCount = Array.isArray(selectedStack?.items) ? selectedStack.items.length : 0;
+    hSub.textContent = `${locName} · ${itemCount} modules`;
+
+    mainHead.append(hTitle, hSub);
+
+    const strip = document.createElement("div");
+    strip.className = "stackItemStrip";
+    const items = Array.isArray(selectedStack?.items) ? selectedStack.items : [];
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "No modules in this stack.";
+      strip.appendChild(empty);
+    } else {
+      items.forEach((item) => {
+        strip.appendChild(renderStackItemCard(item));
+      });
+    }
+
+    const selectedKind = String(selectedStack?.stack_kind || "").toLowerCase();
+    const selectedId = String(selectedStack?.id || "");
+    mainPane.dataset.targetKind = selectedKind;
+    mainPane.dataset.targetId = selectedId;
+    setDropZoneBehavior(mainPane, async (payload) => {
+      await runStackTransfer(payload, selectedKind, selectedId);
+      await refreshAllStackWindows();
+      await refreshAllInventoryWindows();
+    });
+
+    mainPane.append(mainHead, strip);
+    layout.append(indexPane, mainPane);
+
+    body.innerHTML = "";
+    body.appendChild(layout);
+  }
+
+  async function refreshStackWindow(windowId) {
+    const panel = windows.get(windowId);
+    const record = stackWindowState.get(windowId);
+    if (!panel || !record) return;
+
+    const body = panel.querySelector("[data-window-body='true']");
+    if (!body) return;
+    const requestId = ++stackLoadSeq;
+    panel.dataset.stackRequestId = String(requestId);
+    if (!record.context) {
+      body.innerHTML = '<div class="muted">Loading stack…</div>';
+    }
+
+    try {
+      const context = await requestStackContext(record.anchorId);
+      if (panel.dataset.stackRequestId !== String(requestId)) return;
+      record.context = context;
+      if (!record.selectedStackKey) {
+        record.selectedStackKey = stackKey(context?.anchor?.kind, context?.anchor?.id);
+      }
+      buildStackWorkspace(panel, windowId);
+    } catch (error) {
+      if (panel.dataset.stackRequestId !== String(requestId)) return;
+      body.innerHTML = `<div class="muted">${escapeHtml(String(error?.message || "Failed to load stack."))}</div>`;
+    }
+  }
+
+  async function refreshAllStackWindows() {
+    const ids = Array.from(stackWindowState.keys());
+    await Promise.all(ids.map((windowId) => refreshStackWindow(windowId)));
   }
 
   document.addEventListener("pointerdown", (event) => {
@@ -1158,6 +1425,20 @@
     return createInventoryWindow(windowId, title);
   }
 
+  function ensureStackWindow(windowId, title) {
+    const existing = windows.get(windowId);
+    if (existing) {
+      const titleEl = existing.querySelector("[data-window-title='true']");
+      if (titleEl) titleEl.textContent = title;
+      existing.style.display = "block";
+      bringToFront(existing);
+      persistWindow(windowId, { open: true });
+      return existing;
+    }
+
+    return createInventoryWindow(windowId, title);
+  }
+
   async function openInventoryWorkspace(anchorKind, anchorId, anchorName) {
     const kind = String(anchorKind || "").trim().toLowerCase();
     const id = String(anchorId || "").trim();
@@ -1180,6 +1461,28 @@
     await refreshInventoryWindow(windowId);
   }
 
+  async function openStackWorkspace(anchorKind, anchorId, anchorName) {
+    const kind = String(anchorKind || "").trim().toLowerCase();
+    const id = String(anchorId || "").trim();
+    if (!id || kind !== "ship") return;
+
+    const title = `${String(anchorName || id)} Stack`;
+    const windowId = stackWindowId(kind, id);
+    const panel = ensureStackWindow(windowId, title);
+    const titleEl = panel.querySelector("[data-window-title='true']");
+    if (titleEl) titleEl.textContent = title;
+
+    const existing = stackWindowState.get(windowId) || {};
+    stackWindowState.set(windowId, {
+      ...existing,
+      anchorKind: kind,
+      anchorId: id,
+      anchorName: String(anchorName || id),
+    });
+
+    await refreshStackWindow(windowId);
+  }
+
   window.addEventListener(INVENTORY_WINDOW_EVENT, (event) => {
     const payload = event?.detail || {};
     const kind = String(payload?.kind || "").toLowerCase();
@@ -1189,6 +1492,14 @@
     }
     if (kind === "location") {
       openInventoryWorkspace("location", payload?.id, payload?.name);
+    }
+  });
+
+  window.addEventListener(STACK_WINDOW_EVENT, (event) => {
+    const payload = event?.detail || {};
+    const kind = String(payload?.kind || "").toLowerCase();
+    if (kind === "ship") {
+      openStackWorkspace("ship", payload?.id, payload?.name);
     }
   });
 

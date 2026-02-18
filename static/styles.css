@@ -399,6 +399,19 @@ body.embedMode .pagePanel {
   padding-right: 2px;
 }
 
+.mapPage .stackItemStrip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.mapPage .stackItemCard {
+  min-height: 52px;
+}
+
 .mapPage .inventoryItemCard {
   display: grid;
   grid-template-columns: 46px 1fr;
@@ -2011,6 +2024,8 @@ button:disabled {
 .shipyardPanel {
   display: grid;
   gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .shipyardHeader {

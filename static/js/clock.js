@@ -1,4 +1,7 @@
 (function () {
+  const path = String(window.location.pathname || "");
+  if (path !== "/") return;
+
   let serverSyncGameS = Date.now() / 1000;
   let clientSyncRealS = Date.now() / 1000;
   let timeScale = 1;
