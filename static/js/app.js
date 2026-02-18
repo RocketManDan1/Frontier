@@ -978,6 +978,7 @@
   let cameraTweenToken = 0;
   let contextMenuEl = null;
   let syncStatePromise = null;
+  const INVENTORY_WINDOW_EVENT = "earthmoon:open-inventory-window";
 
   function selectedShip() {
     if (!selectedShipId) return null;
@@ -1140,6 +1141,32 @@
     menu.style.top = `${top}px`;
   }
 
+  function requestInventoryWindow(detail) {
+    if (!detail) return;
+    window.dispatchEvent(new CustomEvent(INVENTORY_WINDOW_EVENT, { detail }));
+  }
+
+  function openShipInventoryWindow(ship) {
+    if (!ship) return;
+    requestInventoryWindow({
+      kind: "ship",
+      id: String(ship.id || ""),
+      name: String(ship.name || ship.id || "Ship"),
+      location_id: String(ship.location_id || ""),
+      status: String(ship.status || ""),
+      containers: Array.isArray(ship.inventory_containers) ? ship.inventory_containers : [],
+    });
+  }
+
+  function openLocationInventoryWindow(loc) {
+    if (!loc || !!loc.is_group) return;
+    requestInventoryWindow({
+      kind: "location",
+      id: String(loc.id || ""),
+      name: String(loc.name || loc.id || "Location"),
+    });
+  }
+
   function openShipContextMenu(ship, e) {
     if (!ship) return;
     const pt = contextPointerFromEvent(e);
@@ -1158,6 +1185,10 @@
           selectedShipId = ship.id;
           showShipPanel();
         },
+      },
+      {
+        label: "Open inventory",
+        onClick: () => openShipInventoryWindow(ship),
       },
     ];
 
@@ -1194,6 +1225,13 @@
       actionsList.push({
         label: "View location details",
         onClick: () => showLocationInfo(loc),
+      });
+    }
+
+    if (!loc.is_group) {
+      actionsList.push({
+        label: "Open inventory",
+        onClick: () => openLocationInventoryWindow(loc),
       });
     }
 

@@ -347,8 +347,10 @@ body.embedMode .pagePanel {
 }
 
 .mapPage .mapWindowBody {
-  overflow: auto;
-  max-height: calc(100% - 54px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: calc(100% - 30px);
+  max-height: none;
   padding-bottom: 2px;
 }
 
@@ -438,7 +440,7 @@ body.embedMode .pagePanel {
   min-width: 260px;
   min-height: 280px;
   max-height: calc(100vh - 108px);
-  overflow: auto;
+  overflow: hidden;
 }
 
 .mapPage .mapOverview {
