@@ -260,6 +260,202 @@ body.embedMode .pagePanel {
   background: transparent;
 }
 
+.mapPage .inventoryWindow {
+  min-width: 460px;
+  min-height: 320px;
+}
+
+.mapPage .inventoryWindowBody {
+  overflow: auto;
+  padding: 10px;
+  background: rgba(8, 13, 20, 0.78);
+}
+
+.mapPage .inventoryWindowMeta {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mapPage .inventoryWorkspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) 1fr;
+  gap: 10px;
+  min-height: 100%;
+}
+
+.mapPage .inventoryIndexPane,
+.mapPage .inventoryMainPane {
+  border: 1px solid var(--border-soft);
+  background: rgba(8, 13, 22, 0.68);
+  min-height: 0;
+}
+
+.mapPage .inventoryIndexTitle {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.14);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mapPage .inventoryIndexList {
+  padding: 6px;
+  display: grid;
+  gap: 5px;
+}
+
+.mapPage .inventoryIndexRow {
+  width: 100%;
+  border: 1px solid transparent;
+  background: rgba(11, 17, 27, 0.8);
+  color: var(--text);
+  text-align: left;
+  border-radius: 5px;
+  padding: 7px 8px;
+}
+
+.mapPage .inventoryIndexRow:hover {
+  border-color: rgba(109, 182, 255, 0.32);
+  background: rgba(24, 43, 64, 0.34);
+}
+
+.mapPage .inventoryIndexRow.isActive {
+  border-color: rgba(109, 182, 255, 0.5);
+  background: rgba(47, 99, 161, 0.22);
+}
+
+.mapPage .inventoryIndexRowTitle {
+  font-size: 12px;
+}
+
+.mapPage .inventoryIndexRowSub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mapPage .inventoryMainPane {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mapPage .inventoryMainHead {
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.14);
+}
+
+.mapPage .inventoryMainTitle {
+  font-size: 12px;
+  color: rgba(235, 245, 252, 0.95);
+}
+
+.mapPage .inventoryMainSub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mapPage .inventoryCapSummary {
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.mapPage .inventoryCapSummaryLine,
+.mapPage .inventoryCapSummaryPhases {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.mapPage .inventoryCapBar {
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(117, 160, 208, 0.38);
+  background: rgba(11, 20, 33, 0.95);
+  overflow: hidden;
+}
+
+.mapPage .inventoryCapBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(76, 147, 221, 0.84), rgba(68, 224, 255, 0.9));
+}
+
+.mapPage .inventoryItemGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.mapPage .inventoryItemCard {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(120, 165, 214, 0.14);
+  background: rgba(7, 12, 20, 0.78);
+  border-radius: 5px;
+  min-height: 54px;
+  padding: 7px;
+}
+
+.mapPage .inventoryItemCard.isDraggable {
+  cursor: grab;
+}
+
+.mapPage .inventoryItemCard.isDragging {
+  opacity: 0.55;
+}
+
+.mapPage .inventoryItemCard:hover {
+  border-color: rgba(109, 182, 255, 0.35);
+}
+
+.mapPage .inventoryItemIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid rgba(144, 191, 236, 0.36);
+}
+
+.mapPage .inventoryItemBody {
+  min-width: 0;
+}
+
+.mapPage .inventoryItemTitle {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mapPage .inventoryItemSub,
+.mapPage .inventoryItemStats {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mapPage .inventoryDropZone.isOver {
+  border-color: rgba(109, 182, 255, 0.58) !important;
+  box-shadow: inset 0 0 0 1px rgba(109, 182, 255, 0.3);
+}
+
 .mapPage .overview,
 .mapPage .info {
   position: absolute;
@@ -1943,6 +2139,35 @@ button:disabled {
 
 .shipInvEmpty {
   padding: 8px 9px;
+}
+
+.shipInvSummary {
+  overflow: visible;
+}
+
+.shipInvSummaryBody {
+  padding: 8px 9px;
+  display: grid;
+  gap: 5px;
+}
+
+.shipInvSummaryLine,
+.shipInvSummaryPhases {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.shipInvBar {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(117, 160, 208, 0.38);
+  background: rgba(11, 20, 33, 0.95);
+  overflow: hidden;
+}
+
+.shipInvBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(76, 147, 221, 0.84), rgba(68, 224, 255, 0.9));
 }
 
 .shipInvTable {

@@ -1,0 +1,10 @@
+{
+  "id": "gas_tank_10_m3",
+  "name": "Gas Tank 10 m3",
+  "type": "storage",
+  "category_id": "storage",
+  "tank_phase": "gas",
+  "resource_id": "",
+  "capacity_m3": 10,
+  "mass_kg": 0
+}

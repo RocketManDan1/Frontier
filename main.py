@@ -6,7 +6,7 @@ import sqlite3
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -1210,12 +1210,19 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
 
         dry_mass_kg = max(0.0, float(part.get("mass_kg") or 0.0))
 
+        tank_phase = str(part.get("tank_phase") or "").strip().lower()
+        if tank_phase not in {"solid", "liquid", "gas"}:
+            tank_phase = classify_resource_phase(resource_id, resource_name, density)
+        resource_phase = classify_resource_phase(resource_id, resource_name, density)
+
         row = {
             "container_index": idx,
             "name": str(part.get("name") or f"Container {idx + 1}"),
             "resource_id": resource_id,
             "resource_name": resource_name,
-            "phase": classify_resource_phase(resource_id, resource_name, density),
+            "phase": tank_phase,
+            "tank_phase": tank_phase,
+            "resource_phase": resource_phase,
             "capacity_m3": capacity_m3,
             "used_m3": used_m3,
             "density_kg_m3": density,
@@ -1240,6 +1247,97 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
             row["total_mass_kg"] = row["dry_mass_kg"] + cargo_mass
 
     return rows
+
+
+def compute_ship_inventory_resources(
+    ship_id: str,
+    containers: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    by_resource: Dict[str, Dict[str, Any]] = {}
+
+    for container in containers or []:
+        resource_id = str(container.get("resource_id") or "").strip()
+        if not resource_id:
+            continue
+
+        mass_kg = max(0.0, float(container.get("cargo_mass_kg") or 0.0))
+        volume_m3 = max(0.0, float(container.get("used_m3") or 0.0))
+        if mass_kg <= 1e-9 and volume_m3 <= 1e-9:
+            continue
+
+        phase = str(container.get("resource_phase") or container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
+        if phase not in {"solid", "liquid", "gas"}:
+            phase = "solid"
+
+        entry = by_resource.get(resource_id)
+        if not entry:
+            label = str(container.get("resource_name") or resource_id)
+            entry = {
+                "item_uid": f"ship:{ship_id}:resource:{resource_id}",
+                "item_kind": "resource",
+                "item_id": resource_id,
+                "label": label,
+                "subtitle": f"{phase.title()} cargo",
+                "resource_id": resource_id,
+                "phase": phase,
+                "mass_kg": 0.0,
+                "volume_m3": 0.0,
+                "quantity": 0.0,
+                "icon_seed": f"ship_resource::{resource_id}",
+                "transfer": {
+                    "source_kind": "ship_resource",
+                    "source_id": ship_id,
+                    "source_key": resource_id,
+                    "amount": 0.0,
+                },
+            }
+            by_resource[resource_id] = entry
+
+        entry["mass_kg"] = max(0.0, float(entry.get("mass_kg") or 0.0)) + mass_kg
+        entry["volume_m3"] = max(0.0, float(entry.get("volume_m3") or 0.0)) + volume_m3
+        entry["quantity"] = max(0.0, float(entry.get("quantity") or 0.0)) + mass_kg
+        transfer = entry.get("transfer") if isinstance(entry.get("transfer"), dict) else None
+        if transfer is not None:
+            transfer["amount"] = max(0.0, float(transfer.get("amount") or 0.0)) + mass_kg
+
+    rows = list(by_resource.values())
+    rows.sort(key=lambda r: (str(r.get("phase") or ""), str(r.get("label") or r.get("resource_id") or "")))
+    return rows
+
+
+def compute_ship_capacity_summary(containers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_phase: Dict[str, Dict[str, float]] = {
+        "solid": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
+        "liquid": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
+        "gas": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
+    }
+
+    for container in containers or []:
+        phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
+        if phase not in by_phase:
+            phase = "solid"
+
+        cap = max(0.0, float(container.get("capacity_m3") or 0.0))
+        used = max(0.0, float(container.get("used_m3") or 0.0))
+
+        by_phase[phase]["capacity_m3"] += cap
+        by_phase[phase]["used_m3"] += min(cap, used)
+
+    total_capacity = 0.0
+    total_used = 0.0
+    for row in by_phase.values():
+        row["free_m3"] = max(0.0, row["capacity_m3"] - row["used_m3"])
+        row["utilization"] = (row["used_m3"] / row["capacity_m3"]) if row["capacity_m3"] > 1e-9 else 0.0
+        total_capacity += row["capacity_m3"]
+        total_used += row["used_m3"]
+
+    return {
+        "used_m3": total_used,
+        "capacity_m3": total_capacity,
+        "free_m3": max(0.0, total_capacity - total_used),
+        "utilization": (total_used / total_capacity) if total_capacity > 1e-9 else 0.0,
+        "by_phase": by_phase,
+    }
 
 
 def _json_dumps_stable(value: Any) -> str:
@@ -1498,6 +1596,200 @@ def consume_parts_from_location_inventory(
             by_item[item_id] = next_rows
 
     return normalize_parts(consumed_parts)
+
+
+def _get_location_row(conn: sqlite3.Connection, location_id: str) -> sqlite3.Row:
+    loc_id = str(location_id or "").strip()
+    if not loc_id:
+        raise HTTPException(status_code=400, detail="location_id is required")
+    row = conn.execute(
+        "SELECT id,name,is_group FROM locations WHERE id=?",
+        (loc_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Location not found")
+    if int(row["is_group"]):
+        raise HTTPException(status_code=400, detail="location_id must be a non-group location")
+    return row
+
+
+def _load_ship_inventory_state(conn: sqlite3.Connection, ship_id: str) -> Dict[str, Any]:
+    sid = str(ship_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="ship_id is required")
+
+    row = conn.execute(
+        """
+        SELECT id,name,location_id,arrives_at,parts_json,fuel_kg
+        FROM ships
+        WHERE id=?
+        """,
+        (sid,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    parts = normalize_parts(json.loads(row["parts_json"] or "[]"))
+    fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
+    containers = compute_ship_inventory_containers(parts, fuel_kg)
+    resources = compute_ship_inventory_resources(sid, containers)
+    capacity_summary = compute_ship_capacity_summary(containers)
+    location_id = str(row["location_id"] or "").strip()
+    is_docked = bool(location_id) and row["arrives_at"] is None
+    return {
+        "row": row,
+        "parts": parts,
+        "fuel_kg": fuel_kg,
+        "containers": containers,
+        "resources": resources,
+        "capacity_summary": capacity_summary,
+        "location_id": location_id,
+        "is_docked": is_docked,
+    }
+
+
+def _apply_ship_container_fill(
+    part: Dict[str, Any],
+    *,
+    resource_id: str,
+    cargo_mass_kg: float,
+    used_m3: float,
+    density_kg_m3: float,
+) -> Dict[str, Any]:
+    next_part = dict(part or {})
+    rid = str(resource_id or "").strip()
+    mass = max(0.0, float(cargo_mass_kg or 0.0))
+    used = max(0.0, float(used_m3 or 0.0))
+    density = max(0.0, float(density_kg_m3 or 0.0))
+
+    if rid:
+        next_part["resource_id"] = rid
+    if density > 0.0:
+        next_part["mass_per_m3_kg"] = density
+
+    for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
+        next_part[key] = used
+    for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
+        next_part[key] = mass
+
+    return next_part
+
+
+def _persist_ship_inventory_state(
+    conn: sqlite3.Connection,
+    *,
+    ship_id: str,
+    parts: List[Dict[str, Any]],
+    fuel_kg: float,
+) -> None:
+    stats = derive_ship_stats_from_parts(parts, current_fuel_kg=max(0.0, float(fuel_kg or 0.0)))
+    conn.execute(
+        """
+        UPDATE ships
+        SET parts_json=?, fuel_kg=?, fuel_capacity_kg=?, dry_mass_kg=?, isp_s=?
+        WHERE id=?
+        """,
+        (
+            json.dumps(parts),
+            stats["fuel_kg"],
+            stats["fuel_capacity_kg"],
+            stats["dry_mass_kg"],
+            stats["isp_s"],
+            ship_id,
+        ),
+    )
+
+
+def _resource_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str) -> sqlite3.Row:
+    row = conn.execute(
+        """
+        SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+        FROM location_inventory_stacks
+        WHERE location_id=? AND stack_type='resource' AND stack_key=?
+        """,
+        (location_id, stack_key),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Resource stack not found")
+    return row
+
+
+def _consume_location_resource_mass(conn: sqlite3.Connection, row: sqlite3.Row, mass_kg: float) -> float:
+    available_mass = max(0.0, float(row["mass_kg"] or 0.0))
+    amount = max(0.0, min(available_mass, float(mass_kg or 0.0)))
+    if amount <= 0.0:
+        return 0.0
+
+    available_vol = max(0.0, float(row["volume_m3"] or 0.0))
+    volume_delta = -(available_vol * (amount / available_mass)) if available_mass > 1e-9 else 0.0
+
+    _upsert_inventory_stack(
+        conn,
+        location_id=str(row["location_id"]),
+        stack_type="resource",
+        stack_key=str(row["stack_key"]),
+        item_id=str(row["item_id"]),
+        name=str(row["name"]),
+        quantity_delta=-amount,
+        mass_delta_kg=-amount,
+        volume_delta_m3=volume_delta,
+        payload_json=str(row["payload_json"] or "{}"),
+    )
+    return amount
+
+
+def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = list(ship_state.get("resources") or [])
+    rows.sort(key=lambda r: (str(r.get("phase") or ""), str(r.get("label") or r.get("item_id") or "")))
+    return rows
+
+
+def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    location_id = str(location_payload.get("location_id") or "")
+    rows: List[Dict[str, Any]] = []
+    for resource in location_payload.get("resources") or []:
+        stack_key = str(resource.get("stack_key") or "")
+        mass_kg = max(0.0, float(resource.get("mass_kg") or 0.0))
+        rows.append(
+            {
+                "item_uid": f"location:{location_id}:resource:{stack_key}",
+                "item_kind": "resource",
+                "item_id": str(resource.get("resource_id") or resource.get("item_id") or "resource"),
+                "label": str(resource.get("name") or resource.get("item_id") or "Resource"),
+                "subtitle": "Location Resource",
+                "resource_id": str(resource.get("resource_id") or resource.get("item_id") or ""),
+                "mass_kg": mass_kg,
+                "volume_m3": max(0.0, float(resource.get("volume_m3") or 0.0)),
+                "quantity": mass_kg,
+                "icon_seed": f"resource::{resource.get('resource_id') or resource.get('item_id') or stack_key}",
+                "transfer": {
+                    "source_kind": "location_resource",
+                    "source_id": location_id,
+                    "source_key": stack_key,
+                    "amount": mass_kg,
+                },
+            }
+        )
+
+    for part in location_payload.get("parts") or []:
+        stack_key = str(part.get("stack_key") or "")
+        qty = max(0.0, float(part.get("quantity") or 0.0))
+        rows.append(
+            {
+                "item_uid": f"location:{location_id}:part:{stack_key}",
+                "item_kind": "part",
+                "item_id": str(part.get("item_id") or "part"),
+                "label": str(part.get("name") or part.get("item_id") or "Part"),
+                "subtitle": f"Count: {int(round(qty))}",
+                "resource_id": "",
+                "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
+                "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),
+                "quantity": qty,
+                "icon_seed": f"part::{part.get('item_id') or stack_key}",
+                "transfer": None,
+            }
+        )
+    return rows
 
 
 def normalize_shipyard_item_ids(raw_parts: Any) -> List[str]:
@@ -1949,6 +2241,416 @@ def api_location_inventory(location_id: str, request: Request) -> Dict[str, Any]
         conn.close()
 
 
+@app.get("/api/inventory/ship/{ship_id}")
+def api_ship_inventory(ship_id: str, request: Request) -> Dict[str, Any]:
+    conn = connect_db()
+    try:
+        require_login(conn, request)
+        settle_arrivals(conn, game_now_s())
+        state = _load_ship_inventory_state(conn, ship_id)
+        row = state["row"]
+        return {
+            "ship_id": str(row["id"]),
+            "ship_name": str(row["name"]),
+            "location_id": state["location_id"],
+            "is_docked": bool(state["is_docked"]),
+            "items": _inventory_items_for_ship(state),
+            "capacity_summary": state["capacity_summary"],
+            "containers": state["containers"],
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/inventory/context/{kind}/{entity_id}")
+def api_inventory_context(kind: str, entity_id: str, request: Request) -> Dict[str, Any]:
+    inventory_kind = str(kind or "").strip().lower()
+    inv_id = str(entity_id or "").strip()
+    if inventory_kind not in {"ship", "location"}:
+        raise HTTPException(status_code=400, detail="kind must be 'ship' or 'location'")
+    if not inv_id:
+        raise HTTPException(status_code=400, detail="entity_id is required")
+
+    conn = connect_db()
+    try:
+        require_login(conn, request)
+        settle_arrivals(conn, game_now_s())
+        conn.commit()
+
+        location_id = ""
+        location_name = ""
+        anchor_name = inv_id
+
+        if inventory_kind == "ship":
+            ship_state = _load_ship_inventory_state(conn, inv_id)
+            location_id = ship_state["location_id"] if ship_state["is_docked"] else ""
+            anchor_name = str(ship_state["row"]["name"])
+            if location_id:
+                loc_row = _get_location_row(conn, location_id)
+                location_name = str(loc_row["name"])
+        else:
+            loc_row = _get_location_row(conn, inv_id)
+            location_id = str(loc_row["id"])
+            location_name = str(loc_row["name"])
+            anchor_name = location_name
+
+        inventories: List[Dict[str, Any]] = []
+        if location_id:
+            location_payload = get_location_inventory_payload(conn, location_id)
+            inventories.append(
+                {
+                    "inventory_kind": "location",
+                    "id": location_id,
+                    "name": f"{location_name} Site Inventory",
+                    "location_id": location_id,
+                    "capacity_summary": None,
+                    "items": _inventory_items_for_location(location_payload),
+                }
+            )
+
+            ship_rows = conn.execute(
+                """
+                SELECT id,name
+                FROM ships
+                WHERE location_id=? AND arrives_at IS NULL
+                ORDER BY name, id
+                """,
+                (location_id,),
+            ).fetchall()
+
+            for ship_row in ship_rows:
+                ship_state = _load_ship_inventory_state(conn, str(ship_row["id"]))
+                inventories.append(
+                    {
+                        "inventory_kind": "ship",
+                        "id": str(ship_row["id"]),
+                        "name": str(ship_row["name"]),
+                        "location_id": location_id,
+                        "capacity_summary": ship_state.get("capacity_summary"),
+                        "items": _inventory_items_for_ship(ship_state),
+                    }
+                )
+        elif inventory_kind == "ship":
+            ship_state = _load_ship_inventory_state(conn, inv_id)
+            inventories.append(
+                {
+                    "inventory_kind": "ship",
+                    "id": str(ship_state["row"]["id"]),
+                    "name": str(ship_state["row"]["name"]),
+                    "location_id": "",
+                    "capacity_summary": ship_state.get("capacity_summary"),
+                    "items": _inventory_items_for_ship(ship_state),
+                }
+            )
+
+        return {
+            "anchor": {
+                "kind": inventory_kind,
+                "id": inv_id,
+                "name": anchor_name,
+                "location_id": location_id,
+            },
+            "location": {
+                "id": location_id,
+                "name": location_name,
+            },
+            "inventories": inventories,
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/inventory/transfer")
+def api_inventory_transfer(req: "InventoryTransferReq", request: Request) -> Dict[str, Any]:
+    source_kind = str(req.source_kind or "").strip().lower()
+    source_id = str(req.source_id or "").strip()
+    source_key = str(req.source_key or "").strip()
+    target_kind = str(req.target_kind or "").strip().lower()
+    target_id = str(req.target_id or "").strip()
+
+    if source_kind not in {"ship_container", "ship_resource", "location_resource"}:
+        raise HTTPException(status_code=400, detail="source_kind must be ship_container, ship_resource, or location_resource")
+    if not source_id or not source_key:
+        raise HTTPException(status_code=400, detail="source_id and source_key are required")
+    if not target_id:
+        raise HTTPException(status_code=400, detail="target_id is required")
+
+    conn = connect_db()
+    try:
+        require_login(conn, request)
+        settle_arrivals(conn, game_now_s())
+
+        resources = load_resource_catalog()
+
+        target_location_id = ""
+        target_ship_state: Optional[Dict[str, Any]] = None
+        if target_kind == "location":
+            loc = _get_location_row(conn, target_id)
+            target_location_id = str(loc["id"])
+        else:
+            target_ship_state = _load_ship_inventory_state(conn, target_id)
+            if not target_ship_state["is_docked"]:
+                raise HTTPException(status_code=400, detail="Target ship must be docked")
+            target_location_id = str(target_ship_state["location_id"])
+
+        source_location_id = ""
+        move_resource_id = ""
+        move_mass_kg = max(0.0, float(req.amount or 0.0))
+        source_ship_state: Optional[Dict[str, Any]] = None
+        source_resource_row: Optional[sqlite3.Row] = None
+
+        if source_kind in {"ship_container", "ship_resource"}:
+            source_ship_state = _load_ship_inventory_state(conn, source_id)
+            if not source_ship_state["is_docked"]:
+                raise HTTPException(status_code=400, detail="Source ship must be docked")
+            source_location_id = str(source_ship_state["location_id"])
+
+            if source_kind == "ship_container":
+                try:
+                    src_idx = int(source_key)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="source_key must be a ship container index") from exc
+
+                src_container = next(
+                    (c for c in source_ship_state["containers"] if int(c.get("container_index") or -1) == src_idx),
+                    None,
+                )
+                if not src_container:
+                    raise HTTPException(status_code=404, detail="Source container not found")
+
+                move_resource_id = str(src_container.get("resource_id") or "").strip()
+                available_mass = max(0.0, float(src_container.get("cargo_mass_kg") or 0.0))
+                if not move_resource_id or available_mass <= 1e-9:
+                    raise HTTPException(status_code=400, detail="Source container has no transferable cargo")
+                if move_mass_kg <= 1e-9:
+                    move_mass_kg = available_mass
+                move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+            else:
+                move_resource_id = source_key
+                src_resource = next(
+                    (
+                        item
+                        for item in (source_ship_state.get("resources") or [])
+                        if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id
+                    ),
+                    None,
+                )
+                available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
+                if not move_resource_id or available_mass <= 1e-9:
+                    raise HTTPException(status_code=400, detail="Source ship has no transferable cargo for that resource")
+                if move_mass_kg <= 1e-9:
+                    move_mass_kg = available_mass
+                move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+        else:
+            source_location_id = source_id
+            _get_location_row(conn, source_location_id)
+            source_resource_row = _resource_stack_row(conn, source_location_id, source_key)
+            payload = json.loads(source_resource_row["payload_json"] or "{}")
+            move_resource_id = str(payload.get("resource_id") or source_resource_row["item_id"] or "").strip()
+            available_mass = max(0.0, float(source_resource_row["mass_kg"] or 0.0))
+            if not move_resource_id or available_mass <= 1e-9:
+                raise HTTPException(status_code=400, detail="Source resource stack has no transferable cargo")
+            if move_mass_kg <= 1e-9:
+                move_mass_kg = available_mass
+            move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+
+        if move_mass_kg <= 1e-9:
+            raise HTTPException(status_code=400, detail="Nothing to transfer")
+
+        if source_location_id != target_location_id:
+            raise HTTPException(status_code=400, detail="Inventories must be at the same location")
+
+        if source_kind in {"ship_container", "ship_resource"} and target_kind == "ship" and source_id == target_id:
+            raise HTTPException(status_code=400, detail="Cannot transfer cargo to the same ship")
+
+        accepted_mass_kg = move_mass_kg
+        density = max(0.0, float((resources.get(move_resource_id) or {}).get("mass_per_m3_kg") or 0.0))
+
+        if target_kind == "location":
+            add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg)
+        else:
+            if not target_ship_state:
+                raise HTTPException(status_code=500, detail="Target ship state unavailable")
+
+            target_parts = list(target_ship_state["parts"])
+            target_containers = list(target_ship_state["containers"])
+
+            resource_meta = resources.get(move_resource_id) or {}
+            resource_phase = classify_resource_phase(
+                move_resource_id,
+                str(resource_meta.get("name") or move_resource_id),
+                float(resource_meta.get("mass_per_m3_kg") or density or 0.0),
+            )
+
+            compatible: List[Tuple[Dict[str, Any], float, float]] = []
+            total_free_mass_kg = 0.0
+            for container in target_containers:
+                cap = max(0.0, float(container.get("capacity_m3") or 0.0))
+                used = max(0.0, float(container.get("used_m3") or 0.0))
+                free = max(0.0, cap - used)
+                tank_phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
+                container_resource = str(container.get("resource_id") or "").strip()
+                if free <= 1e-9:
+                    continue
+                if tank_phase not in {"solid", "liquid", "gas"}:
+                    tank_phase = "solid"
+                if tank_phase != resource_phase:
+                    continue
+                if container_resource and container_resource != move_resource_id:
+                    continue
+                resolved_density = max(0.0, float(container.get("density_kg_m3") or density or 0.0))
+                if resolved_density <= 0.0:
+                    continue
+                free_mass_kg = free * resolved_density
+                if free_mass_kg <= 1e-9:
+                    continue
+                compatible.append((container, resolved_density, free_mass_kg))
+                total_free_mass_kg += free_mass_kg
+
+            if not compatible:
+                raise HTTPException(status_code=400, detail="No compatible destination tank with free capacity")
+
+            accepted_mass_kg = min(accepted_mass_kg, total_free_mass_kg)
+            if accepted_mass_kg <= 1e-9:
+                raise HTTPException(status_code=400, detail="Destination tank has no usable free capacity")
+
+            remaining_to_place = accepted_mass_kg
+            for compatible_container, resolved_density, free_mass_kg in compatible:
+                if remaining_to_place <= 1e-9:
+                    break
+
+                to_place = min(remaining_to_place, free_mass_kg)
+                idx = int(compatible_container.get("container_index") or -1)
+                if idx < 0 or idx >= len(target_parts):
+                    raise HTTPException(status_code=400, detail="Destination container index is invalid")
+
+                used = max(0.0, float(compatible_container.get("used_m3") or 0.0))
+                next_used = used + (to_place / resolved_density)
+                next_mass = max(0.0, float(compatible_container.get("cargo_mass_kg") or 0.0)) + to_place
+                target_parts[idx] = _apply_ship_container_fill(
+                    target_parts[idx],
+                    resource_id=move_resource_id,
+                    cargo_mass_kg=next_mass,
+                    used_m3=next_used,
+                    density_kg_m3=resolved_density,
+                )
+                remaining_to_place -= to_place
+
+            accepted_mass_kg = max(0.0, accepted_mass_kg - remaining_to_place)
+            if accepted_mass_kg <= 1e-9:
+                raise HTTPException(status_code=400, detail="Destination tank rejected transfer")
+
+            target_fuel_kg = max(0.0, float(target_ship_state["fuel_kg"] or 0.0))
+            if move_resource_id.lower() == "water":
+                target_fuel_kg += accepted_mass_kg
+
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(target_ship_state["row"]["id"]),
+                parts=target_parts,
+                fuel_kg=target_fuel_kg,
+            )
+
+        if source_kind in {"ship_container", "ship_resource"}:
+            if not source_ship_state:
+                raise HTTPException(status_code=500, detail="Source ship state unavailable")
+            src_parts = list(source_ship_state["parts"])
+            src_containers = list(source_ship_state["containers"])
+            consumed_mass_kg = 0.0
+
+            if source_kind == "ship_container":
+                src_idx = int(source_key)
+                src_container = next((c for c in src_containers if int(c.get("container_index") or -1) == src_idx), None)
+                if not src_container:
+                    raise HTTPException(status_code=404, detail="Source container not found")
+
+                src_density = max(1e-9, float(src_container.get("density_kg_m3") or density or 0.0))
+                src_used = max(0.0, float(src_container.get("used_m3") or 0.0))
+                src_mass = max(0.0, float(src_container.get("cargo_mass_kg") or 0.0))
+                consumed_mass_kg = min(accepted_mass_kg, src_mass)
+                next_src_mass = max(0.0, src_mass - consumed_mass_kg)
+                next_src_used = max(0.0, src_used - (consumed_mass_kg / src_density))
+
+                if src_idx < 0 or src_idx >= len(src_parts):
+                    raise HTTPException(status_code=400, detail="Source container index is invalid")
+
+                src_parts[src_idx] = _apply_ship_container_fill(
+                    src_parts[src_idx],
+                    resource_id=move_resource_id,
+                    cargo_mass_kg=next_src_mass,
+                    used_m3=next_src_used,
+                    density_kg_m3=src_density,
+                )
+            else:
+                remaining_to_take = accepted_mass_kg
+                for src_container in src_containers:
+                    if remaining_to_take <= 1e-9:
+                        break
+
+                    container_resource = str(src_container.get("resource_id") or "").strip()
+                    if container_resource != move_resource_id:
+                        continue
+
+                    src_mass = max(0.0, float(src_container.get("cargo_mass_kg") or 0.0))
+                    if src_mass <= 1e-9:
+                        continue
+
+                    src_idx = int(src_container.get("container_index") or -1)
+                    if src_idx < 0 or src_idx >= len(src_parts):
+                        continue
+
+                    src_density = max(1e-9, float(src_container.get("density_kg_m3") or density or 0.0))
+                    src_used = max(0.0, float(src_container.get("used_m3") or 0.0))
+                    take_mass = min(src_mass, remaining_to_take)
+                    next_src_mass = max(0.0, src_mass - take_mass)
+                    next_src_used = max(0.0, src_used - (take_mass / src_density))
+
+                    src_parts[src_idx] = _apply_ship_container_fill(
+                        src_parts[src_idx],
+                        resource_id=move_resource_id,
+                        cargo_mass_kg=next_src_mass,
+                        used_m3=next_src_used,
+                        density_kg_m3=src_density,
+                    )
+                    remaining_to_take -= take_mass
+                    consumed_mass_kg += take_mass
+
+                if consumed_mass_kg <= 1e-9:
+                    raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
+
+            accepted_mass_kg = consumed_mass_kg
+
+            source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
+            if move_resource_id.lower() == "water":
+                source_fuel_kg = max(0.0, source_fuel_kg - accepted_mass_kg)
+
+            _persist_ship_inventory_state(
+                conn,
+                ship_id=str(source_ship_state["row"]["id"]),
+                parts=src_parts,
+                fuel_kg=source_fuel_kg,
+            )
+        else:
+            if not source_resource_row:
+                raise HTTPException(status_code=500, detail="Source resource stack unavailable")
+            _consume_location_resource_mass(conn, source_resource_row, accepted_mass_kg)
+
+        conn.commit()
+        return {
+            "ok": True,
+            "source_kind": source_kind,
+            "source_id": source_id,
+            "source_key": source_key,
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "resource_id": move_resource_id,
+            "moved_mass_kg": accepted_mass_kg,
+            "location_id": source_location_id,
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/api/transfer_quote")
 def api_transfer_quote(from_id: str, to_id: str, request: Request) -> Dict[str, Any]:
     conn = connect_db()
@@ -2141,6 +2843,8 @@ def api_state(request: Request) -> Dict[str, Any]:
                 current_fuel_kg=float(r["fuel_kg"] or 0.0),
             )
             inventory_containers = compute_ship_inventory_containers(parts, stats["fuel_kg"])
+            inventory_items = compute_ship_inventory_resources(str(r["id"]), inventory_containers)
+            inventory_capacity_summary = compute_ship_capacity_summary(inventory_containers)
             ships.append(
                 {
                     "id": r["id"],
@@ -2159,6 +2863,8 @@ def api_state(request: Request) -> Dict[str, Any]:
                     "dock_slot": r["dock_slot"],
                     "parts": parts,
                     "inventory_containers": inventory_containers,
+                    "inventory_items": inventory_items,
+                    "inventory_capacity_summary": inventory_capacity_summary,
                     "fuel_kg": stats["fuel_kg"],
                     "fuel_capacity_kg": stats["fuel_capacity_kg"],
                     "dry_mass_kg": stats["dry_mass_kg"],
@@ -2193,6 +2899,15 @@ class TransferReq(BaseModel):
 
 class InventoryContainerReq(BaseModel):
     container_index: int
+
+
+class InventoryTransferReq(BaseModel):
+    source_kind: Literal["ship_container", "ship_resource", "location_resource"]
+    source_id: str
+    source_key: str
+    target_kind: Literal["ship", "location"]
+    target_id: str
+    amount: Optional[float] = None
 
 
 class SpawnShipReq(BaseModel):
@@ -2244,10 +2959,14 @@ def api_admin_reset_game(request: Request) -> Dict[str, Any]:
     conn = connect_db()
     deleted_ships = 0
     deleted_accounts = 0
+    deleted_inventory_stacks = 0
     try:
         require_admin(conn, request)
         cur = conn.execute("DELETE FROM ships")
         deleted_ships = int(cur.rowcount or 0)
+
+        cur = conn.execute("DELETE FROM location_inventory_stacks")
+        deleted_inventory_stacks = int(cur.rowcount or 0)
 
         user_rows = conn.execute("SELECT COUNT(*) AS c FROM users WHERE username <> 'admin'").fetchone()
         deleted_accounts = int(user_rows["c"] or 0)
@@ -2265,6 +2984,7 @@ def api_admin_reset_game(request: Request) -> Dict[str, Any]:
         "ok": True,
         "reset_to": "2000-01-01T00:00:00Z",
         "deleted_ships": deleted_ships,
+        "deleted_inventory_stacks": deleted_inventory_stacks,
         "deleted_accounts": deleted_accounts,
         "paused": simulation_paused(),
         "server_time": game_now_s(),

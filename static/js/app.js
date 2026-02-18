@@ -2049,75 +2049,72 @@
     });
   }
 
-  function buildInventoryGroups(containers) {
-    const out = { solid: [], liquid: [], gas: [] };
-    for (const c of containers || []) {
-      const phase = String(c?.phase || "solid").toLowerCase();
-      if (phase === "liquid") out.liquid.push(c);
-      else if (phase === "gas") out.gas.push(c);
-      else out.solid.push(c);
-    }
-    return out;
-  }
+  function buildInventoryListHtml(items, capacitySummary) {
+    const rows = Array.isArray(items) ? items : [];
+    const summary = (capacitySummary && typeof capacitySummary === "object") ? capacitySummary : {};
+    const used = Math.max(0, Number(summary.used_m3) || 0);
+    const cap = Math.max(0, Number(summary.capacity_m3) || 0);
+    const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
 
-  function buildInventoryListHtml(containers) {
-    if (!Array.isArray(containers) || !containers.length) {
-      return `<li><div class="muted">No cargo containers found on this ship.</div></li>`;
-    }
+    const byPhase = (summary.by_phase && typeof summary.by_phase === "object") ? summary.by_phase : {};
+    const phaseStats = ["solid", "liquid", "gas"].map((phase) => {
+      const entry = byPhase[phase] || {};
+      const pUsed = Math.max(0, Number(entry.used_m3) || 0);
+      const pCap = Math.max(0, Number(entry.capacity_m3) || 0);
+      return `${phase[0].toUpperCase()}${phase.slice(1)} ${fmtM3(pUsed)} / ${fmtM3(pCap)}`;
+    }).join(" · ");
 
-    const groups = buildInventoryGroups(containers);
-    const labels = [
-      ["solid", "Solid Containers"],
-      ["liquid", "Liquid Containers"],
-      ["gas", "Gas Containers"],
-    ];
-
-    const sectionHtml = labels.map(([key, title]) => {
-      const rows = groups[key] || [];
-      if (!rows.length) return "";
-
-      const tableRows = rows.map((c) => {
-        const idx = Number(c.container_index);
-        const used = Math.max(0, Number(c.used_m3) || 0);
-        const cap = Math.max(0, Number(c.capacity_m3) || 0);
-        const mass = Math.max(0, Number(c.total_mass_kg) || 0);
-        const cargoMass = Math.max(0, Number(c.cargo_mass_kg) || 0);
-        const name = String(c.name || `Container ${idx + 1}`);
-        const resourceName = String(c.resource_name || c.resource_id || "Unspecified");
-        return `
-          <tr>
-            <td>
-              <div>${name} · ${resourceName}</div>
-            </td>
-            <td>${fmtM3(used)} / ${fmtM3(cap)}</td>
-            <td>${fmtKg(mass)}</td>
-            <td class="shipInvActionsCell">
-              <button type="button" class="btnSecondary shipInvActionBtn" data-inv-action="jettison" data-container-index="${idx}" ${cargoMass <= 0 ? "disabled" : ""}>Jettison</button>
-              <button type="button" class="btnSecondary shipInvActionBtn" data-inv-action="deploy" data-container-index="${idx}">Deploy Container</button>
-            </td>
-          </tr>
-        `;
-      }).join("");
-
-      return `
-        <div class="shipInvSection">
-          <div class="shipInvSectionTitle">${title}</div>
-          <table class="shipInvTable">
-            <thead>
-              <tr>
-                <th>Container</th>
-                <th>In Use</th>
-                <th>Total Mass</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
+    const summaryHtml = `
+      <div class="shipInvSection shipInvSummary">
+        <div class="shipInvSectionTitle">Cargo Usage</div>
+        <div class="shipInvSummaryBody">
+          <div class="shipInvSummaryLine">${fmtM3(used)} / ${fmtM3(cap)} used</div>
+          <div class="shipInvBar"><div class="shipInvBarFill" style="width:${pct.toFixed(2)}%"></div></div>
+          <div class="shipInvSummaryPhases">${phaseStats}</div>
         </div>
+      </div>
+    `;
+
+    if (!rows.length) {
+      return `<li><div class="shipInvRoot">${summaryHtml}<div class="muted">No cargo contents found on this ship.</div></div></li>`;
+    }
+
+    const tableRows = rows.map((item) => {
+      const label = String(item?.label || item?.item_id || "Unknown resource");
+      const phase = String(item?.phase || "solid");
+      const vol = Math.max(0, Number(item?.volume_m3) || 0);
+      const mass = Math.max(0, Number(item?.mass_kg) || 0);
+      return `
+        <tr>
+          <td>${label}</td>
+          <td>${phase}</td>
+          <td>${fmtM3(vol)}</td>
+          <td>${fmtKg(mass)}</td>
+        </tr>
       `;
     }).join("");
 
-    return `<li><div class="shipInvRoot">${sectionHtml || '<div class="muted">No cargo containers found on this ship.</div>'}</div></li>`;
+    return `
+      <li>
+        <div class="shipInvRoot">
+          ${summaryHtml}
+          <div class="shipInvSection">
+            <div class="shipInvSectionTitle">Cargo Contents</div>
+            <table class="shipInvTable">
+              <thead>
+                <tr>
+                  <th>Resource</th>
+                  <th>Phase</th>
+                  <th>Volume</th>
+                  <th>Mass</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </li>
+    `;
   }
 
   async function runInventoryAction(shipId, containerIndex, action) {
@@ -2136,30 +2133,7 @@
   }
 
   function wireInventoryActionButtons(ship) {
-    if (!infoList || !ship) return;
-    const buttons = infoList.querySelectorAll(".shipInvActionBtn[data-inv-action][data-container-index]");
-    buttons.forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const action = String(btn.getAttribute("data-inv-action") || "").toLowerCase();
-        const containerIndex = Number(btn.getAttribute("data-container-index") || 0);
-        const isDeploy = action === "deploy";
-        if (isDeploy) {
-          const ok = window.confirm("Deploy this container with its cargo?");
-          if (!ok) return;
-        }
-
-        btn.disabled = true;
-        try {
-          await runInventoryAction(ship.id, containerIndex, isDeploy ? "deploy" : "jettison");
-          await syncState();
-          showShipPanel();
-        } catch (err) {
-          console.error(err);
-          alert(err?.message || "Inventory action failed.");
-          showShipPanel();
-        }
-      });
-    });
+    if (!ship || !infoList) return;
   }
 
   // ---------- Coordinate scaling ----------
@@ -3962,6 +3936,11 @@
     renderShipInfoTabs();
 
     if (shipInfoTab === "inventory") {
+      const inventoryItems = Array.isArray(ship.inventory_items) ? ship.inventory_items : [];
+      const capacitySummary = ship.inventory_capacity_summary && typeof ship.inventory_capacity_summary === "object"
+        ? ship.inventory_capacity_summary
+        : null;
+
       const subtitle = ship.status === "docked"
         ? `Docked: ${locationsById.get(ship.location_id)?.name || ship.location_id}`
         : `In transit: ${locationsById.get(ship.from_location_id)?.name || ship.from_location_id} → ${locationsById.get(ship.to_location_id)?.name || ship.to_location_id}`;
@@ -3969,7 +3948,7 @@
       setInfo(
         ship.name,
         subtitle,
-        `Containers: ${(ship.inventory_containers || []).length}`,
+        `Cargo resources: ${inventoryItems.length}`,
         [
           `Fuel: ${Number(ship.fuel_kg || 0).toFixed(0)} / ${Number(ship.fuel_capacity_kg || 0).toFixed(0)} kg`,
           `Δv remaining: ${Number(ship.delta_v_remaining_m_s || 0).toFixed(0)} m/s`,
@@ -3977,7 +3956,7 @@
       );
 
       if (infoList) {
-        infoList.innerHTML += buildInventoryListHtml(ship.inventory_containers || []);
+        infoList.innerHTML += buildInventoryListHtml(inventoryItems, capacitySummary);
         wireInventoryActionButtons(ship);
       }
 

@@ -1,0 +1,10 @@
+{
+  "id": "solid_tank_100_m3",
+  "name": "Solid Tank 100 m3",
+  "type": "storage",
+  "category_id": "storage",
+  "tank_phase": "solid",
+  "resource_id": "",
+  "capacity_m3": 100,
+  "mass_kg": 0
+}

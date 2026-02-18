@@ -1,8 +1,9 @@
 {
   "id": "water_tank_10_m3",
-  "name": "Water Tank 10 m3",
+  "name": "Liquid Tank 10 m3",
   "type": "storage",
   "category_id": "storage",
+  "tank_phase": "liquid",
   "resource_id": "water",
   "capacity_m3": 10,
   "mass_kg": 0
