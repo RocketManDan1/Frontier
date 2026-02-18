@@ -1831,6 +1831,8 @@ def profile(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
+    if request.query_params.get("embed") != "1":
+        return RedirectResponse(url="/", status_code=302)
     return FileResponse(str(APP_DIR / "static" / "profile.html"))
 
 
@@ -1839,7 +1841,7 @@ def login_page(request: Request):
     conn = connect_db()
     try:
         if get_current_user(conn, request):
-            return RedirectResponse(url="/profile", status_code=302)
+            return RedirectResponse(url="/", status_code=302)
     finally:
         conn.close()
     return FileResponse(str(APP_DIR / "static" / "login.html"))
@@ -1853,7 +1855,7 @@ def admin(request: Request):
         if not user:
             return RedirectResponse(url="/login", status_code=302)
         if not int(user["is_admin"]):
-            return RedirectResponse(url="/profile", status_code=302)
+            return RedirectResponse(url="/", status_code=302)
     finally:
         conn.close()
     return FileResponse(str(APP_DIR / "static" / "admin.html"))

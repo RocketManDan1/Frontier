@@ -87,12 +87,56 @@
   function setupMapWindows() {
     const content = document.querySelector(".mapPage .content");
     if (!content) return;
+    const mapDockEl = document.querySelector(".mapPage .mapDock");
+    const mapDockWindowConfig = {
+      overview: { icon: "/static/img/dock/map.png" },
+      info: { icon: "/static/img/dock/info.png" },
+    };
 
     const layoutState = loadWindowLayoutState();
+    const panelRecords = new Map();
+
+    function bootstrapDockButton(btn, iconSrc) {
+      if (!btn) return;
+      if (!btn.querySelector(".mapDockBtnLabel")) {
+        const labelText = (btn.textContent || "").trim();
+        btn.textContent = "";
+        const iconEl = document.createElement("span");
+        iconEl.className = "mapDockBtnIcon";
+        iconEl.setAttribute("aria-hidden", "true");
+        const labelEl = document.createElement("span");
+        labelEl.className = "mapDockBtnLabel";
+        labelEl.textContent = labelText;
+        btn.append(iconEl, labelEl);
+      }
+      if (iconSrc) {
+        btn.classList.add("hasIcon");
+        btn.style.setProperty("--dock-icon", `url(\"${iconSrc}\")`);
+      }
+    }
+
+    if (mapDockEl) {
+      Object.entries(mapDockWindowConfig).forEach(([panelId, cfg]) => {
+        const btn = mapDockEl.querySelector(`[data-map-window='${panelId}']`);
+        bootstrapDockButton(btn, cfg?.icon || "");
+      });
+    }
 
     function bringWindowToFront(panelEl) {
       mapWindowZIndex += 1;
       panelEl.style.zIndex = String(mapWindowZIndex);
+      content.querySelectorAll(".mapWindow.isSelected").forEach((el) => {
+        el.classList.remove("isSelected");
+      });
+      panelEl.classList.add("isSelected");
+    }
+
+    function setMapDockOpen(panelId, open) {
+      if (!mapDockEl) return;
+      const btn = mapDockEl.querySelector(`[data-map-window='${panelId}']`);
+      if (!btn) return;
+      btn.classList.toggle("isOpen", !!open);
+      btn.setAttribute("aria-pressed", open ? "true" : "false");
     }
 
     function clampPanelRect(rect, limits, minW, minH) {
@@ -107,11 +151,11 @@
       const r = content.getBoundingClientRect();
       return {
         minLeft: 0,
-        minTop: 92,
+        minTop: 12,
         maxLeft: Math.max(0, r.width),
         maxTop: Math.max(0, r.height),
         maxWidth: Math.max(220, r.width - 8),
-        maxHeight: Math.max(180, r.height - 96),
+        maxHeight: Math.max(180, r.height - 16),
       };
     }
 
@@ -127,8 +171,55 @@
     function setupPanel(panelEl, panelId, minW, minH) {
       if (!panelEl) return;
       const dragHandle = panelEl.querySelector("[data-drag-handle='true']");
-      const resizeHandle = panelEl.querySelector("[data-resize-handle='true']");
-      if (!dragHandle || !resizeHandle) return;
+      if (!dragHandle) return;
+
+      function ensureResizeHandles() {
+        panelEl.querySelectorAll("[data-resize-handle='true']").forEach((el) => el.remove());
+        const dirs = ["n", "e", "s", "w", "ne", "nw", "se", "sw"];
+        return dirs.map((dir) => {
+          const handle = document.createElement("div");
+          handle.className = `mapWindowResize mapWindowResize--${dir}`;
+          handle.setAttribute("data-resize-handle", "true");
+          handle.setAttribute("data-resize-dir", dir);
+          handle.setAttribute("aria-hidden", "true");
+          panelEl.appendChild(handle);
+          return handle;
+        });
+      }
+
+      const resizeHandles = ensureResizeHandles();
+
+      if (!dragHandle.querySelector(".mapWindowHeaderRow")) {
+        const headerItems = Array.from(dragHandle.children);
+        const headerRow = document.createElement("div");
+        headerRow.className = "mapWindowHeaderRow";
+        const titleWrap = document.createElement("div");
+        headerItems.forEach((child) => titleWrap.appendChild(child));
+        const actionsWrap = document.createElement("div");
+        actionsWrap.className = "mapWindowActions";
+
+        const minBtn = document.createElement("button");
+        minBtn.className = "mapWindowAction";
+        minBtn.type = "button";
+        minBtn.setAttribute("data-map-window-action", "minimize");
+        minBtn.setAttribute("aria-label", "Minimize");
+        minBtn.textContent = "—";
+
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "mapWindowAction";
+        closeBtn.type = "button";
+        closeBtn.setAttribute("data-map-window-action", "close");
+        closeBtn.setAttribute("aria-label", "Close");
+        closeBtn.textContent = "×";
+
+        actionsWrap.append(minBtn, closeBtn);
+        headerRow.append(titleWrap, actionsWrap);
+        dragHandle.appendChild(headerRow);
+      }
+
+      const bodyChildren = Array.from(panelEl.children).filter(
+        (child) => child !== dragHandle && !resizeHandles.includes(child)
+      );
 
       const startRect = panelEl.getBoundingClientRect();
       const contentRect = content.getBoundingClientRect();
@@ -153,6 +244,7 @@
 
       const persistRect = (rect) => {
         layoutState[panelId] = {
+          ...(layoutState[panelId] || {}),
           left: Math.round(rect.left),
           top: Math.round(rect.top),
           width: Math.round(rect.width),
@@ -160,6 +252,83 @@
         };
         saveWindowLayoutState(layoutState);
       };
+
+      const persistFlags = (flags) => {
+        layoutState[panelId] = {
+          ...(layoutState[panelId] || {}),
+          ...flags,
+        };
+        saveWindowLayoutState(layoutState);
+      };
+
+      const saveCurrentRect = () => {
+        const now = panelEl.getBoundingClientRect();
+        const contentNow = content.getBoundingClientRect();
+        persistRect({
+          left: now.left - contentNow.left,
+          top: now.top - contentNow.top,
+          width: now.width,
+          height: now.height,
+        });
+      };
+
+      function setMinimized(minimized) {
+        const isMin = !!minimized;
+        if (isMin) {
+          saveCurrentRect();
+        }
+        panelEl.dataset.minimized = isMin ? "true" : "false";
+        panelEl.classList.toggle("isMinimized", isMin);
+        bodyChildren.forEach((el) => {
+          el.style.display = isMin ? "none" : "";
+        });
+        resizeHandles.forEach((handle) => {
+          handle.style.display = isMin ? "none" : "";
+        });
+        if (isMin) {
+          panelEl.style.height = "30px";
+        } else {
+          const latest = layoutState[panelId] || {};
+          const panelNow = panelEl.getBoundingClientRect();
+          const contentNow = content.getBoundingClientRect();
+          const next = clampPanelRect(
+            {
+              left: Number.isFinite(latest.left) ? latest.left : panelNow.left - contentNow.left,
+              top: Number.isFinite(latest.top) ? latest.top : panelNow.top - contentNow.top,
+              width: Number.isFinite(latest.width) ? latest.width : panelNow.width,
+              height: Number.isFinite(latest.height) ? latest.height : panelNow.height,
+            },
+            contentLimits(),
+            minW,
+            minH
+          );
+          applyRect(panelEl, next);
+        }
+        persistFlags({ minimized: isMin });
+      }
+
+      function showPanel() {
+        panelEl.style.display = "block";
+        bringWindowToFront(panelEl);
+        setMapDockOpen(panelId, true);
+        persistFlags({ open: true });
+      }
+
+      function hidePanel() {
+        setMinimized(false);
+        panelEl.style.display = "none";
+        panelEl.classList.remove("isSelected");
+        setMapDockOpen(panelId, false);
+        persistFlags({ open: false, minimized: false });
+      }
+
+      function togglePanel() {
+        if (panelEl.style.display === "none") {
+          showPanel();
+          return;
+        }
+        hidePanel();
+      }
 
       function startDrag(event) {
         if (event.button !== 0) return;
@@ -222,6 +391,7 @@
         event.stopPropagation();
         bringWindowToFront(panelEl);
         panelEl.classList.add("isResizing");
+        const dir = String(event.currentTarget?.dataset?.resizeDir || "se").toLowerCase();
 
         const baseRect = panelEl.getBoundingClientRect();
         const contentNow = content.getBoundingClientRect();
@@ -236,12 +406,28 @@
 
         const onMove = (moveEvent) => {
           const limits = contentLimits();
-          const nextWidth = origin.width + (moveEvent.clientX - origin.x);
-          const nextHeight = origin.height + (moveEvent.clientY - origin.y);
+          const dx = moveEvent.clientX - origin.x;
+          const dy = moveEvent.clientY - origin.y;
+          let nextLeft = origin.left;
+          let nextTop = origin.top;
+          let nextWidth = origin.width;
+          let nextHeight = origin.height;
+
+          if (dir.includes("e")) nextWidth = origin.width + dx;
+          if (dir.includes("s")) nextHeight = origin.height + dy;
+          if (dir.includes("w")) {
+            nextLeft = origin.left + dx;
+            nextWidth = origin.width - dx;
+          }
+          if (dir.includes("n")) {
+            nextTop = origin.top + dy;
+            nextHeight = origin.height - dy;
+          }
+
           const bounded = clampPanelRect(
             {
-              left: origin.left,
-              top: origin.top,
+              left: nextLeft,
+              top: nextTop,
               width: nextWidth,
               height: nextHeight,
             },
@@ -273,12 +459,54 @@
       }
 
       dragHandle.addEventListener("pointerdown", startDrag);
-      resizeHandle.addEventListener("pointerdown", startResize);
+      resizeHandles.forEach((handle) => {
+        handle.addEventListener("pointerdown", startResize);
+      });
       panelEl.addEventListener("pointerdown", () => bringWindowToFront(panelEl));
+
+      panelEl.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-map-window-action]");
+        if (!btn) return;
+        const action = btn.getAttribute("data-map-window-action");
+        if (action === "close") {
+          hidePanel();
+          return;
+        }
+        if (action === "minimize") {
+          setMinimized(panelEl.dataset.minimized !== "true");
+        }
+      });
+
+      panelRecords.set(panelId, { panelEl, showPanel, hidePanel, togglePanel, setMinimized });
+
+      const shouldOpen = saved?.open !== false;
+      if (!shouldOpen) {
+        panelEl.style.display = "none";
+        setMapDockOpen(panelId, false);
+      } else {
+        showPanel();
+        if (saved?.minimized) {
+          setMinimized(true);
+        } else {
+          setMinimized(false);
+        }
+      }
     }
 
     setupPanel(overviewPanelEl, "overview", 240, 220);
     setupPanel(infoPanelEl, "info", 260, 280);
+
+    if (mapDockEl) {
+      mapDockEl.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-map-window]");
+        if (!btn) return;
+        const panelId = btn.getAttribute("data-map-window");
+        if (!panelId) return;
+        const record = panelRecords.get(panelId);
+        if (!record) return;
+        record.togglePanel();
+      });
+    }
 
     window.addEventListener("resize", () => {
       [
@@ -286,6 +514,8 @@
         { el: infoPanelEl, id: "info", minW: 260, minH: 280 },
       ].forEach((entry) => {
         if (!entry.el) return;
+        if (entry.el.style.display === "none") return;
+        if (entry.el.dataset.minimized === "true") return;
         const r = entry.el.getBoundingClientRect();
         const cr = content.getBoundingClientRect();
         const next = clampPanelRect(
@@ -301,6 +531,7 @@
         );
         applyRect(entry.el, next);
         layoutState[entry.id] = {
+          ...(layoutState[entry.id] || {}),
           left: Math.round(next.left),
           top: Math.round(next.top),
           width: Math.round(next.width),

@@ -2,11 +2,23 @@
   if (window.__authBootstrapLoaded) return;
   window.__authBootstrapLoaded = true;
 
+  function redirectToLogin() {
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = "/login";
+        return;
+      }
+    } catch {
+      // Fallback to local frame navigation.
+    }
+    window.location.href = "/login";
+  }
+
   async function loadCurrentUser() {
     const resp = await fetch("/api/auth/me", { cache: "no-store" });
     if (!resp.ok) {
       if (resp.status === 401) {
-        window.location.href = "/login";
+        redirectToLogin();
         return null;
       }
       throw new Error("Failed to fetch auth state");
@@ -37,6 +49,6 @@
   };
 
   window.gameAuth.ensure().catch(() => {
-    window.location.href = "/login";
+    redirectToLogin();
   });
 })();

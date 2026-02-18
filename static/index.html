@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Earth–Luna Map</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout7" />
+    <link rel="stylesheet" href="/static/styles.css?v=layout18" />
   </head>
 
   <body class="mapPage">
@@ -28,10 +28,19 @@
       </div>
 
       <div class="content">
+        <aside class="mapDock panel" aria-label="Application dock">
+          <button class="mapDockBtn" type="button" data-map-window="overview">Overview</button>
+          <button class="mapDockBtn" type="button" data-map-window="info">Info</button>
+          <button class="mapDockBtn" type="button" data-app-window="fleet">Fleet</button>
+          <button class="mapDockBtn" type="button" data-app-window="shipyard">Shipyard</button>
+          <button class="mapDockBtn" type="button" data-app-window="research">Research</button>
+          <button class="mapDockBtn" type="button" data-app-window="profile">Profile</button>
+          <button class="mapDockBtn authAdminTab" type="button" data-app-window="admin">Admin</button>
+        </aside>
+
         <div id="overviewPanel" class="panel overview mapWindow" data-window-id="overview">
           <div class="mapWindowHeader" data-drag-handle="true">
             <div class="titleSmall">Map Overview</div>
-            <div class="muted small">Visible hierarchy: planets, moons, orbits, ships</div>
           </div>
           <div id="mapOverview" class="mapOverview"></div>
           <div class="mapWindowResize" data-resize-handle="true" aria-hidden="true"></div>
@@ -39,10 +48,11 @@
 
         <div id="stage" class="stage"></div>
 
+        <div id="appWindowLayer" class="appWindowLayer" aria-live="polite"></div>
+
         <div id="infoPanel" class="panel info mapWindow" data-window-id="info">
           <div class="mapWindowHeader" data-drag-handle="true">
             <div class="titleSmall">Info Panel</div>
-            <div class="muted small">Selection details and actions</div>
           </div>
           <div class="mapWindowBody">
             <div id="shipInfoTabsHost" class="shipInfoTabsHost"></div>
@@ -66,8 +76,9 @@
       onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js';">
     </script>
 
-    <script src="/static/js/auth.js?v=au1"></script>
+    <script src="/static/js/auth.js?v=au2"></script>
     <script src="/static/js/clock.js?v=ti2"></script>
-    <script src="/static/js/app.js?v=ti39"></script>
+    <script src="/static/js/app.js?v=ti47"></script>
+    <script src="/static/js/map_windows.js?v=wm9"></script>
   </body>
 </html>

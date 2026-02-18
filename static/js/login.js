@@ -27,7 +27,7 @@
       }
 
       const isAdmin = !!data.user?.is_admin;
-      window.location.href = isAdmin ? "/admin" : "/profile";
+      window.location.href = isAdmin ? "/admin" : "/";
     } catch (err) {
       setMessage(`Login failed: ${err.message || err}`, true);
     }

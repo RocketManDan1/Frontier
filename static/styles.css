@@ -48,6 +48,35 @@ body::before {
   opacity: 0.55;
 }
 
+body.embedMode {
+  overflow: hidden;
+}
+
+body.embedMode::before {
+  display: none;
+}
+
+body.embedMode .app {
+  max-width: none;
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+body.embedMode .top {
+  display: none;
+}
+
+body.embedMode .pagePanel {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  width: 100%;
+  height: 100vh;
+  box-shadow: none;
+}
+
 .app {
   max-width: 1400px;
   margin: 0 auto;
@@ -76,6 +105,10 @@ body::before {
   z-index: 6;
 }
 
+.mapPage .top {
+  display: none;
+}
+
 .mapPage .content {
   position: absolute;
   inset: 0;
@@ -83,10 +116,154 @@ body::before {
   padding: 0;
 }
 
+.mapPage .mapDock {
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: auto;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 165, 214, 0.18);
+  background: rgba(8, 14, 24, 0.24);
+  backdrop-filter: blur(5px);
+  box-shadow: none;
+}
+
+.mapPage .mapDock::after {
+  display: none;
+}
+
+.mapPage .mapDockBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: rgba(219, 236, 251, 0.68);
+  border: 1px solid rgba(120, 165, 214, 0.18);
+  border-radius: 999px;
+  background: rgba(7, 12, 20, 0.18);
+}
+
+.mapPage .mapDockBtnIcon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 34px 34px;
+  opacity: 0.92;
+}
+
+.mapPage .mapDockBtn.hasIcon {
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.mapPage .mapDockBtn.hasIcon .mapDockBtnIcon {
+  display: inline-block;
+  background-image: var(--dock-icon);
+}
+
+.mapPage .mapDockBtn.hasIcon .mapDockBtnLabel {
+  display: none;
+}
+
+.mapPage .mapDockBtn:hover,
+.mapPage .mapDockBtn.isOpen {
+  border-color: rgba(109, 182, 255, 0.55);
+  background: rgba(24, 43, 64, 0.38);
+  color: rgba(232, 244, 255, 0.95);
+}
+
+.mapPage .mapDockBtn.isOpen {
+  border-color: rgba(109, 182, 255, 0.48);
+  background: rgba(109, 182, 255, 0.13);
+  color: rgba(234, 246, 255, 0.92);
+  box-shadow: 0 0 14px rgba(68, 224, 255, 0.16);
+}
+
+.mapPage .appWindowLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.mapPage .appWindow {
+  position: absolute;
+  pointer-events: auto;
+  min-width: 380px;
+  min-height: 300px;
+  width: 740px;
+  height: 500px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mapPage .appWindow .mapWindowHeader {
+  margin: 0;
+  padding: 4px 7px;
+}
+
+.mapPage .appWindowHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mapPage .appWindowActions {
+  display: flex;
+  gap: 6px;
+}
+
+.mapPage .appWindowAction {
+  width: 20px;
+  height: 18px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(210, 226, 240, 0.74);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.mapPage .appWindowAction:hover {
+  background: rgba(90, 168, 212, 0.12);
+  color: rgba(235, 245, 252, 0.98);
+}
+
+.mapPage .appWindowBody {
+  height: calc(100% - 42px);
+  background: rgba(8, 13, 20, 0.64);
+}
+
+.mapPage .appWindowFrame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
 .mapPage .overview,
 .mapPage .info {
   position: absolute;
-  top: 92px;
+  top: 16px;
   z-index: 5;
   backdrop-filter: blur(8px);
 }
@@ -102,13 +279,71 @@ body::before {
     inset 0 0 0 1px rgba(220, 238, 255, 0.05);
 }
 
+.mapPage .mapWindow.isSelected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(109, 182, 255, 0.52);
+  box-shadow: 0 0 12px rgba(68, 224, 255, 0.16);
+  pointer-events: none;
+  z-index: 3;
+}
+
 .mapPage .mapWindowHeader {
   cursor: move;
   user-select: none;
   border-bottom: 1px solid rgba(120, 165, 214, 0.14);
-  margin: -14px -14px 10px;
-  padding: 10px 12px 9px;
+  margin: -14px -14px 4px;
+  padding: 4px 7px;
   background: linear-gradient(180deg, rgba(14, 23, 36, 0.58), rgba(9, 16, 25, 0));
+}
+
+.mapPage .mapWindowHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mapPage .mapWindowActions {
+  display: flex;
+  gap: 6px;
+}
+
+.mapPage .mapWindowAction {
+  width: 20px;
+  height: 18px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(210, 226, 240, 0.74);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.mapPage .mapWindow .titleSmall {
+  margin-bottom: 0;
+  line-height: 1.1;
+}
+
+.mapPage .mapWindow.isMinimized {
+  min-height: 0 !important;
+  height: 30px !important;
+  overflow: hidden;
+}
+
+.mapPage .appWindow.isMinimized {
+  min-height: 0 !important;
+  height: 30px !important;
+}
+
+.mapPage .mapWindowAction:hover {
+  background: rgba(90, 168, 212, 0.12);
+  color: rgba(235, 245, 252, 0.98);
 }
 
 .mapPage .mapWindowBody {
@@ -119,19 +354,78 @@ body::before {
 
 .mapPage .mapWindowResize {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 14px;
-  height: 14px;
+  z-index: 4;
+  background: transparent;
+}
+
+.mapPage .mapWindowResize--n,
+.mapPage .mapWindowResize--s {
+  left: 10px;
+  right: 10px;
+  height: 8px;
+}
+
+.mapPage .mapWindowResize--n {
+  top: -3px;
+  cursor: ns-resize;
+}
+
+.mapPage .mapWindowResize--s {
+  bottom: -3px;
+  cursor: ns-resize;
+}
+
+.mapPage .mapWindowResize--e,
+.mapPage .mapWindowResize--w {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+}
+
+.mapPage .mapWindowResize--e {
+  right: -3px;
+  cursor: ew-resize;
+}
+
+.mapPage .mapWindowResize--w {
+  left: -3px;
+  cursor: ew-resize;
+}
+
+.mapPage .mapWindowResize--ne,
+.mapPage .mapWindowResize--nw,
+.mapPage .mapWindowResize--se,
+.mapPage .mapWindowResize--sw {
+  width: 12px;
+  height: 12px;
+}
+
+.mapPage .mapWindowResize--ne {
+  right: -3px;
+  top: -3px;
+  cursor: nesw-resize;
+}
+
+.mapPage .mapWindowResize--nw {
+  left: -3px;
+  top: -3px;
   cursor: nwse-resize;
-  border-right: 2px solid rgba(109, 182, 255, 0.45);
-  border-bottom: 2px solid rgba(109, 182, 255, 0.45);
-  border-radius: 0 0 5px 0;
-  opacity: 0.8;
+}
+
+.mapPage .mapWindowResize--se {
+  right: -3px;
+  bottom: -3px;
+  cursor: nwse-resize;
+}
+
+.mapPage .mapWindowResize--sw {
+  left: -3px;
+  bottom: -3px;
+  cursor: nesw-resize;
 }
 
 .mapPage .overview {
-  left: 16px;
+  left: 160px;
   width: 320px;
   min-width: 240px;
   min-height: 220px;
@@ -281,6 +575,10 @@ body::before {
   align-items: center;
 }
 
+.top .tabs {
+  display: none;
+}
+
 .tab {
   display: inline-block;
   padding: 8px 14px;
@@ -325,13 +623,13 @@ body::before {
 }
 
 .mapOverview {
-  margin-top: 8px;
+  margin-top: 4px;
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: 5px;
   background: rgba(7, 12, 20, 0.72);
   overflow: auto;
   max-height: calc(100vh - 220px);
-  min-height: 280px;
+  min-height: 240px;
 }
 
 .ovHead,
@@ -346,7 +644,7 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 6px 8px;
+  padding: 4px 7px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -378,20 +676,20 @@ body::before {
   border-radius: 0;
   background: transparent;
   color: var(--text);
-  padding: 5px 8px;
-  min-height: 24px;
+  padding: 3px 7px;
+  min-height: 20px;
   text-align: left;
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .ovFolderRow {
   width: 100%;
-  min-height: 24px;
+  min-height: 20px;
   display: flex;
   align-items: center;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -400,11 +698,11 @@ body::before {
 
 .ovSubFolder {
   border-left: 1px solid var(--border-soft);
-  padding-left: 10px !important;
+  padding-left: 7px !important;
 }
 
 .ovPlanetGroup > summary {
-  padding: 5px 8px;
+  padding: 3px 7px;
 }
 
 .ovPlanetGroup > summary:hover {
@@ -457,23 +755,23 @@ body::before {
 }
 
 .ovZoneGroup > summary {
-  padding: 6px 8px;
+  padding: 3px 7px;
   border-bottom: 1px solid rgba(120, 165, 214, 0.12);
 }
 
 .ovZoneRow {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: rgba(198, 222, 250, 0.9);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ovAstroSymbol {
-  font-size: 3em;
+  font-size: 1.6em;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -505,7 +803,7 @@ body::before {
 }
 
 .ovName {
-  font-size: 12px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   min-width: 0;
@@ -529,7 +827,7 @@ body::before {
 .ovChildren {
   margin: 0;
   padding: 0;
-  margin-left: 8px;
+  margin-left: 5px;
   border-left: 1px solid rgba(120, 165, 214, 0.2);
 }
 

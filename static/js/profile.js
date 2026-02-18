@@ -2,6 +2,18 @@
   const infoEl = document.getElementById("profileInfo");
   const logoutBtn = document.getElementById("logoutBtn");
 
+  function redirectToLogin() {
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = "/login";
+        return;
+      }
+    } catch {
+      // Fallback to same-window redirect.
+    }
+    window.location.href = "/login";
+  }
+
   function formatCreated(epochS) {
     const d = new Date((Number(epochS) || 0) * 1000);
     if (Number.isNaN(d.getTime())) return "unknown";
@@ -12,7 +24,7 @@
     const resp = await fetch("/api/auth/me", { cache: "no-store" });
     if (!resp.ok) {
       if (resp.status === 401) {
-        window.location.href = "/login";
+        redirectToLogin();
         return;
       }
       infoEl.textContent = "Failed to load profile.";
@@ -34,7 +46,7 @@
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      window.location.href = "/login";
+      redirectToLogin();
     }
   });
 
