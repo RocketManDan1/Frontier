@@ -271,47 +271,52 @@
     const mass = fmtKg(item?.mass_kg);
     const vol = fmtM3(item?.volume_m3);
     const statsText = `${mass} · ${vol}`;
+    const category = String(item?.category || item?.item_kind || "").trim();
+    const phase = String(item?.phase || "").trim();
+    const qty = Math.max(0, Number(item?.quantity) || 0);
 
-    const card = itemDisplay && typeof itemDisplay.createCard === "function"
-      ? itemDisplay.createCard({
-        label: String(item?.label || "Item"),
-        subtitle: String(item?.subtitle || item?.item_kind || ""),
-        stats: statsText,
-        iconSeed: item?.icon_seed || item?.item_uid || item?.item_id,
-        className: "inventoryItemCard",
-        role: "listitem",
-        draggable: !!transfer,
-      })
+    // Build tooltip lines from item metadata
+    const tooltipLines = [];
+    if (item?.thrust_kn) tooltipLines.push(["Thrust", `${Number(item.thrust_kn).toFixed(0)} kN`]);
+    if (item?.isp_s) tooltipLines.push(["ISP", `${Number(item.isp_s).toFixed(0)} s`]);
+    if (item?.capacity_m3) tooltipLines.push(["Capacity", fmtM3(item.capacity_m3)]);
+    if (item?.power_mw) tooltipLines.push(["Power", `${Number(item.power_mw).toFixed(1)} MW`]);
+    if (item?.resource_id) tooltipLines.push(["Resource", String(item.resource_id)]);
+
+    const cell = itemDisplay && typeof itemDisplay.createGridCell === "function"
+      ? itemDisplay.createGridCell({
+          label: String(item?.label || "Item"),
+          subtitle: String(item?.subtitle || item?.item_kind || ""),
+          stats: statsText,
+          iconSeed: item?.icon_seed || item?.item_uid || item?.item_id,
+          category: category,
+          phase: phase,
+          mass_kg: item?.mass_kg,
+          volume_m3: item?.volume_m3,
+          quantity: qty > 1 ? qty : 0,
+          draggable: !!transfer,
+          tooltipLines: tooltipLines.length ? tooltipLines : undefined,
+        })
       : (() => {
-        const fallback = document.createElement("article");
-        fallback.className = "inventoryItemCard";
-        fallback.setAttribute("role", "listitem");
-        if (transfer) {
-          fallback.draggable = true;
-          fallback.classList.add("isDraggable");
-        }
-        const icon = document.createElement("img");
-        icon.className = "inventoryItemIcon";
-        icon.alt = `${String(item?.label || "Item")} icon`;
-        icon.src = iconDataUri(item?.icon_seed || item?.item_uid || item?.item_id, item?.label || item?.item_id);
-        const body = document.createElement("div");
-        body.className = "inventoryItemBody";
-        const title = document.createElement("div");
-        title.className = "inventoryItemTitle";
-        title.textContent = String(item?.label || "Item");
-        const sub = document.createElement("div");
-        sub.className = "inventoryItemSub";
-        sub.textContent = String(item?.subtitle || item?.item_kind || "");
-        const stats = document.createElement("div");
-        stats.className = "inventoryItemStats";
-        stats.textContent = statsText;
-        body.append(title, sub, stats);
-        fallback.append(icon, body);
-        return fallback;
-      })();
+          const fallback = document.createElement("div");
+          fallback.className = "invCell";
+          if (transfer) {
+            fallback.draggable = true;
+            fallback.classList.add("isDraggable");
+          }
+          const icon = document.createElement("img");
+          icon.className = "invCellIcon";
+          icon.alt = String(item?.label || "Item");
+          icon.src = iconDataUri(item?.icon_seed || item?.item_uid || item?.item_id, item?.label || item?.item_id);
+          const lbl = document.createElement("div");
+          lbl.className = "invCellLabel";
+          lbl.textContent = String(item?.label || "Item");
+          fallback.append(icon, lbl);
+          return fallback;
+        })();
 
     if (transfer) {
-      card.addEventListener("dragstart", (event) => {
+      cell.addEventListener("dragstart", (event) => {
         if (!event.dataTransfer) return;
         const payload = {
           source_kind: String(transfer.source_kind || ""),
@@ -323,16 +328,16 @@
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(DRAG_TRANSFER_MIME, json);
         event.dataTransfer.setData("text/plain", `earthmoon-transfer:${json}`);
-        card.classList.add("isDragging");
+        cell.classList.add("isDragging");
       });
-      card.addEventListener("dragend", () => {
-        card.classList.remove("isDragging");
+      cell.addEventListener("dragend", () => {
+        cell.classList.remove("isDragging");
         root.querySelectorAll(".inventoryDropZone.isOver").forEach((el) => el.classList.remove("isOver"));
       });
     }
 
     if (String(item?.item_kind || "").toLowerCase() === "container") {
-      card.addEventListener("contextmenu", (event) => {
+      cell.addEventListener("contextmenu", (event) => {
         event.preventDefault();
         const transferSource = item?.transfer && typeof item.transfer === "object" ? item.transfer : null;
         const shipId = String(transferSource?.source_id || "").trim();
@@ -366,7 +371,7 @@
       });
     }
 
-    return card;
+    return cell;
   }
 
   function renderInventoryContainerGroups(selectedInventory, onDropToContainer = null) {
@@ -398,7 +403,7 @@
       const cap = Math.max(0, Number(group?.capacity_m3) || 0);
       const sub = document.createElement("div");
       sub.className = "inventoryContainerGroupSub";
-      sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} tank · ${fmtM3(used)} / ${fmtM3(cap)}`;
+      sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} · ${fmtM3(used)} / ${fmtM3(cap)}`;
 
       head.append(title, sub);
 
@@ -408,7 +413,7 @@
       if (!items.length) {
         const empty = document.createElement("div");
         empty.className = "muted small";
-        empty.textContent = "Container empty";
+        empty.textContent = "Empty";
         itemsWrap.appendChild(empty);
       } else {
         items.forEach((item) => {
@@ -776,7 +781,7 @@
 
       const rowSub = document.createElement("div");
       rowSub.className = "inventoryIndexRowSub";
-      rowSub.textContent = entryKind === "ship" ? "Ship cargo" : "Location storage";
+      rowSub.textContent = entryKind === "ship" ? "Ship inventory" : "Location storage";
 
       row.append(rowTitle, rowSub);
       let inventoryRowClickTimer = null;
@@ -995,9 +1000,9 @@
   }
 
   function renderStackItemCard(item) {
-    const card = renderInventoryItemCard(item);
-    card.classList.add("stackItemCard");
-    return card;
+    const cell = renderInventoryItemCard(item);
+    cell.classList.add("stackItemCard");
+    return cell;
   }
 
   function buildStackWorkspace(panel, windowId) {
@@ -1047,7 +1052,7 @@
 
       const rowSub = document.createElement("div");
       rowSub.className = "inventoryIndexRowSub";
-      rowSub.textContent = entryKind === "ship" ? "Ship stack" : "Location inventory";
+      rowSub.textContent = entryKind === "ship" ? "Ship modules" : "Location parts";
 
       row.append(rowTitle, rowSub);
       let stackRowClickTimer = null;

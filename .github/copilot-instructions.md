@@ -47,6 +47,7 @@ Single-container **FastAPI + SQLite** space-logistics game server. All backend l
 - Client JS in `static/js/` with per-page modules (`fleet.js`, `shipyard.js`, `research.js`, etc.).
 - Rendering uses **PixiJS** (`pixi.min.js`) for the orbital map canvas.
 - Pages check auth client-side via `/api/auth/me`; server also redirects unauthenticated users to `/login`.
+- **Item display**: All items (parts, resources, cargo) render as Eve Online-style grid cells via the shared `ItemDisplay` library in `static/js/item_display.js`. See `docs/ui-item-display-system.md` for the full specification, including icon generation, tooltip system, CSS classes, backend data contract, and integration patterns. **All new item-bearing UI must use this system.**
 
 ## Development Workflow
 

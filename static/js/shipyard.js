@@ -296,32 +296,48 @@
 
   function createItemCard(part, options = {}) {
     const label = String(part?.name || part?.type || part?.item_id || "Part").trim() || "Part";
-    const card = itemDisplay && typeof itemDisplay.createCard === "function"
-      ? itemDisplay.createCard({
-        label,
-        subtitle: String(options.subtitle || partSubtitle(part)),
-        stats: String(options.stats || partStatsText(part)),
-        iconSeed: part?.item_id || part?.name || label,
-        className: "inventoryItemCard stackItemCard shipyardItemCard",
-        role: "listitem",
-        draggable: !!options.draggable,
-      })
+    const category = String(part?.category_id || part?.type || "module").trim().toLowerCase();
+
+    // Build tooltip lines
+    const tooltipLines = [];
+    if (Number(part?.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(part.thrust_kn).toFixed(0)} kN`]);
+    if (Number(part?.isp_s) > 0) tooltipLines.push(["ISP", `${Number(part.isp_s).toFixed(0)} s`]);
+    if (Number(part?.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(part.thermal_mw).toFixed(1)} MW`]);
+    if (Number(part?.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(part.electric_mw).toFixed(1)} MWe`]);
+    if (Number(part?.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(part.heat_rejection_mw).toFixed(1)} MW`]);
+    if (Number(part?.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(part.capacity_m3).toFixed(0)} m³`]);
+    if (Number(part?.fuel_capacity_kg) > 0) tooltipLines.push(["Fuel Cap", `${Number(part.fuel_capacity_kg).toFixed(0)} kg`]);
+
+    const cell = itemDisplay && typeof itemDisplay.createGridCell === "function"
+      ? itemDisplay.createGridCell({
+          label,
+          subtitle: String(options.subtitle || partSubtitle(part)),
+          iconSeed: part?.item_id || part?.name || label,
+          category: category,
+          mass_kg: Number(part?.mass_kg) || 0,
+          volume_m3: partVolumeM3(part),
+          quantity: Number(options.quantity) || 0,
+          draggable: !!options.draggable,
+          className: "shipyardItemCell",
+          tooltipLines: tooltipLines.length ? tooltipLines : undefined,
+        })
       : (() => {
-        const fallback = document.createElement("article");
-        fallback.className = "inventoryItemCard stackItemCard shipyardItemCard";
-        fallback.setAttribute("role", "listitem");
-        if (options.draggable) {
-          fallback.draggable = true;
-          fallback.classList.add("isDraggable");
-        }
-        fallback.textContent = `${label} · ${partDetailText(part)}`;
-        return fallback;
-      })();
+          const fallback = document.createElement("div");
+          fallback.className = "invCell shipyardItemCell";
+          if (options.draggable) {
+            fallback.draggable = true;
+            fallback.classList.add("isDraggable");
+          }
+          fallback.textContent = `${label} · ${partDetailText(part)}`;
+          return fallback;
+        })();
 
     if (options.disabled) {
-      card.classList.add("isDisabled");
+      cell.classList.add("isDisabled");
+      cell.style.opacity = "0.4";
+      cell.style.pointerEvents = "none";
     }
-    return card;
+    return cell;
   }
 
   function partFolderId(part) {
@@ -424,7 +440,7 @@
       }
 
       const strip = document.createElement("div");
-      strip.className = "stackItemStrip shipyardCardStrip";
+      strip.className = "shipyardGarageGrid";
       const sortedParts = parts
         .slice()
         .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
@@ -445,7 +461,7 @@
             draggable: !(isLimited && remaining <= 0),
             disabled: isLimited && remaining <= 0,
             subtitle: partSubtitle(part),
-            stats: partStatsText(part, isLimited ? remaining : null),
+            quantity: isLimited ? remaining : 0,
           });
 
           card.addEventListener("click", () => {
@@ -488,7 +504,7 @@
     }
 
     const strip = document.createElement("div");
-    strip.className = "stackItemStrip shipyardCardStrip shipyardSlotsDropZone";
+    strip.className = "shipyardSlotsGrid shipyardSlotsDropZone";
     bindStackDropZone(strip);
 
     selectedItemIds.forEach((itemId, index) => {
@@ -497,19 +513,8 @@
       const card = createItemCard(part || { item_id: itemId, name: itemId }, {
         draggable: true,
         subtitle: part ? partSubtitle(part) : "module",
-        stats: part ? partStatsText(part) : "0 kg · 0.00 m³",
       });
       card.dataset.slotIndex = String(index);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "btnSecondary shipyardCardRemoveBtn";
-      removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        removeSelectedPartAt(index);
-      });
-      card.appendChild(removeBtn);
 
       card.addEventListener("click", () => removeSelectedPartAt(index));
       card.addEventListener("dragstart", (event) => {

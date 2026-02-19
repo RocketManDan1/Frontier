@@ -79,16 +79,42 @@
     return nonThrusters.concat(thrusters);
   }
 
+  const itemDisplay = window.ItemDisplay || null;
+
   function partsStackHtml(ship) {
+    // Return a placeholder container; grid cells appended in post-render
+    return '<div class="fleetPartsGrid" data-ship-parts="true"></div>';
+  }
+
+  function renderPartsGrid(container, ship) {
+    if (!container || !itemDisplay) return;
     const ordered = orderedPartsForStack(ship);
-    if (!ordered.length) return '<div class="partsStackEmpty">—</div>';
+    container.innerHTML = "";
+    if (!ordered.length) {
+      container.textContent = "—";
+      return;
+    }
+    ordered.forEach((part) => {
+      const p = typeof part === "object" && part ? part : {};
+      const name = String(p.name || p.type || "Part");
+      const category = String(p.type || p.category_id || "module").toLowerCase();
+      const tooltipLines = [];
+      if (Number(p.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
+      if (Number(p.isp_s) > 0) tooltipLines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
+      if (Number(p.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(p.capacity_m3).toFixed(2)} m³`]);
+      if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MW`]);
+      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", `${Number(p.water_kg).toFixed(0)} kg`]);
 
-    const rowHtml = ordered.map((part, index) => {
-      const rowNum = index + 1;
-      return `<div class="partsStackRow"><span class="partsStackCell partsStackIndex">${rowNum}</span><span class="partsStackCell">${partsText({ parts: [part] })}</span></div>`;
-    }).join("");
-
-    return `<div class="partsStack"><div class="partsStackHead"><span class="partsStackCell partsStackIndex">#</span><span class="partsStackCell">Part</span></div>${rowHtml}</div>`;
+      const cell = itemDisplay.createGridCell({
+        label: name,
+        iconSeed: p.item_id || name,
+        category: category,
+        mass_kg: Number(p.mass_kg) || 0,
+        subtitle: category,
+        tooltipLines: tooltipLines.length ? tooltipLines : undefined,
+      });
+      container.appendChild(cell);
+    });
   }
 
   function fuelText(ship) {
@@ -265,6 +291,15 @@
     if (tbody._lastHtml !== newHtml) {
       tbody.innerHTML = newHtml;
       tbody._lastHtml = newHtml;
+
+      // Post-render: populate parts grids with grid cells
+      const sortedShips = ships.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      sortedShips.forEach((ship) => {
+        const detailsRow = tbody.querySelector(`tr.fleetRow[data-ship-id="${ship.id}"] + tr.fleetDetailsRow`);
+        if (!detailsRow) return;
+        const gridEl = detailsRow.querySelector("[data-ship-parts='true']");
+        if (gridEl) renderPartsGrid(gridEl, ship);
+      });
     }
   }
 

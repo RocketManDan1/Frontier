@@ -1363,6 +1363,7 @@ def compute_ship_inventory_resources(
                 "item_id": resource_id,
                 "label": label,
                 "subtitle": f"{phase.title()} cargo",
+                "category": "resource",
                 "resource_id": resource_id,
                 "phase": phase,
                 "mass_kg": 0.0,
@@ -1922,11 +1923,13 @@ def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dic
                     "item_id": resource_id,
                     "label": resource_name,
                     "subtitle": f"{phase.title()} cargo · {used_m3:.2f} m³",
+                    "category": "resource",
                     "resource_id": resource_id,
                     "phase": phase,
                     "mass_kg": cargo_mass_kg,
                     "volume_m3": used_m3,
                     "quantity": cargo_mass_kg,
+                    "capacity_m3": capacity_m3,
                     "icon_seed": f"ship_container::{ship_id}::{idx}::{resource_id}",
                     "transfer": {
                         "source_kind": "ship_container",
@@ -2014,6 +2017,13 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "amount": 1.0,
             }
 
+        part_category = str(part_payload.get("type") or part_payload.get("category_id") or "module").strip().lower()
+        tooltip_lines = []
+        thrust_kn = float(part_payload.get("thrust_kn") or 0)
+        isp_s = float(part_payload.get("isp_s") or 0)
+        power_mw = float(part_payload.get("thermal_mw") or part_payload.get("power_mw") or 0)
+        cap_m3_val = float(part_payload.get("capacity_m3") or 0)
+
         rows.append(
             {
                 "item_uid": f"ship:{ship_id}:part:{idx}",
@@ -2022,10 +2032,15 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "item_id": item_id,
                 "label": label,
                 "subtitle": subtitle,
+                "category": part_category,
                 "resource_id": "",
                 "mass_kg": mass_kg,
                 "volume_m3": volume_m3,
                 "quantity": 1.0,
+                "thrust_kn": thrust_kn if thrust_kn > 0 else None,
+                "isp_s": isp_s if isp_s > 0 else None,
+                "power_mw": power_mw if power_mw > 0 else None,
+                "capacity_m3": cap_m3_val if cap_m3_val > 0 else None,
                 "icon_seed": f"ship_part::{item_id}::{idx}",
                 "transfer": transfer,
             }
@@ -2083,6 +2098,13 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
                 else:
                     subtitle = f"Count: {int(round(qty))} · {phase.title()} · Empty · {used_m3:.2f}/{capacity_m3:.2f} m³"
 
+        part_payload_loc = part.get("part") if isinstance(part.get("part"), dict) else {}
+        loc_part_category = str(part_payload_loc.get("type") or part_payload_loc.get("category_id") or "module").strip().lower()
+        loc_thrust = float(part_payload_loc.get("thrust_kn") or 0)
+        loc_isp = float(part_payload_loc.get("isp_s") or 0)
+        loc_power = float(part_payload_loc.get("thermal_mw") or part_payload_loc.get("power_mw") or 0)
+        loc_cap = float(part_payload_loc.get("capacity_m3") or 0)
+
         rows.append(
             {
                 "item_uid": f"location:{location_id}:part:{stack_key}",
@@ -2090,10 +2112,15 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
                 "item_id": str(part.get("item_id") or "part"),
                 "label": str(part.get("name") or part.get("item_id") or "Part"),
                 "subtitle": subtitle,
+                "category": loc_part_category,
                 "resource_id": "",
                 "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
                 "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),
                 "quantity": qty,
+                "thrust_kn": loc_thrust if loc_thrust > 0 else None,
+                "isp_s": loc_isp if loc_isp > 0 else None,
+                "power_mw": loc_power if loc_power > 0 else None,
+                "capacity_m3": loc_cap if loc_cap > 0 else None,
                 "icon_seed": f"stack_part::{part.get('item_id') or stack_key}",
                 "transfer": {
                     "source_kind": "location_part",
@@ -2119,6 +2146,7 @@ def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict
                 "item_id": str(resource.get("resource_id") or resource.get("item_id") or "resource"),
                 "label": str(resource.get("name") or resource.get("item_id") or "Resource"),
                 "subtitle": "Location Resource",
+                "category": "resource",
                 "resource_id": str(resource.get("resource_id") or resource.get("item_id") or ""),
                 "mass_kg": mass_kg,
                 "volume_m3": max(0.0, float(resource.get("volume_m3") or 0.0)),
@@ -2143,6 +2171,7 @@ def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict
                 "item_id": str(part.get("item_id") or "part"),
                 "label": str(part.get("name") or part.get("item_id") or "Part"),
                 "subtitle": f"Count: {int(round(qty))}",
+                "category": str((part.get("part") or {}).get("type") or (part.get("part") or {}).get("category_id") or "module").strip().lower() if isinstance(part.get("part"), dict) else "module",
                 "resource_id": "",
                 "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
                 "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),

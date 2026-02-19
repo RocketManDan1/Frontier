@@ -1478,46 +1478,54 @@
     }
 
     const resourcesHtml = resources.length
-      ? `
-        <div class="shipInvSection">
-          <div class="shipInvSectionTitle">Resources</div>
-          <table class="shipInvTable">
-            <thead><tr><th>Name</th><th>Mass</th><th>Volume</th></tr></thead>
-            <tbody>
-              ${resources.map((r) => `
-                <tr>
-                  <td>${String(r?.name || r?.item_id || "Resource")}</td>
-                  <td>${Math.max(0, Number(r?.mass_kg) || 0).toFixed(0)} kg</td>
-                  <td>${Math.max(0, Number(r?.volume_m3) || 0).toFixed(2)} m³</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `
+      ? `<div class="shipInvSection"><div class="shipInvSectionTitle">Resources</div><div class="shipInvGrid" data-grid-type="resources"></div></div>`
       : "";
 
     const partsHtml = parts.length
-      ? `
-        <div class="shipInvSection">
-          <div class="shipInvSectionTitle">Parts</div>
-          <table class="shipInvTable">
-            <thead><tr><th>Name</th><th>Count</th><th>Mass</th></tr></thead>
-            <tbody>
-              ${parts.map((p) => `
-                <tr>
-                  <td>${String(p?.name || p?.item_id || "Part")}</td>
-                  <td>${Math.max(0, Number(p?.quantity) || 0).toFixed(0)}</td>
-                  <td>${Math.max(0, Number(p?.mass_kg) || 0).toFixed(0)} kg</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `
+      ? `<div class="shipInvSection"><div class="shipInvSectionTitle">Parts</div><div class="shipInvGrid" data-grid-type="parts"></div></div>`
       : "";
 
     return `<li><div class="shipInvRoot">${resourcesHtml}${partsHtml}</div></li>`;
+  }
+
+  function renderLocationInventoryGrids(containerEl, inventory) {
+    const ID = window.ItemDisplay;
+    if (!ID || !containerEl) return;
+    const resources = Array.isArray(inventory?.resources) ? inventory.resources : [];
+    const parts = Array.isArray(inventory?.parts) ? inventory.parts : [];
+
+    const resGrid = containerEl.querySelector('[data-grid-type="resources"]');
+    if (resGrid) {
+      resources.forEach((r) => {
+        const cell = ID.createGridCell({
+          label: String(r?.name || r?.item_id || "Resource"),
+          iconSeed: `resource::${r?.resource_id || r?.item_id || ""}`,
+          category: "resource",
+          mass_kg: Number(r?.mass_kg) || 0,
+          volume_m3: Number(r?.volume_m3) || 0,
+          quantity: Number(r?.mass_kg) || 0,
+          subtitle: "Resource",
+        });
+        resGrid.appendChild(cell);
+      });
+    }
+
+    const partGrid = containerEl.querySelector('[data-grid-type="parts"]');
+    if (partGrid) {
+      parts.forEach((p) => {
+        const partData = (p?.part && typeof p.part === "object") ? p.part : {};
+        const category = String(partData.type || partData.category_id || "module").toLowerCase();
+        const cell = ID.createGridCell({
+          label: String(p?.name || p?.item_id || "Part"),
+          iconSeed: `part::${p?.item_id || ""}`,
+          category: category,
+          mass_kg: Number(p?.mass_kg) || 0,
+          quantity: Math.max(0, Math.floor(Number(p?.quantity) || 0)),
+          subtitle: category,
+        });
+        partGrid.appendChild(cell);
+      });
+    }
   }
 
   async function showOrbitalLocationInventory(loc) {
@@ -1533,7 +1541,10 @@
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data?.detail || "Failed to load inventory");
       if (reqId !== locationInventoryReqSeq) return;
-      if (infoList) infoList.innerHTML = buildLocationInventoryHtml(data);
+      if (infoList) {
+        infoList.innerHTML = buildLocationInventoryHtml(data);
+        renderLocationInventoryGrids(infoList, data);
+      }
     } catch (err) {
       if (reqId !== locationInventoryReqSeq) return;
       if (infoList) infoList.innerHTML = `<li><div class="muted">${String(err?.message || "No inventory data.")}</div></li>`;
@@ -2049,11 +2060,123 @@
 
   function buildPartsStackHtml(ship) {
     const ordered = orderedPartsForStack(ship);
-    if (!ordered.length) return '<li>Parts: —</li>';
-    const rows = ordered
-      .map((part, idx) => `<div class="partsStackRow"><span class="partsStackCell partsStackIndex">${idx + 1}</span><span class="partsStackCell">${partLabel(part)}</span></div>`)
-      .join("");
-    return `<li><div><b>Parts</b></div><div class="partsStack"><div class="partsStackHead"><span class="partsStackCell partsStackIndex">#</span><span class="partsStackCell">Part</span></div>${rows}</div></li>`;
+    if (!ordered.length) return '<li><div class="muted">No parts installed.</div></li>';
+    return '<li><div class="shipInvSection"><div class="shipInvSectionTitle">Installed Parts</div><div class="shipInvGrid" data-grid-type="ship-parts"></div></div></li>';
+  }
+
+  function renderShipPartsGrid(containerEl, ship) {
+    const ID = window.ItemDisplay;
+    if (!ID || !containerEl) return;
+    const grid = containerEl.querySelector('[data-grid-type="ship-parts"]');
+    if (!grid) return;
+    const ordered = orderedPartsForStack(ship);
+    ordered.forEach((part) => {
+      const p = typeof part === "object" && part ? part : {};
+      const name = String(p.name || p.type || "Part");
+      const category = String(p.type || p.category_id || "module").toLowerCase();
+      const tooltipLines = [];
+      if (Number(p.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
+      if (Number(p.isp_s) > 0) tooltipLines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
+      if (Number(p.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(p.capacity_m3).toFixed(2)} m³`]);
+      if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MW`]);
+      if (Number(p.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
+      if (Number(p.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MW`]);
+      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", `${Number(p.water_kg).toFixed(0)} kg`]);
+      const cell = ID.createGridCell({
+        label: name,
+        iconSeed: p.item_id || name,
+        category: category,
+        mass_kg: Number(p.mass_kg) || 0,
+        subtitle: category,
+        tooltipLines: tooltipLines.length ? tooltipLines : undefined,
+      });
+      grid.appendChild(cell);
+    });
+  }
+
+  function buildDeltaVPanelHtml(ship) {
+    const dryMass = Number(ship.dry_mass_kg || 0);
+    const fuel = Number(ship.fuel_kg || 0);
+    const fuelCap = Number(ship.fuel_capacity_kg || 0);
+    const wetMass = dryMass + fuel;
+    const isp = Number(ship.isp_s || 0);
+    const thrust = Number(ship.thrust_kn || 0);
+    const dv = Number(ship.delta_v_remaining_m_s || 0);
+    const accelG = wetMass > 0 ? (thrust * 1000) / (wetMass * 9.80665) : 0;
+    const fPct = fuelCap > 0 ? Math.max(0, Math.min(100, (fuel / fuelCap) * 100)) : 0;
+    const dvCls = dv > 0 ? "pbPositive" : "pbNeutral";
+    return `
+      <li>
+        <div class="powerBalancePanel">
+          <div class="pbTitle">Delta-v &amp; Propulsion</div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Mass Budget</div>
+            <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${dryMass.toFixed(0)} kg</span></div>
+            <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fuel.toFixed(0)} / ${fuelCap.toFixed(0)} kg</span></div>
+            <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${wetMass.toFixed(0)} kg</b></span></div>
+          </div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Propulsion</div>
+            <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN</span></div>
+            <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s</span></div>
+            <div class="pbRow"><span class="pbLabel">Acceleration</span><span class="pbVal">${accelG.toFixed(3)} g</span></div>
+          </div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Delta-v</div>
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Δv remaining</b></span><span class="pbVal ${dvCls}"><b>${Math.max(0, dv).toFixed(0)} m/s</b></span></div>
+          </div>
+        </div>
+      </li>
+    `;
+  }
+
+  function fmtMw(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(1)} MW`;
+  }
+
+  function buildPowerBalanceHtml(ship) {
+    const pb = ship.power_balance;
+    if (!pb) return "";
+    const reactorMw = Number(pb.reactor_thermal_mw || 0);
+    const thrusterMw = Number(pb.thruster_thermal_mw || 0);
+    const genInputMw = Number(pb.generator_thermal_mw_input || 0);
+    const thermalSurplus = Number(pb.thermal_surplus_mw || 0);
+    const electricMw = Number(pb.generator_electric_mw || 0);
+    const genWaste = Number(pb.generator_waste_heat_mw || 0);
+    const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
+    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const maxThrottle = Number(pb.max_throttle || 0);
+    const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
+    if (!hasAny) return "";
+    const thermalCls = thermalSurplus >= 0 ? "pbPositive" : "pbNegative";
+    const wasteCls = wasteSurplus > 0 ? "pbNegative" : "pbPositive";
+    const throttleCls = maxThrottle < 1 ? "pbNegative" : "pbPositive";
+    return `
+      <li>
+        <div class="powerBalancePanel">
+          <div class="pbTitle">Power &amp; Thermal Balance</div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Thermal Budget</div>
+            <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMw(reactorMw)}</span></div>
+            <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMw(thrusterMw)}</span></div>
+            <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMw(genInputMw)}</span></div>
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)} MW</b></span></div>
+            ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
+          </div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Electric</div>
+            <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMw(electricMw)}</span></div>
+          </div>
+          <div class="pbSection">
+            <div class="pbSectionHead">Waste Heat</div>
+            <div class="pbRow"><span class="pbLabel">Generator waste</span><span class="pbVal">${fmtMw(genWaste)}</span></div>
+            <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMw(radRejection)}</span></div>
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)} MW</b></span></div>
+          </div>
+        </div>
+      </li>
+    `;
   }
 
   function fmtM3(v) {
@@ -2159,42 +2282,37 @@
       return `<li><div class="shipInvRoot">${summaryHtml}<div class="muted">No cargo contents found on this ship.</div></div></li>`;
     }
 
-    const tableRows = rows.map((item) => {
-      const label = String(item?.label || item?.item_id || "Unknown resource");
-      const phase = String(item?.phase || "solid");
-      const vol = Math.max(0, Number(item?.volume_m3) || 0);
-      const mass = Math.max(0, Number(item?.mass_kg) || 0);
-      return `
-        <tr>
-          <td>${label}</td>
-          <td>${phase}</td>
-          <td>${fmtM3(vol)}</td>
-          <td>${fmtKg(mass)}</td>
-        </tr>
-      `;
-    }).join("");
-
     return `
       <li>
         <div class="shipInvRoot">
           ${summaryHtml}
           <div class="shipInvSection">
             <div class="shipInvSectionTitle">Cargo Contents</div>
-            <table class="shipInvTable">
-              <thead>
-                <tr>
-                  <th>Resource</th>
-                  <th>Phase</th>
-                  <th>Volume</th>
-                  <th>Mass</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
+            <div class="shipInvGrid" data-grid-type="ship-cargo"></div>
           </div>
         </div>
       </li>
     `;
+  }
+
+  function renderShipInventoryGrids(containerEl, items) {
+    const ID = window.ItemDisplay;
+    if (!ID || !containerEl) return;
+    const grid = containerEl.querySelector('[data-grid-type="ship-cargo"]');
+    if (!grid) return;
+    const rows = Array.isArray(items) ? items : [];
+    rows.forEach((item) => {
+      const cell = ID.createGridCell({
+        label: String(item?.label || item?.item_id || "Cargo"),
+        iconSeed: `resource::${item?.resource_id || item?.item_id || ""}`,
+        category: "resource",
+        mass_kg: Number(item?.mass_kg) || 0,
+        volume_m3: Number(item?.volume_m3) || 0,
+        phase: String(item?.phase || ""),
+        subtitle: `${String(item?.phase || "solid")} cargo`,
+      });
+      grid.appendChild(cell);
+    });
   }
 
   async function runInventoryAction(shipId, containerIndex, action) {
@@ -4031,18 +4149,15 @@
         ? `Docked: ${locationsById.get(ship.location_id)?.name || ship.location_id}`
         : `In transit: ${locationsById.get(ship.from_location_id)?.name || ship.from_location_id} → ${locationsById.get(ship.to_location_id)?.name || ship.to_location_id}`;
 
-      setInfo(
-        ship.name,
-        subtitle,
-        `Cargo resources: ${inventoryItems.length}`,
-        [
-          `Fuel: ${Number(ship.fuel_kg || 0).toFixed(0)} / ${Number(ship.fuel_capacity_kg || 0).toFixed(0)} kg`,
-          `Δv remaining: ${Number(ship.delta_v_remaining_m_s || 0).toFixed(0)} m/s`,
-        ]
-      );
+      setInfo(ship.name, subtitle, `Cargo resources: ${inventoryItems.length}`, []);
 
       if (infoList) {
         infoList.innerHTML += buildInventoryListHtml(inventoryItems, capacitySummary);
+        infoList.innerHTML += buildPartsStackHtml(ship);
+        infoList.innerHTML += buildDeltaVPanelHtml(ship);
+        infoList.innerHTML += buildPowerBalanceHtml(ship);
+        renderShipInventoryGrids(infoList, inventoryItems);
+        renderShipPartsGrid(infoList, ship);
         wireInventoryActionButtons(ship);
       }
 
@@ -4057,12 +4172,15 @@
         `Docked: ${loc?.name || ship.location_id}`,
         `Location: ${ship.location_id}`,
         [
-          `Fuel: ${Number(ship.fuel_kg || 0).toFixed(0)} / ${Number(ship.fuel_capacity_kg || 0).toFixed(0)} kg`,
-          `Δv remaining: ${Number(ship.delta_v_remaining_m_s || 0).toFixed(0)} m/s`,
           ...(ship.notes || []),
         ]
       );
-      if (infoList) infoList.innerHTML += buildPartsStackHtml(ship);
+      if (infoList) {
+        infoList.innerHTML += buildPartsStackHtml(ship);
+        infoList.innerHTML += buildDeltaVPanelHtml(ship);
+        infoList.innerHTML += buildPowerBalanceHtml(ship);
+        renderShipPartsGrid(infoList, ship);
+      }
       actions.innerHTML = `<button id="moveBtn" class="btnPrimary">Move</button> <button id="deconstructBtn" class="btnSecondary">Deconstruct</button>`;
       document.getElementById("moveBtn").onclick = () => openTransferPlanner(ship);
       document.getElementById("deconstructBtn").onclick = async () => {
@@ -4105,13 +4223,16 @@
       `In transit: ${A?.name || ship.from_location_id} → ${B?.name || ship.to_location_id}`,
       eta !== null ? `ETA: ${formatEtaDaysHours(eta)}` : "",
       [
-        `Fuel: ${Number(ship.fuel_kg || 0).toFixed(0)} / ${Number(ship.fuel_capacity_kg || 0).toFixed(0)} kg`,
-        `Δv remaining: ${Number(ship.delta_v_remaining_m_s || 0).toFixed(0)} m/s`,
         ship.dv_planned_m_s != null ? `Δv planned: ${Math.round(ship.dv_planned_m_s)} m/s` : "",
         (ship.transfer_path || []).length ? `Path: ${(ship.transfer_path || []).join(" → ")}` : "",
       ].filter(Boolean)
     );
-    if (infoList) infoList.innerHTML += buildPartsStackHtml(ship);
+    if (infoList) {
+      infoList.innerHTML += buildPartsStackHtml(ship);
+      infoList.innerHTML += buildDeltaVPanelHtml(ship);
+      infoList.innerHTML += buildPowerBalanceHtml(ship);
+      renderShipPartsGrid(infoList, ship);
+    }
     actions.innerHTML = `<div class="muted small">(No mid-course changes in alpha.)</div>`;
   }
 
