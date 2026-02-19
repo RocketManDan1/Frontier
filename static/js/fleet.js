@@ -103,11 +103,100 @@
     return `${Math.max(0, dv).toFixed(0)} m/s`;
   }
 
+  function fuelPct(fuel, cap) {
+    if (cap <= 0) return 0;
+    return Math.max(0, Math.min(100, (fuel / cap) * 100));
+  }
+
+  function deltaVPanelHtml(ship) {
+    const dryMass = Number(ship.dry_mass_kg || 0);
+    const fuel = Number(ship.fuel_kg || 0);
+    const fuelCap = Number(ship.fuel_capacity_kg || 0);
+    const wetMass = dryMass + fuel;
+    const isp = Number(ship.isp_s || 0);
+    const thrust = Number(ship.thrust_kn || 0);
+    const dv = Number(ship.delta_v_remaining_m_s || 0);
+    const accelG = wetMass > 0 ? (thrust * 1000) / (wetMass * 9.80665) : 0;
+    const fPct = fuelPct(fuel, fuelCap);
+    const dvCls = dv > 0 ? "pbPositive" : "pbNeutral";
+
+    return `
+      <div class="powerBalancePanel powerBalanceFleet">
+        <div class="pbTitle">Delta-v &amp; Propulsion</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Mass Budget</div>
+          <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${dryMass.toFixed(0)} kg</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fuel.toFixed(0)} / ${fuelCap.toFixed(0)} kg</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${wetMass.toFixed(0)} kg</b></span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Propulsion</div>
+          <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN</span></div>
+          <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s</span></div>
+          <div class="pbRow"><span class="pbLabel">Acceleration</span><span class="pbVal">${accelG.toFixed(3)} g</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Delta-v</div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Δv remaining</b></span><span class="pbVal ${dvCls}"><b>${Math.max(0, dv).toFixed(0)} m/s</b></span></div>
+        </div>
+      </div>
+    `;
+  }
+
   function moveOrderText(ship) {
     if (ship.status !== "transit") return "Docked (no active move order)";
     return (ship.transfer_path || []).length
       ? (ship.transfer_path || []).join(" → ")
       : `${ship.from_location_id || "?"} → ${ship.to_location_id || "?"}`;
+  }
+
+  function fmtMw(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(1)} MW`;
+  }
+
+  function powerBalanceHtml(ship) {
+    const pb = ship.power_balance;
+    if (!pb) return "";
+    const reactorMw = Number(pb.reactor_thermal_mw || 0);
+    const thrusterMw = Number(pb.thruster_thermal_mw || 0);
+    const genInputMw = Number(pb.generator_thermal_mw_input || 0);
+    const thermalSurplus = Number(pb.thermal_surplus_mw || 0);
+    const electricMw = Number(pb.generator_electric_mw || 0);
+    const genWaste = Number(pb.generator_waste_heat_mw || 0);
+    const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
+    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const maxThrottle = Number(pb.max_throttle || 0);
+    const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
+    if (!hasAny) return "";
+
+    const thermalCls = thermalSurplus >= 0 ? "pbPositive" : "pbNegative";
+    const wasteCls = wasteSurplus > 0 ? "pbNegative" : "pbPositive";
+    const throttleCls = maxThrottle < 1 ? "pbNegative" : "pbPositive";
+
+    return `
+      <div class="powerBalancePanel powerBalanceFleet">
+        <div class="pbTitle">Power &amp; Thermal Balance</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Thermal Budget</div>
+          <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMw(reactorMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMw(thrusterMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMw(genInputMw)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)} MW</b></span></div>
+          ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Electric</div>
+          <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMw(electricMw)}</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Waste Heat</div>
+          <div class="pbRow"><span class="pbLabel">Generator waste</span><span class="pbVal">${fmtMw(genWaste)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMw(radRejection)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)} MW</b></span></div>
+        </div>
+      </div>
+    `;
   }
 
   function rowHtml(s) {
@@ -141,8 +230,8 @@
         <td colspan="6">
           <div class="fleetDetails">
             <div><b>Parts:</b> ${partsStackHtml(s)}</div>
-            <div><b>Fuel remaining:</b> ${fuelText(s)}</div>
-            <div><b>Δv remaining:</b> ${deltaVText(s)}</div>
+            ${deltaVPanelHtml(s)}
+            ${powerBalanceHtml(s)}
             <div><b>Cargo:</b> ${cargoText(s)}</div>
             <div><b>Move order:</b> ${moveOrderText(s)}</div>
             <div class="fleetProgress">
@@ -168,11 +257,15 @@
     const moving = ships.filter((s) => s.status === "transit").length;
     summaryEl.textContent = `${ships.length} ships • ${moving} in transit`;
 
-    tbody.innerHTML = ships
+    const newHtml = ships
       .slice()
       .sort((a, b) => String(a.name).localeCompare(String(b.name)))
       .map(rowHtml)
       .join("");
+    if (tbody._lastHtml !== newHtml) {
+      tbody.innerHTML = newHtml;
+      tbody._lastHtml = newHtml;
+    }
   }
 
   tbody?.addEventListener("click", (event) => {

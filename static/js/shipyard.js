@@ -19,10 +19,14 @@
   let sourceRefreshTimer = null;
 
   const GARAGE_FOLDERS = [
+    { id: "reactors", label: "Reactors" },
     { id: "thrusters", label: "Thrusters" },
+    { id: "generators", label: "Generators" },
+    { id: "radiators", label: "Radiators" },
     { id: "storage", label: "Storage" },
-    { id: "generator", label: "Generator" },
   ];
+
+  const collapsedFolders = new Set();
 
   function setMsg(text, isError) {
     msgEl.textContent = text || "";
@@ -177,6 +181,13 @@
     const bits = [];
     if (Number(part.thrust_kn) > 0) bits.push(`${Number(part.thrust_kn).toFixed(0)} kN`);
     if (Number(part.isp_s) > 0) bits.push(`${Number(part.isp_s).toFixed(0)} s`);
+    if (Number(part.thermal_mw) > 0 && String(part.category_id || part.type || "").includes("reactor"))
+      bits.push(`${Number(part.thermal_mw).toFixed(0)} MWth out`);
+    if (Number(part.thermal_mw) > 0 && String(part.category_id || part.type || "").includes("thruster"))
+      bits.push(`${Number(part.thermal_mw).toFixed(0)} MWth req`);
+    if (Number(part.thermal_mw_input) > 0) bits.push(`${Number(part.thermal_mw_input).toFixed(0)} MWth in`);
+    if (Number(part.electric_mw) > 0) bits.push(`${Number(part.electric_mw).toFixed(0)} MWe`);
+    if (Number(part.heat_rejection_mw) > 0) bits.push(`${Number(part.heat_rejection_mw).toFixed(0)} MW rejected`);
     if (Number(part.capacity_m3) > 0) bits.push(`${Number(part.capacity_m3).toFixed(0)} m3`);
     if (Number(part.fuel_capacity_kg) > 0) bits.push(`${Number(part.fuel_capacity_kg).toFixed(0)} kg fuel`);
     if (Number(part.mass_kg) > 0) bits.push(`${Number(part.mass_kg).toFixed(0)} kg dry`);
@@ -318,6 +329,14 @@
     const name = String(part?.name || "").toLowerCase();
 
     if (
+      rawCategory.includes("reactor") ||
+      rawCategory === "fission" ||
+      rawCategory === "fusion"
+    ) {
+      return "reactors";
+    }
+
+    if (
       rawCategory.includes("thruster") ||
       rawCategory.includes("engine") ||
       Number(part?.thrust_kn) > 0 ||
@@ -326,6 +345,24 @@
       name.includes("engine")
     ) {
       return "thrusters";
+    }
+
+    if (
+      rawCategory.includes("generator") ||
+      rawCategory === "power" ||
+      rawCategory === "power_generator" ||
+      Number(part?.electric_mw) > 0
+    ) {
+      return "generators";
+    }
+
+    if (
+      rawCategory.includes("radiator") ||
+      rawCategory === "cooler" ||
+      rawCategory === "cooling" ||
+      Number(part?.heat_rejection_mw) > 0
+    ) {
+      return "radiators";
     }
 
     if (
@@ -341,7 +378,7 @@
       return "storage";
     }
 
-    return "generator";
+    return "storage";
   }
 
   function groupedGarageParts(parts) {
@@ -366,10 +403,25 @@
       const group = document.createElement("div");
       group.className = "shipyardGarageGroup";
 
+      const folderObj = GARAGE_FOLDERS.find((f) => f.label === groupName);
+      const fId = folderObj ? folderObj.id : groupName;
+      const isCollapsed = collapsedFolders.has(fId);
+
       const heading = document.createElement("div");
       heading.className = "shipyardGarageHeading";
-      heading.textContent = groupName;
+      heading.innerHTML = `<span class="garageChevron${isCollapsed ? "" : " isOpen"}">&#9656;</span> ${groupName} <span class="garageCount">${parts.length}</span>`;
+      heading.style.cursor = "pointer";
+      heading.addEventListener("click", () => {
+        if (collapsedFolders.has(fId)) collapsedFolders.delete(fId);
+        else collapsedFolders.add(fId);
+        renderGarage();
+      });
       group.appendChild(heading);
+
+      if (isCollapsed) {
+        garageEl.appendChild(group);
+        return;
+      }
 
       const strip = document.createElement("div");
       strip.className = "stackItemStrip shipyardCardStrip";
@@ -494,7 +546,68 @@
     slotsEl.appendChild(strip);
   }
 
-  function renderStats(stats) {
+  function fmtMw(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(1)} MW`;
+  }
+
+  function fmtPct(v) {
+    return `${(Math.max(0, Math.min(1, Number(v) || 0)) * 100).toFixed(0)}%`;
+  }
+
+  function balanceClass(surplus) {
+    const v = Number(surplus) || 0;
+    if (v > 0) return "pbPositive";
+    if (v < 0) return "pbNegative";
+    return "pbNeutral";
+  }
+
+  function renderPowerBalance(pb) {
+    if (!pb) return "";
+    const reactorMw = Number(pb.reactor_thermal_mw || 0);
+    const thrusterMw = Number(pb.thruster_thermal_mw || 0);
+    const genInputMw = Number(pb.generator_thermal_mw_input || 0);
+    const totalDemand = Number(pb.total_thermal_demand_mw || 0);
+    const thermalSurplus = Number(pb.thermal_surplus_mw || 0);
+    const electricMw = Number(pb.generator_electric_mw || 0);
+    const genWaste = Number(pb.generator_waste_heat_mw || 0);
+    const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
+    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const maxThrottle = Number(pb.max_throttle || 0);
+
+    const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
+    if (!hasAny) return "";
+
+    return `
+      <div class="powerBalancePanel">
+        <div class="pbTitle">Power &amp; Thermal Balance</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Thermal Budget (MWth)</div>
+          <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMw(reactorMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMw(thrusterMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMw(genInputMw)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Thermal surplus</b></span><span class="pbVal ${balanceClass(thermalSurplus)}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)} MW</b></span></div>
+          ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${maxThrottle < 1 ? "pbNegative" : "pbPositive"}">${fmtPct(maxThrottle)}</span></div>` : ""}
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Electric Output (MWe)</div>
+          <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMw(electricMw)}</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Waste Heat Budget</div>
+          <div class="pbRow"><span class="pbLabel">Generator waste heat</span><span class="pbVal">${fmtMw(genWaste)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMw(radRejection)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated heat</b></span><span class="pbVal ${balanceClass(wasteSurplus)}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)} MW</b></span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function fuelPct(fuel, cap) {
+    if (cap <= 0) return 0;
+    return Math.max(0, Math.min(100, (fuel / cap) * 100));
+  }
+
+  function renderDeltaVPanel(stats) {
     const dryMass = Number(stats?.dry_mass_kg || 0);
     const fuelMass = Number(stats?.fuel_kg || 0);
     const fuelCap = Number(stats?.fuel_capacity_kg || 0);
@@ -503,18 +616,35 @@
     const thrust = Number(stats?.thrust_kn || 0);
     const dv = Number(stats?.delta_v_remaining_m_s || 0);
     const accelG = Number(stats?.accel_g || 0);
+    const fPct = fuelPct(fuelMass, fuelCap);
+    const dvClass = dv > 0 ? "pbPositive" : "pbNeutral";
 
-    const lines = [
-      `Dry mass: ${fmtMassKg(dryMass)}`,
-      `Fuel: ${fmtMassKg(fuelMass)} / ${fmtMassKg(fuelCap)}`,
-      `Wet mass: ${fmtMassKg(wetMass)}`,
-      `Thrust: ${thrust.toFixed(0)} kN`,
-      `Isp: ${isp.toFixed(0)} s`,
-      `Delta-v: ${fmtMs(dv)}`,
-      `Acceleration: ${fmtGs(accelG)}`,
-    ];
+    return `
+      <div class="powerBalancePanel">
+        <div class="pbTitle">Delta-v &amp; Propulsion</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Mass Budget</div>
+          <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtMassKg(dryMass)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtMassKg(fuelMass)} / ${fmtMassKg(fuelCap)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtMassKg(wetMass)}</b></span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Propulsion</div>
+          <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN</span></div>
+          <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s</span></div>
+          <div class="pbRow"><span class="pbLabel">Acceleration</span><span class="pbVal">${fmtGs(accelG)}</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Delta-v</div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Δv remaining</b></span><span class="pbVal ${dvClass}"><b>${fmtMs(dv)}</b></span></div>
+        </div>
+      </div>
+    `;
+  }
 
-    statsEl.innerHTML = lines.map((line) => `<li>${line}</li>`).join("");
+  function renderStats(stats, powerBalance) {
+    statsEl.innerHTML = renderDeltaVPanel(stats) + renderPowerBalance(powerBalance);
   }
 
   async function refreshPreview() {
@@ -524,9 +654,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parts: selectedItemIds, source_location_id: buildLocationId }),
       });
-      renderStats(data.stats || {});
+      renderStats(data.stats || {}, data.power_balance || null);
     } catch (err) {
-      renderStats({});
+      renderStats({}, null);
       setMsg(err?.message || "Failed to refresh preview", true);
     }
   }

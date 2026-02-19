@@ -18,7 +18,7 @@
 
 html,
 body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -1525,6 +1525,19 @@ button:disabled {
   min-width: 88px;
 }
 
+body.fleetPage {
+  height: auto;
+  overflow-y: auto;
+}
+
+.fleetPage .app {
+  height: auto;
+}
+
+.fleetPage .panel {
+  overflow: visible;
+}
+
 .fleetPage .pagePanel {
   padding: 8px;
 }
@@ -2191,6 +2204,31 @@ button:disabled {
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.shipyardGarageHeading:hover {
+  color: var(--text);
+}
+
+.garageChevron {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 120ms ease;
+  transform: rotate(0deg);
+}
+
+.garageChevron.isOpen {
+  transform: rotate(90deg);
+}
+
+.garageCount {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.5;
 }
 
 .shipyardSlotEmpty {
@@ -2476,4 +2514,103 @@ button:disabled {
   .tab {
     flex: 1;
   }
+}
+
+/* ── Power & Thermal Balance Panel ── */
+
+.powerBalancePanel {
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: rgba(8, 13, 22, 0.82);
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(163, 184, 203, 0.95);
+}
+
+.powerBalanceFleet {
+  margin-top: 8px;
+}
+
+.pbTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(109, 182, 255, 0.85);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(109, 182, 255, 0.18);
+}
+
+.pbSection {
+  margin-bottom: 6px;
+}
+
+.pbSection:last-child {
+  margin-bottom: 0;
+}
+
+.pbSectionHead {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: rgba(163, 184, 203, 0.6);
+  margin-bottom: 3px;
+  margin-top: 4px;
+}
+
+.pbRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1px 0;
+  font-size: 12px;
+}
+
+.pbRow.pbDivider {
+  border-top: 1px solid rgba(109, 182, 255, 0.12);
+  margin-top: 2px;
+  padding-top: 3px;
+}
+
+.pbLabel {
+  color: rgba(163, 184, 203, 0.82);
+}
+
+.pbVal {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 72px;
+}
+
+.pbPositive {
+  color: #5ee89c;
+}
+
+.pbNegative {
+  color: #ff6b7a;
+}
+
+.pbNeutral {
+  color: rgba(163, 184, 203, 0.82);
+}
+
+.pbBarWrap {
+  display: inline-block;
+  width: 60px;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+  overflow: hidden;
+}
+
+.pbBar {
+  display: block;
+  height: 100%;
+  background: #5ee89c;
+  border-radius: 3px 0 0 3px;
+  transition: width 0.3s ease;
 }

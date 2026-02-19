@@ -687,6 +687,192 @@ def load_storage_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
+def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all reactor items from items/reactors/<family>/*.json."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    reactor_root = APP_DIR / "items" / "reactors"
+    if not reactor_root.exists() or not reactor_root.is_dir():
+        return catalog
+    for family_dir in sorted(
+        [p for p in reactor_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+    ):
+        family_path = family_dir / "family.json"
+        if not family_path.exists():
+            continue
+        try:
+            family = _load_json_file(family_path)
+        except ValueError:
+            continue
+        mainline_files = [str(v) for v in (family.get("mainline_files") or []) if str(v).strip()]
+        for rel in mainline_files:
+            file_path = family_dir / rel
+            if not file_path.exists():
+                continue
+            try:
+                entry = _load_json_file(file_path)
+            except ValueError:
+                continue
+            item_id = str(entry.get("id") or "").strip()
+            if not item_id:
+                continue
+            output = entry.get("output") or {}
+            catalog[item_id] = {
+                "item_id": item_id,
+                "name": str(entry.get("name") or item_id),
+                "type": "reactor",
+                "category_id": "reactor",
+                "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+                "thermal_mw": max(0.0, float(output.get("thermal_mw") or 0.0)),
+                "branch": str(entry.get("branch") or ""),
+            }
+    return catalog
+
+
+@lru_cache(maxsize=1)
+def load_generator_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all generator items from items/generators/<family>/*.json."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    gen_root = APP_DIR / "items" / "generators"
+    if not gen_root.exists() or not gen_root.is_dir():
+        return catalog
+    for family_dir in sorted(
+        [p for p in gen_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+    ):
+        family_path = family_dir / "family.json"
+        if not family_path.exists():
+            continue
+        try:
+            family = _load_json_file(family_path)
+        except ValueError:
+            continue
+        mainline_files = [str(v) for v in (family.get("mainline_files") or []) if str(v).strip()]
+        for rel in mainline_files:
+            file_path = family_dir / rel
+            if not file_path.exists():
+                continue
+            try:
+                entry = _load_json_file(file_path)
+            except ValueError:
+                continue
+            item_id = str(entry.get("id") or "").strip()
+            if not item_id:
+                continue
+            inp = entry.get("input") or {}
+            out = entry.get("output") or {}
+            efficiency = max(0.0, min(1.0, float(entry.get("conversion_efficiency") or 0.0)))
+            thermal_input = max(0.0, float(inp.get("thermal_mw_rated") or 0.0))
+            electric_output = max(0.0, float(out.get("electric_mw") or 0.0))
+            waste_heat_mw = thermal_input * (1.0 - efficiency) if efficiency > 0.0 else thermal_input
+            catalog[item_id] = {
+                "item_id": item_id,
+                "name": str(entry.get("name") or item_id),
+                "type": "generator",
+                "category_id": "generator",
+                "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+                "thermal_mw_input": thermal_input,
+                "electric_mw": electric_output,
+                "conversion_efficiency": efficiency,
+                "waste_heat_mw": waste_heat_mw,
+                "branch": str(entry.get("branch") or ""),
+            }
+    return catalog
+
+
+@lru_cache(maxsize=1)
+def load_radiator_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all radiator items from items/radiators/<family>/*.json."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    rad_root = APP_DIR / "items" / "radiators"
+    if not rad_root.exists() or not rad_root.is_dir():
+        return catalog
+    for family_dir in sorted(
+        [p for p in rad_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+    ):
+        family_path = family_dir / "family.json"
+        if not family_path.exists():
+            continue
+        try:
+            family = _load_json_file(family_path)
+        except ValueError:
+            continue
+        mainline_files = [str(v) for v in (family.get("mainline_files") or []) if str(v).strip()]
+        for rel in mainline_files:
+            file_path = family_dir / rel
+            if not file_path.exists():
+                continue
+            try:
+                entry = _load_json_file(file_path)
+            except ValueError:
+                continue
+            item_id = str(entry.get("id") or "").strip()
+            if not item_id:
+                continue
+            out = entry.get("output") or {}
+            catalog[item_id] = {
+                "item_id": item_id,
+                "name": str(entry.get("name") or item_id),
+                "type": "radiator",
+                "category_id": "radiator",
+                "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+                "heat_rejection_mw": max(0.0, float(out.get("heat_rejection_mw") or 0.0)),
+                "operating_temp_k": max(0.0, float(entry.get("operating_temp_k") or 0.0)),
+                "branch": str(entry.get("branch") or ""),
+            }
+    return catalog
+
+
+def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compute the thermal/electric/waste-heat balance from a list of normalized parts."""
+    reactor_thermal_mw = 0.0
+    thruster_thermal_mw = 0.0
+    generator_thermal_mw_input = 0.0
+    generator_electric_mw = 0.0
+    generator_waste_heat_mw = 0.0
+    radiator_heat_rejection_mw = 0.0
+
+    for part in parts:
+        cat = str(part.get("category_id") or part.get("type") or "").lower()
+        if cat == "reactor":
+            reactor_thermal_mw += max(0.0, float(part.get("thermal_mw") or 0.0))
+        elif cat == "thruster":
+            thruster_thermal_mw += max(0.0, float(part.get("thermal_mw") or 0.0))
+        elif cat == "generator":
+            generator_thermal_mw_input += max(0.0, float(part.get("thermal_mw_input") or 0.0))
+            generator_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
+            generator_waste_heat_mw += max(0.0, float(part.get("waste_heat_mw") or 0.0))
+        elif cat == "radiator":
+            radiator_heat_rejection_mw += max(0.0, float(part.get("heat_rejection_mw") or 0.0))
+
+    # Total thermal demand = thruster + generator input
+    total_thermal_demand_mw = thruster_thermal_mw + generator_thermal_mw_input
+    thermal_surplus_mw = reactor_thermal_mw - total_thermal_demand_mw
+
+    # Total waste heat = generator waste heat (reactor waste heat goes into thrust for NTR)
+    waste_heat_surplus_mw = generator_waste_heat_mw - radiator_heat_rejection_mw
+
+    # Throttle cap: if reactor can't supply thruster, throttle is limited
+    if thruster_thermal_mw > 0.0 and reactor_thermal_mw > 0.0:
+        max_throttle = min(1.0, reactor_thermal_mw / thruster_thermal_mw)
+    elif thruster_thermal_mw > 0.0:
+        max_throttle = 0.0
+    else:
+        max_throttle = 1.0
+
+    return {
+        "reactor_thermal_mw": round(reactor_thermal_mw, 1),
+        "thruster_thermal_mw": round(thruster_thermal_mw, 1),
+        "generator_thermal_mw_input": round(generator_thermal_mw_input, 1),
+        "total_thermal_demand_mw": round(total_thermal_demand_mw, 1),
+        "thermal_surplus_mw": round(thermal_surplus_mw, 1),
+        "generator_electric_mw": round(generator_electric_mw, 1),
+        "generator_waste_heat_mw": round(generator_waste_heat_mw, 1),
+        "radiator_heat_rejection_mw": round(radiator_heat_rejection_mw, 1),
+        "waste_heat_surplus_mw": round(waste_heat_surplus_mw, 1),
+        "max_throttle": round(max_throttle, 4),
+    }
+
+
+@lru_cache(maxsize=1)
 def load_recipe_catalog() -> Dict[str, Dict[str, Any]]:
     catalog: Dict[str, Dict[str, Any]] = {}
     for root in _item_roots_for("Recipes"):
@@ -1092,9 +1278,16 @@ def normalize_parts(
     thruster_catalog: Dict[str, Dict[str, Any]],
     storage_catalog: Dict[str, Dict[str, Any]],
     canonical_item_category: Callable[[Any], str],
+    reactor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    generator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     if not isinstance(raw_parts, list):
         return []
+
+    _reactor_catalog = reactor_catalog or {}
+    _generator_catalog = generator_catalog or {}
+    _radiator_catalog = radiator_catalog or {}
 
     normalized: List[Dict[str, Any]] = []
     for entry in raw_parts:
@@ -1108,6 +1301,15 @@ def normalize_parts(
             if label in storage_catalog:
                 normalized.append(dict(storage_catalog[label]))
                 continue
+            if label in _reactor_catalog:
+                normalized.append(dict(_reactor_catalog[label]))
+                continue
+            if label in _generator_catalog:
+                normalized.append(dict(_generator_catalog[label]))
+                continue
+            if label in _radiator_catalog:
+                normalized.append(dict(_radiator_catalog[label]))
+                continue
             category_id = canonical_item_category(label)
             normalized.append({"name": label, "type": category_id, "category_id": category_id})
             continue
@@ -1120,6 +1322,21 @@ def normalize_parts(
                 continue
             if raw_item_id and raw_item_id in storage_catalog:
                 merged = dict(storage_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
+                continue
+            if raw_item_id and raw_item_id in _reactor_catalog:
+                merged = dict(_reactor_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
+                continue
+            if raw_item_id and raw_item_id in _generator_catalog:
+                merged = dict(_generator_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
+                continue
+            if raw_item_id and raw_item_id in _radiator_catalog:
+                merged = dict(_radiator_catalog[raw_item_id])
                 merged.update(entry)
                 normalized.append(merged)
                 continue
@@ -1274,8 +1491,24 @@ def build_shipyard_catalog_payload(
     storage_catalog: Dict[str, Dict[str, Any]],
     resource_catalog: Dict[str, Dict[str, Any]],
     recipe_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    reactor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    generator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     parts: List[Dict[str, Any]] = []
+
+    for item in (reactor_catalog or {}).values():
+        parts.append(
+            {
+                "item_id": item.get("item_id"),
+                "name": item.get("name"),
+                "type": "reactor",
+                "category_id": "reactor",
+                "mass_kg": float(item.get("mass_kg") or 0.0),
+                "thermal_mw": float(item.get("thermal_mw") or 0.0),
+                "branch": str(item.get("branch") or ""),
+            }
+        )
 
     for item in thruster_catalog.values():
         parts.append(
@@ -1287,7 +1520,38 @@ def build_shipyard_catalog_payload(
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "thrust_kn": float(item.get("thrust_kn") or 0.0),
                 "isp_s": float(item.get("isp_s") or 0.0),
+                "thermal_mw": float(item.get("thermal_mw") or 0.0),
                 "family": str(item.get("thruster_family") or ""),
+                "branch": str(item.get("branch") or ""),
+            }
+        )
+
+    for item in (generator_catalog or {}).values():
+        parts.append(
+            {
+                "item_id": item.get("item_id"),
+                "name": item.get("name"),
+                "type": "generator",
+                "category_id": "generator",
+                "mass_kg": float(item.get("mass_kg") or 0.0),
+                "thermal_mw_input": float(item.get("thermal_mw_input") or 0.0),
+                "electric_mw": float(item.get("electric_mw") or 0.0),
+                "conversion_efficiency": float(item.get("conversion_efficiency") or 0.0),
+                "waste_heat_mw": float(item.get("waste_heat_mw") or 0.0),
+                "branch": str(item.get("branch") or ""),
+            }
+        )
+
+    for item in (radiator_catalog or {}).values():
+        parts.append(
+            {
+                "item_id": item.get("item_id"),
+                "name": item.get("name"),
+                "type": "radiator",
+                "category_id": "radiator",
+                "mass_kg": float(item.get("mass_kg") or 0.0),
+                "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0.0),
+                "operating_temp_k": float(item.get("operating_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
             }
         )

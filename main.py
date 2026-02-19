@@ -598,6 +598,21 @@ def load_storage_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
+def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_reactor_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_generator_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_generator_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_radiator_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_radiator_catalog()
+
+
+@lru_cache(maxsize=1)
 def load_recipe_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_recipe_catalog()
 
@@ -1130,6 +1145,9 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
         thruster_catalog=load_thruster_main_catalog(),
         storage_catalog=load_storage_catalog(),
         canonical_item_category=canonical_item_category,
+        reactor_catalog=load_reactor_catalog(),
+        generator_catalog=load_generator_catalog(),
+        radiator_catalog=load_radiator_catalog(),
     )
 
 
@@ -2158,6 +2176,9 @@ def build_shipyard_catalog_payload() -> Dict[str, Any]:
         storage_catalog=load_storage_catalog(),
         resource_catalog=load_resource_catalog(),
         recipe_catalog=load_recipe_catalog(),
+        reactor_catalog=load_reactor_catalog(),
+        generator_catalog=load_generator_catalog(),
+        radiator_catalog=load_radiator_catalog(),
     )
 
 
@@ -3495,10 +3516,12 @@ def api_shipyard_preview(req: ShipyardPreviewReq, request: Request) -> Dict[str,
     item_ids = normalize_shipyard_item_ids(req.parts)
     parts = shipyard_parts_from_item_ids(item_ids)
     stats = build_ship_stats_payload(parts)
+    power_balance = catalog_service.compute_power_balance(parts)
     return {
         "build_location_id": source_location_id,
         "parts": parts,
         "stats": stats,
+        "power_balance": power_balance,
     }
 
 
@@ -3586,6 +3609,7 @@ def api_state(request: Request) -> Dict[str, Any]:
                         stats["fuel_kg"],
                         stats["isp_s"],
                     ),
+                    "power_balance": catalog_service.compute_power_balance(parts),
                     "status": "transit" if r["arrives_at"] else "docked",
                 }
             )
