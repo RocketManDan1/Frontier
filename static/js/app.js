@@ -1044,16 +1044,18 @@
     const worldPoint = world.toLocal(new PIXI.Point(localX, localY));
     const zoom = Math.max(0.0001, Number(world.scale.x) || 1);
 
-    const shipTolWorld = 22 / zoom;
     let bestShip = null;
     let bestShipD2 = Number.POSITIVE_INFINITY;
     for (const [shipId, gfx] of shipGfx.entries()) {
       const c = gfx?.container;
       if (!c || c.visible === false) continue;
+      const shipHitRadius = c.hitArea instanceof PIXI.Circle
+        ? Math.max(0, Number(c.hitArea.radius) || 0)
+        : (12 / zoom);
       const dx = worldPoint.x - Number(c.x || 0);
       const dy = worldPoint.y - Number(c.y || 0);
       const d2 = dx * dx + dy * dy;
-      if (d2 <= shipTolWorld * shipTolWorld && d2 < bestShipD2) {
+      if (d2 <= shipHitRadius * shipHitRadius && d2 < bestShipD2) {
         bestShip = shipId;
         bestShipD2 = d2;
       }
@@ -3327,6 +3329,7 @@
   function buildShipUnderGlow(size, colorInt, alpha = 0.95) {
     const glow = new PIXI.Graphics();
     const r = Math.max(7, size * SHIP_GLOW_RADIUS_MULT);
+    glow.__glowRadiusPx = r;
     const core = mixColor(colorInt, 0xffffff, 0.78);
     glow.beginFill(core, SHIP_GLOW_ALPHA * alpha);
     glow.drawCircle(0, 0, r);
@@ -3345,6 +3348,7 @@
     iconContainer.__hitRadiusPx = Math.max(3.2, targetH * 0.34);
 
     const glow = buildShipUnderGlow(size, colorInt, alpha);
+    iconContainer.__glowRadiusPx = Math.max(3.2, Number(glow.__glowRadiusPx) || 0);
     iconContainer.addChild(glow);
 
     const fallback = buildFallbackShipGlyph(size, colorInt, alpha);
@@ -3671,8 +3675,8 @@
 
       if (shipIcon) shipIcon.scale.set(iconDisplayScale);
       if (container?.hitArea) {
-        const hitBase = Math.max(2.4, Number(shipIcon?.__hitRadiusPx) || (Number(hitRadius) || 8) * 0.3);
-        const scaledHitRadius = Math.max(2.4, hitBase * iconDisplayScale);
+        const glowBase = Math.max(2.4, Number(shipIcon?.__glowRadiusPx) || Number(shipIcon?.__hitRadiusPx) || (Number(hitRadius) || 8) * 0.3);
+        const scaledHitRadius = Math.max(2.4, glowBase * iconDisplayScale);
         if (container.hitArea instanceof PIXI.Circle) {
           container.hitArea.radius = scaledHitRadius;
         } else {

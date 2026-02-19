@@ -80,7 +80,7 @@ body.embedMode .pagePanel {
 .app {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 10px;
 }
 
 .mapPage,
@@ -206,10 +206,10 @@ body.embedMode .pagePanel {
 .mapPage .appWindow {
   position: absolute;
   pointer-events: auto;
-  min-width: 380px;
-  min-height: 300px;
-  width: 740px;
-  height: 500px;
+  min-width: 340px;
+  min-height: 260px;
+  width: 680px;
+  height: 440px;
   padding: 0;
   overflow: hidden;
 }
@@ -463,6 +463,7 @@ body.embedMode .pagePanel {
   gap: 8px;
 }
 
+.stackItemStrip,
 .mapPage .stackItemStrip {
   display: grid;
   grid-template-columns: 1fr;
@@ -472,10 +473,12 @@ body.embedMode .pagePanel {
   padding-right: 2px;
 }
 
+.stackItemCard,
 .mapPage .stackItemCard {
   min-height: 52px;
 }
 
+.inventoryItemCard,
 .mapPage .inventoryItemCard {
   display: grid;
   grid-template-columns: 46px 1fr;
@@ -488,18 +491,22 @@ body.embedMode .pagePanel {
   padding: 7px;
 }
 
+.inventoryItemCard.isDraggable,
 .mapPage .inventoryItemCard.isDraggable {
   cursor: grab;
 }
 
+.inventoryItemCard.isDragging,
 .mapPage .inventoryItemCard.isDragging {
   opacity: 0.55;
 }
 
+.inventoryItemCard:hover,
 .mapPage .inventoryItemCard:hover {
   border-color: rgba(109, 182, 255, 0.35);
 }
 
+.inventoryItemIcon,
 .mapPage .inventoryItemIcon {
   width: 42px;
   height: 42px;
@@ -508,10 +515,12 @@ body.embedMode .pagePanel {
   border: 1px solid rgba(144, 191, 236, 0.36);
 }
 
+.inventoryItemBody,
 .mapPage .inventoryItemBody {
   min-width: 0;
 }
 
+.inventoryItemTitle,
 .mapPage .inventoryItemTitle {
   font-size: 12px;
   white-space: nowrap;
@@ -519,6 +528,8 @@ body.embedMode .pagePanel {
   text-overflow: ellipsis;
 }
 
+.inventoryItemSub,
+.inventoryItemStats,
 .mapPage .inventoryItemSub,
 .mapPage .inventoryItemStats {
   font-size: 10px;
@@ -701,7 +712,7 @@ body.embedMode .pagePanel {
 
 .mapPage .overview {
   left: 160px;
-  width: 320px;
+  width: 300px;
   min-width: 240px;
   min-height: 220px;
   max-height: calc(100vh - 108px);
@@ -709,7 +720,7 @@ body.embedMode .pagePanel {
 
 .mapPage .info {
   right: 16px;
-  width: 340px;
+  width: 320px;
   min-width: 260px;
   min-height: 280px;
   max-height: calc(100vh - 108px);
@@ -800,7 +811,7 @@ body.embedMode .pagePanel {
     var(--panel);
   border: 1px solid var(--border-soft);
   border-radius: 2px;
-  padding: 14px;
+  padding: 10px;
   box-shadow:
     0 18px 42px rgba(0, 0, 0, 0.46),
     inset 0 0 0 1px rgba(220, 238, 255, 0.02);
@@ -820,11 +831,11 @@ body.embedMode .pagePanel {
 }
 
 .top {
-  padding: 12px 14px;
+  padding: 8px 10px;
 }
 
 .top .title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
@@ -832,21 +843,21 @@ body.embedMode .pagePanel {
 }
 
 .top .subtitle {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -856,11 +867,11 @@ body.embedMode .pagePanel {
 
 .tab {
   display: inline-block;
-  padding: 8px 14px;
-  min-width: 82px;
+  padding: 6px 10px;
+  min-width: 70px;
   text-align: center;
   text-transform: none;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   border: 1px solid rgba(99, 128, 162, 0.52);
   border-radius: 1px;
@@ -884,14 +895,14 @@ body.embedMode .pagePanel {
 
 .content {
   display: grid;
-  grid-template-columns: 320px 1fr 340px;
-  gap: 14px;
+  grid-template-columns: 300px 1fr 320px;
+  gap: 10px;
   align-items: stretch;
-  padding: 14px;
+  padding: 10px;
 }
 
 .overview {
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1162,10 +1173,10 @@ body.embedMode .pagePanel {
 
 .titleSmall {
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .muted {
@@ -1173,14 +1184,14 @@ body.embedMode .pagePanel {
 }
 
 .small {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .infoList {
-  margin: 9px 0 0;
+  margin: 6px 0 0;
   padding-left: 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .realWorldRef {
@@ -1286,9 +1297,10 @@ button,
   border: 1px solid rgba(99, 128, 162, 0.58);
   background: linear-gradient(180deg, rgba(20, 25, 34, 0.96), rgba(11, 15, 22, 0.98));
   color: var(--text);
-  padding: 9px 14px;
-  min-height: 36px;
+  padding: 7px 11px;
+  min-height: 30px;
   font-weight: 600;
+  font-size: 12px;
   letter-spacing: 0.03em;
   cursor: pointer;
   transition: 120ms ease;
@@ -1318,9 +1330,9 @@ button:disabled {
 
 .field label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1329,7 +1341,7 @@ button:disabled {
 .field select,
 .field textarea {
   width: 100%;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border-radius: 1px;
   border: 1px solid rgba(107, 153, 205, 0.42);
   background: rgba(10, 15, 23, 0.94);
@@ -1351,15 +1363,15 @@ button:disabled {
 .fieldInline {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .fleetHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 9px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .tableWrap {
@@ -1376,7 +1388,7 @@ button:disabled {
 .fleetTable th,
 .fleetTable td {
   text-align: left;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
@@ -1484,6 +1496,11 @@ button:disabled {
   grid-template-columns: 44px 1fr;
 }
 
+.partsStackWithActions .partsStackHead,
+.partsStackWithActions .partsStackRow {
+  grid-template-columns: 44px 1fr auto;
+}
+
 .partsStackHead {
   background: rgba(16, 30, 46, 0.86);
   font-weight: 600;
@@ -1501,8 +1518,15 @@ button:disabled {
   border-bottom: 1px solid rgba(120, 165, 214, 0.12);
 }
 
+.partsStackAction {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 88px;
+}
+
 .fleetPage .pagePanel {
-  padding: 10px;
+  padding: 8px;
 }
 
 .fleetPage .muted,
@@ -1873,12 +1897,12 @@ button:disabled {
 }
 
 .pagePanel {
-  margin: 14px;
+  margin: 10px;
 }
 
 .researchPagePanel {
   display: grid;
-  gap: 12px;
+  gap: 9px;
   border-radius: 2px;
   border-color: rgba(120, 150, 184, 0.34);
   background:
@@ -1906,20 +1930,20 @@ button:disabled {
 
 .researchSubtabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .researchSubtab {
-  min-width: 126px;
-  min-height: 34px;
-  padding: 8px 12px;
+  min-width: 108px;
+  min-height: 30px;
+  padding: 6px 10px;
   border-radius: 1px;
   border-color: rgba(99, 128, 162, 0.52);
   background: linear-gradient(180deg, rgba(18, 24, 34, 0.96), rgba(11, 15, 22, 0.98));
   color: rgba(192, 212, 228, 0.82);
   text-transform: none;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .researchSubtab.active {
@@ -1931,12 +1955,12 @@ button:disabled {
 
 .researchLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 10px;
 }
 
 .researchViewport {
-  height: calc(100vh - 215px);
+  height: calc(100vh - 200px);
   min-height: 500px;
   border-radius: 2px;
   overflow: auto;
@@ -1971,9 +1995,9 @@ button:disabled {
 
 .researchSkillNode {
   position: absolute;
-  width: 230px;
-  min-height: 158px;
-  padding: 11px;
+  width: 210px;
+  min-height: 142px;
+  padding: 9px;
   border-radius: 1px;
   border: 1px solid rgba(103, 132, 163, 0.42);
   background: linear-gradient(180deg, rgba(20, 25, 34, 0.96), rgba(11, 15, 22, 0.98));
@@ -1996,7 +2020,7 @@ button:disabled {
 }
 
 .researchSkillNodeName {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.035em;
@@ -2039,7 +2063,7 @@ button:disabled {
 
 .researchSidebar {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   align-content: start;
 }
 
@@ -2049,7 +2073,7 @@ button:disabled {
 
 .researchUnlockPanel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   border-color: rgba(120, 150, 184, 0.34);
   background:
     linear-gradient(180deg, rgba(17, 23, 32, 0.9), rgba(10, 14, 21, 0.94)),
@@ -2058,13 +2082,13 @@ button:disabled {
 
 .researchUnlockRows {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .researchUnlockRow {
   border: 1px solid rgba(94, 124, 156, 0.52);
   border-radius: 1px;
-  padding: 10px;
+  padding: 8px;
   background: linear-gradient(180deg, rgba(20, 25, 34, 0.94), rgba(11, 15, 22, 0.98));
 }
 
@@ -2087,7 +2111,7 @@ button:disabled {
 
 .shipyardPanel {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -2095,7 +2119,7 @@ button:disabled {
 .shipyardHeader {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   align-items: end;
 }
 
@@ -2106,18 +2130,48 @@ button:disabled {
 
 .shipyardLayout {
   display: grid;
-  grid-template-columns: 1fr 1fr 340px;
-  gap: 12px;
+  grid-template-columns: 1fr 1fr 300px;
+  gap: 8px;
 }
 
 .shipyardColumn {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .shipyardGarage,
 .shipyardSlots {
   display: grid;
   gap: 8px;
+}
+
+.shipyardSlots {
+  min-height: 360px;
+  align-content: start;
+}
+
+.shipyardCardStrip {
+  max-height: 260px;
+}
+
+.shipyardItemCard {
+  position: relative;
+  padding-right: 80px;
+}
+
+.shipyardItemCard.isDraggable {
+  cursor: pointer;
+}
+
+.shipyardItemCard.isDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.shipyardCardRemoveBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .shipyardGarageGroup {
@@ -2127,29 +2181,16 @@ button:disabled {
   background: rgba(8, 13, 22, 0.66);
 }
 
+.shipyardGarageGroup .partsStack {
+  margin-top: 0;
+}
+
 .shipyardGarageHeading {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 6px;
-}
-
-.shipyardPartRow,
-.shipyardSlotRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(109, 182, 255, 0.15);
-  background: rgba(10, 17, 27, 0.7);
-}
-
-.shipyardPartLabel,
-.shipyardSlotLabel {
-  min-width: 0;
 }
 
 .shipyardSlotEmpty {
@@ -2164,7 +2205,7 @@ button:disabled {
 
 .shipyardBuildBar {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
 

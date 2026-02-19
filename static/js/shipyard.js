@@ -7,6 +7,9 @@
   const shipNameEl = document.getElementById("shipyardName");
   const sourceLocationEl = document.getElementById("shipyardSourceLocation");
   const sourceHintEl = document.getElementById("shipyardSourceHint");
+  const itemDisplay = window.ItemDisplay || null;
+
+  const SHIPYARD_DRAG_MIME = "application/x-earthmoon-shipyard-item";
 
   let buildLocationId = "LEO";
   let catalogParts = [];
@@ -14,6 +17,12 @@
   let selectedItemIds = [];
   let buildSourceLocations = [];
   let sourceRefreshTimer = null;
+
+  const GARAGE_FOLDERS = [
+    { id: "thrusters", label: "Thrusters" },
+    { id: "storage", label: "Storage" },
+    { id: "generator", label: "Generator" },
+  ];
 
   function setMsg(text, isError) {
     msgEl.textContent = text || "";
@@ -174,14 +183,174 @@
     return bits.join(" • ") || "—";
   }
 
-  function groupedGarageParts(parts) {
-    const byGroup = new Map();
-    for (const part of parts) {
-      const group = String(part.category_id || part.type || "parts").toLowerCase();
-      if (!byGroup.has(group)) byGroup.set(group, []);
-      byGroup.get(group).push(part);
+  function partVolumeM3(part) {
+    const capacity = Number(part?.capacity_m3 || 0);
+    if (capacity > 0) return capacity;
+    const vol = Number(part?.volume_m3 || 0);
+    if (vol > 0) return vol;
+    return 0;
+  }
+
+  function partStatsText(part, remaining = null) {
+    const fmtKg = itemDisplay && typeof itemDisplay.fmtKg === "function"
+      ? itemDisplay.fmtKg
+      : (v) => `${Math.max(0, Number(v) || 0).toFixed(0)} kg`;
+    const fmtM3 = itemDisplay && typeof itemDisplay.fmtM3 === "function"
+      ? itemDisplay.fmtM3
+      : (v) => `${Math.max(0, Number(v) || 0).toFixed(2)} m³`;
+    const base = `${fmtKg(part?.mass_kg)} · ${fmtM3(partVolumeM3(part))}`;
+    if (Number.isFinite(remaining)) return `${base} · ${Math.max(0, Math.floor(remaining))} available`;
+    return base;
+  }
+
+  function partSubtitle(part) {
+    const raw = String(part?.category_id || part?.type || "module").trim().toLowerCase();
+    return raw || "module";
+  }
+
+  function parseShipyardDragPayload(event) {
+    const dt = event?.dataTransfer;
+    if (!dt) return null;
+    const raw = dt.getData(SHIPYARD_DRAG_MIME) || dt.getData("text/plain");
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch {
+      return null;
     }
-    return Array.from(byGroup.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  function bindStackDropZone(dropEl) {
+    if (!dropEl) return;
+    if (dropEl.dataset.shipyardDropBound === "1") return;
+    dropEl.dataset.shipyardDropBound = "1";
+    dropEl.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    });
+    dropEl.addEventListener("drop", (event) => {
+      const payload = parseShipyardDragPayload(event);
+      if (!payload) return;
+      event.preventDefault();
+      if (String(payload.source || "") === "garage") {
+        addSelectedPart(payload.item_id);
+        return;
+      }
+      if (String(payload.source || "") === "slot") {
+        const fromIndex = Number(payload.index);
+        if (Number.isInteger(fromIndex) && fromIndex >= 0 && fromIndex < selectedItemIds.length) {
+          const [moved] = selectedItemIds.splice(fromIndex, 1);
+          selectedItemIds.push(moved);
+          renderSlots();
+          refreshPreview();
+        }
+      }
+    });
+  }
+
+  function removeSelectedPartAt(index) {
+    if (index < 0 || index >= selectedItemIds.length) return;
+    selectedItemIds.splice(index, 1);
+    renderSlots();
+    renderGarage();
+    refreshPreview();
+  }
+
+  function addSelectedPart(itemId, insertAt = null) {
+    const id = String(itemId || "").trim();
+    if (!id) return;
+    if (insertAt == null || insertAt < 0 || insertAt > selectedItemIds.length) {
+      selectedItemIds.push(id);
+    } else {
+      selectedItemIds.splice(insertAt, 0, id);
+    }
+    renderSlots();
+    renderGarage();
+    refreshPreview();
+  }
+
+  function moveSelectedPart(fromIndex, toIndex) {
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+    if (from < 0 || from >= selectedItemIds.length || to < 0 || to >= selectedItemIds.length) return;
+    if (from === to) return;
+    const [moved] = selectedItemIds.splice(from, 1);
+    selectedItemIds.splice(to, 0, moved);
+    renderSlots();
+    refreshPreview();
+  }
+
+  function createItemCard(part, options = {}) {
+    const label = String(part?.name || part?.type || part?.item_id || "Part").trim() || "Part";
+    const card = itemDisplay && typeof itemDisplay.createCard === "function"
+      ? itemDisplay.createCard({
+        label,
+        subtitle: String(options.subtitle || partSubtitle(part)),
+        stats: String(options.stats || partStatsText(part)),
+        iconSeed: part?.item_id || part?.name || label,
+        className: "inventoryItemCard stackItemCard shipyardItemCard",
+        role: "listitem",
+        draggable: !!options.draggable,
+      })
+      : (() => {
+        const fallback = document.createElement("article");
+        fallback.className = "inventoryItemCard stackItemCard shipyardItemCard";
+        fallback.setAttribute("role", "listitem");
+        if (options.draggable) {
+          fallback.draggable = true;
+          fallback.classList.add("isDraggable");
+        }
+        fallback.textContent = `${label} · ${partDetailText(part)}`;
+        return fallback;
+      })();
+
+    if (options.disabled) {
+      card.classList.add("isDisabled");
+    }
+    return card;
+  }
+
+  function partFolderId(part) {
+    const rawCategory = String(part?.category_id || part?.type || "").toLowerCase();
+    const name = String(part?.name || "").toLowerCase();
+
+    if (
+      rawCategory.includes("thruster") ||
+      rawCategory.includes("engine") ||
+      Number(part?.thrust_kn) > 0 ||
+      Number(part?.isp_s) > 0 ||
+      name.includes("thruster") ||
+      name.includes("engine")
+    ) {
+      return "thrusters";
+    }
+
+    if (
+      rawCategory.includes("storage") ||
+      rawCategory.includes("tank") ||
+      rawCategory.includes("cargo") ||
+      Number(part?.capacity_m3) > 0 ||
+      Number(part?.fuel_capacity_kg) > 0 ||
+      Number(part?.water_kg) > 0 ||
+      name.includes("storage") ||
+      name.includes("tank")
+    ) {
+      return "storage";
+    }
+
+    return "generator";
+  }
+
+  function groupedGarageParts(parts) {
+    const byGroup = new Map(GARAGE_FOLDERS.map((folder) => [folder.id, []]));
+    for (const part of parts) {
+      const groupId = partFolderId(part);
+      byGroup.get(groupId).push(part);
+    }
+    return GARAGE_FOLDERS.map((folder) => [folder.label, byGroup.get(folder.id) || []]);
   }
 
   function renderGarage() {
@@ -202,40 +371,53 @@
       heading.textContent = groupName;
       group.appendChild(heading);
 
-      parts
+      const strip = document.createElement("div");
+      strip.className = "stackItemStrip shipyardCardStrip";
+      const sortedParts = parts
         .slice()
-        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
-        .forEach((part) => {
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+      if (!sortedParts.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted small";
+        empty.textContent = "—";
+        strip.appendChild(empty);
+      } else {
+        sortedParts.forEach((part) => {
           const selectedCount = selectedCountByItemId(part.item_id);
           const availableQty = Number(part.available_qty);
           const isLimited = Number.isFinite(availableQty);
           const remaining = isLimited ? Math.max(0, Math.floor(availableQty - selectedCount)) : Infinity;
 
-          const row = document.createElement("div");
-          row.className = "shipyardPartRow";
-
-          const label = document.createElement("div");
-          label.className = "shipyardPartLabel";
-          const remainingText = isLimited ? ` • ${remaining} available` : "";
-          label.innerHTML = `<b>${part.name}</b><div class="muted small">${partDetailText(part)}${remainingText}</div>`;
-
-          const addBtn = document.createElement("button");
-          addBtn.type = "button";
-          addBtn.className = "btnSecondary";
-          addBtn.textContent = "Add";
-          addBtn.disabled = isLimited && remaining <= 0;
-          addBtn.addEventListener("click", () => {
-            if (isLimited && remaining <= 0) return;
-            selectedItemIds.push(part.item_id);
-            renderSlots();
-            renderGarage();
-            refreshPreview();
+          const card = createItemCard(part, {
+            draggable: !(isLimited && remaining <= 0),
+            disabled: isLimited && remaining <= 0,
+            subtitle: partSubtitle(part),
+            stats: partStatsText(part, isLimited ? remaining : null),
           });
 
-          row.appendChild(label);
-          row.appendChild(addBtn);
-          group.appendChild(row);
+          card.addEventListener("click", () => {
+            if (isLimited && remaining <= 0) return;
+            addSelectedPart(part.item_id);
+          });
+
+          if (!(isLimited && remaining <= 0)) {
+            card.addEventListener("dragstart", (event) => {
+              if (!event.dataTransfer) return;
+              const payload = JSON.stringify({ source: "garage", item_id: part.item_id });
+              event.dataTransfer.effectAllowed = "copyMove";
+              event.dataTransfer.setData(SHIPYARD_DRAG_MIME, payload);
+              event.dataTransfer.setData("text/plain", payload);
+              card.classList.add("isDragging");
+            });
+            card.addEventListener("dragend", () => card.classList.remove("isDragging"));
+          }
+
+          strip.appendChild(card);
         });
+      }
+
+      group.appendChild(strip);
 
       garageEl.appendChild(group);
     });
@@ -245,38 +427,71 @@
     slotsEl.innerHTML = "";
 
     if (!selectedItemIds.length) {
-      slotsEl.innerHTML = '<div class="shipyardSlotEmpty muted">No parts added yet. Use the garage to add parts.</div>';
+      const emptyDrop = document.createElement("div");
+      emptyDrop.className = "partsStackEmpty shipyardSlotsDropZone";
+      emptyDrop.textContent = "No parts added yet. Click or drag parts from the garage.";
+      bindStackDropZone(emptyDrop);
+      slotsEl.appendChild(emptyDrop);
       return;
     }
 
+    const strip = document.createElement("div");
+    strip.className = "stackItemStrip shipyardCardStrip shipyardSlotsDropZone";
+    bindStackDropZone(strip);
+
     selectedItemIds.forEach((itemId, index) => {
       const part = garageParts.find((p) => String(p.item_id || "") === String(itemId || ""));
-      const row = document.createElement("div");
-      row.className = "shipyardSlotRow";
 
-      const left = document.createElement("div");
-      left.className = "shipyardSlotLabel";
-      left.innerHTML = `<b>${index + 1}.</b> ${part ? part.name : itemId}`;
-
-      const controls = document.createElement("div");
-      controls.className = "shipyardSlotControls";
+      const card = createItemCard(part || { item_id: itemId, name: itemId }, {
+        draggable: true,
+        subtitle: part ? partSubtitle(part) : "module",
+        stats: part ? partStatsText(part) : "0 kg · 0.00 m³",
+      });
+      card.dataset.slotIndex = String(index);
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.className = "btnSecondary";
+      removeBtn.className = "btnSecondary shipyardCardRemoveBtn";
       removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", () => {
-        selectedItemIds.splice(index, 1);
-        renderSlots();
-        renderGarage();
-        refreshPreview();
+      removeBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeSelectedPartAt(index);
+      });
+      card.appendChild(removeBtn);
+
+      card.addEventListener("click", () => removeSelectedPartAt(index));
+      card.addEventListener("dragstart", (event) => {
+        if (!event.dataTransfer) return;
+        const payload = JSON.stringify({ source: "slot", index });
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(SHIPYARD_DRAG_MIME, payload);
+        event.dataTransfer.setData("text/plain", payload);
+        card.classList.add("isDragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("isDragging"));
+      card.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      });
+      card.addEventListener("drop", (event) => {
+        const payload = parseShipyardDragPayload(event);
+        if (!payload) return;
+        event.preventDefault();
+        const toIndex = Number(card.dataset.slotIndex);
+        if (!Number.isInteger(toIndex)) return;
+        if (String(payload.source || "") === "garage") {
+          addSelectedPart(payload.item_id, toIndex);
+          return;
+        }
+        if (String(payload.source || "") === "slot") {
+          moveSelectedPart(Number(payload.index), toIndex);
+        }
       });
 
-      controls.appendChild(removeBtn);
-      row.appendChild(left);
-      row.appendChild(controls);
-      slotsEl.appendChild(row);
+      strip.appendChild(card);
     });
+
+    slotsEl.appendChild(strip);
   }
 
   function renderStats(stats) {
@@ -351,6 +566,7 @@
 
   async function init() {
     try {
+      bindStackDropZone(slotsEl);
       const data = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
       applyCatalogData(data, false);
       renderSourceLocations();

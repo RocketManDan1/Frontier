@@ -20,6 +20,10 @@
   };
 
   const state = loadState();
+  let openSequence = Object.values(state || {}).reduce((max, entry) => {
+    const seq = Number(entry?.openSeq || 0);
+    return Number.isFinite(seq) ? Math.max(max, seq) : max;
+  }, 0);
   const windows = new Map();
   let zIndex = 80;
   let inventoryLoadSeq = 0;
@@ -27,6 +31,7 @@
   let stackLoadSeq = 0;
   const stackWindowState = new Map();
   const DRAG_TRANSFER_MIME = "application/x-earthmoon-inventory-transfer";
+  const itemDisplay = window.ItemDisplay || null;
   let inventoryContextMenuEl = null;
   const inventoryIconCache = new Map();
   let inventoryRefreshInFlight = null;
@@ -132,6 +137,10 @@
   }
 
   function iconDataUri(seed, label) {
+    if (itemDisplay && typeof itemDisplay.iconDataUri === "function") {
+      return itemDisplay.iconDataUri(seed, label);
+    }
+
     const cacheKey = `${String(seed || "")}::${String(label || "")}`;
     const cached = inventoryIconCache.get(cacheKey);
     if (cached) return cached;
@@ -258,40 +267,48 @@
   }
 
   function renderInventoryItemCard(item) {
-    const card = document.createElement("article");
-    card.className = "inventoryItemCard";
-    card.setAttribute("role", "listitem");
-
     const transfer = item?.transfer && typeof item.transfer === "object" ? item.transfer : null;
-    if (transfer) {
-      card.draggable = true;
-      card.classList.add("isDraggable");
-    }
-
-    const icon = document.createElement("img");
-    icon.className = "inventoryItemIcon";
-    icon.alt = `${String(item?.label || "Item")} icon`;
-    icon.src = iconDataUri(item?.icon_seed || item?.item_uid || item?.item_id, item?.label || item?.item_id);
-
-    const body = document.createElement("div");
-    body.className = "inventoryItemBody";
-
-    const title = document.createElement("div");
-    title.className = "inventoryItemTitle";
-    title.textContent = String(item?.label || "Item");
-
-    const sub = document.createElement("div");
-    sub.className = "inventoryItemSub";
-    sub.textContent = String(item?.subtitle || item?.item_kind || "");
-
-    const stats = document.createElement("div");
-    stats.className = "inventoryItemStats";
     const mass = fmtKg(item?.mass_kg);
     const vol = fmtM3(item?.volume_m3);
-    stats.textContent = `${mass} · ${vol}`;
+    const statsText = `${mass} · ${vol}`;
 
-    body.append(title, sub, stats);
-    card.append(icon, body);
+    const card = itemDisplay && typeof itemDisplay.createCard === "function"
+      ? itemDisplay.createCard({
+        label: String(item?.label || "Item"),
+        subtitle: String(item?.subtitle || item?.item_kind || ""),
+        stats: statsText,
+        iconSeed: item?.icon_seed || item?.item_uid || item?.item_id,
+        className: "inventoryItemCard",
+        role: "listitem",
+        draggable: !!transfer,
+      })
+      : (() => {
+        const fallback = document.createElement("article");
+        fallback.className = "inventoryItemCard";
+        fallback.setAttribute("role", "listitem");
+        if (transfer) {
+          fallback.draggable = true;
+          fallback.classList.add("isDraggable");
+        }
+        const icon = document.createElement("img");
+        icon.className = "inventoryItemIcon";
+        icon.alt = `${String(item?.label || "Item")} icon`;
+        icon.src = iconDataUri(item?.icon_seed || item?.item_uid || item?.item_id, item?.label || item?.item_id);
+        const body = document.createElement("div");
+        body.className = "inventoryItemBody";
+        const title = document.createElement("div");
+        title.className = "inventoryItemTitle";
+        title.textContent = String(item?.label || "Item");
+        const sub = document.createElement("div");
+        sub.className = "inventoryItemSub";
+        sub.textContent = String(item?.subtitle || item?.item_kind || "");
+        const stats = document.createElement("div");
+        stats.className = "inventoryItemStats";
+        stats.textContent = statsText;
+        body.append(title, sub, stats);
+        fallback.append(icon, body);
+        return fallback;
+      })();
 
     if (transfer) {
       card.addEventListener("dragstart", (event) => {
@@ -1270,6 +1287,11 @@
     saveState();
   }
 
+  function recordWindowOpened(id) {
+    openSequence += 1;
+    persistWindow(id, { open: true, openSeq: openSequence });
+  }
+
   function attachFrameEmbedMode(frame) {
     frame.addEventListener("load", () => {
       try {
@@ -1806,12 +1828,13 @@
       existing.style.display = "block";
       bringToFront(existing);
       setDockOpen(appId, true);
-      persistWindow(appId, { open: true });
+      recordWindowOpened(appId);
       return;
     }
 
     createWindow(appId, config);
     setDockOpen(appId, true);
+    recordWindowOpened(appId);
   }
 
   function hideWindow(appId) {
@@ -1856,11 +1879,24 @@
     });
   });
 
-  Object.keys(APP_CONFIG).forEach((appId) => {
+  const appIds = Object.keys(APP_CONFIG);
+  appIds.forEach((appId) => {
     const btn = dockButtonFor(appId);
     bootstrapDockButton(btn, APP_CONFIG[appId]?.icon || "");
-    const saved = state[appId];
-    if (saved && saved.open) showWindow(appId);
-    else setDockOpen(appId, false);
   });
+
+  const openAppIds = appIds
+    .filter((appId) => !!state[appId]?.open)
+    .sort((a, b) => {
+      const aSeq = Number(state[a]?.openSeq || 0);
+      const bSeq = Number(state[b]?.openSeq || 0);
+      if (aSeq === bSeq) return a.localeCompare(b);
+      return aSeq - bSeq;
+    });
+
+  appIds
+    .filter((appId) => !state[appId]?.open)
+    .forEach((appId) => setDockOpen(appId, false));
+
+  openAppIds.forEach((appId) => showWindow(appId));
 })();
