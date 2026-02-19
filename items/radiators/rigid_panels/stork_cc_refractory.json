@@ -1,0 +1,21 @@
+{
+  "id": "stork_cc_refractory",
+  "name": "C/C Refractory Panel \"Stork\"",
+  "research_node": "high_temp_rigid_panel_radiator",
+  "research_unlock_level": 1,
+  "branch": "carbon_composite",
+  "mass_t": 9.0,
+  "substrate": "carbon_carbon_composite",
+  "coating": "refractory_oxide",
+  "emissivity": 0.91,
+  "operating_temp_k": 1100,
+  "radiating_area_m2": 3500,
+  "input": {
+    "waste_heat_mw": 250
+  },
+  "output": {
+    "heat_rejection_mw": 250
+  },
+  "description": "Carbon-carbon composite structural panels with a refractory oxide surface treatment — a materials combination developed for high-enthalpy atmospheric re-entry structures and adapted here for sustained high-temperature space radiation service. At 1100 K the specific rejection rate is ~73 kW/m², enabling the same mass of hardware to shed ten times more waste heat than first-generation aluminum panels. Required for vessels running segmented cascade or SP-100 class thermoelectric generators.",
+  "ui_tags": ["rigid_panel", "carbon_composite", "high_temp"]
+}

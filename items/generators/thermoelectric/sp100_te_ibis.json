@@ -1,0 +1,17 @@
+{
+  "id": "sp100_te_ibis",
+  "name": "SP-100 TE \"Ibis\"",
+  "research_node": "advanced_thermoelectric",
+  "research_unlock_level": 1,
+  "branch": "silicon_germanium",
+  "mass_t": 12.0,
+  "input": {
+    "thermal_mw_rated": 1000
+  },
+  "output": {
+    "electric_mw": 85
+  },
+  "conversion_efficiency": 0.085,
+  "description": "Evolved from the US SP-100 space reactor power programme, this unit scales silicon-germanium thermoelectric technology to multi-hundred megawatt thermal inputs. Improved couple geometry and a segmented hot-shoe design push efficiency well above first-generation hardware. Still demands careful radiator allocation, but the electric yield makes it viable for mid-range ship power budgets.",
+  "ui_tags": ["thermoelectric", "silicon_germanium", "advanced"]
+}

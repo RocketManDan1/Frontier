@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "generators_thermoelectric",
+  "display_name": "Advanced Solid-State Thermoelectric",
+  "notes": [
+    "Converts reactor thermal output (thermal_mw) into electricity via solid-state thermocouple arrays.",
+    "No moving parts. Conversion is entirely solid-state (silicon-germanium or skutterudite couples).",
+    "electric_mw = thermal_mw_input * conversion_efficiency (capped at thermal_mw_rated).",
+    "Waste heat = thermal_mw_input * (1 - conversion_efficiency); must be handled by radiators.",
+    "Multiple units per vessel are permitted; outputs sum."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "reactor_thermal",
+    "field": "thermal_mw"
+  },
+  "output_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "snap_sige_wren.json",
+    "sp100_te_ibis.json",
+    "sige_segmented_crane.json",
+    "advanced_skut_egret.json"
+  ]
+}

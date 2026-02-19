@@ -1,0 +1,17 @@
+{
+  "id": "advanced_skut_egret",
+  "name": "ASC-Skutterudite \"Egret\"",
+  "research_node": "advanced_solid_state_thermoelectric",
+  "research_unlock_level": 3,
+  "branch": "advanced_solid_state",
+  "mass_t": 42.0,
+  "input": {
+    "thermal_mw_rated": 5000
+  },
+  "output": {
+    "electric_mw": 750
+  },
+  "conversion_efficiency": 0.15,
+  "description": "The most capable solid-state thermoelectric currently fielded. Filled skutterudite compounds — cerium- and lanthanum-doped cage structures — suppress thermal conductivity while maintaining high Seebeck coefficients, pushing the figure of merit well above classical SiGe. Designed for the heaviest reactor outputs, the Egret's array architecture allows modular replacement of couple segments without full unit teardown. Still not Brayton-class, but no rotating machinery to fail.",
+  "ui_tags": ["thermoelectric", "skutterudite", "advanced", "high_output"]
+}

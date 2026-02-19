@@ -88,6 +88,7 @@
   function setupMapWindows() {
     const content = document.querySelector(".mapPage .content");
     if (!content) return;
+    const appWindowLayerEl = document.getElementById("appWindowLayer");
     const mapDockEl = document.querySelector(".mapPage .mapDock");
     const mapDockWindowConfig = {
       overview: { icon: "/static/img/dock/map.png" },
@@ -124,12 +125,27 @@
     }
 
     function bringWindowToFront(panelEl) {
-      mapWindowZIndex += 1;
+      let topZ = Number.isFinite(mapWindowZIndex) ? mapWindowZIndex : 20;
+      Array.from(content.children).forEach((el) => {
+        if (!el?.classList?.contains("mapWindow")) return;
+        if (!el) return;
+        const inlineZ = Number(el.style?.zIndex);
+        if (Number.isFinite(inlineZ)) {
+          topZ = Math.max(topZ, inlineZ);
+          return;
+        }
+        const computedZ = Number(window.getComputedStyle(el).zIndex);
+        if (Number.isFinite(computedZ)) topZ = Math.max(topZ, computedZ);
+      });
+      mapWindowZIndex = topZ + 1;
       panelEl.style.zIndex = String(mapWindowZIndex);
       content.querySelectorAll(".mapWindow.isSelected").forEach((el) => {
         el.classList.remove("isSelected");
       });
       panelEl.classList.add("isSelected");
+      if (appWindowLayerEl) {
+        appWindowLayerEl.style.zIndex = String(Math.max(1, mapWindowZIndex - 1));
+      }
     }
 
     function setMapDockOpen(panelId, open) {
@@ -563,6 +579,10 @@
       mapWindowZIndex += 1;
       infoPanelEl.style.zIndex = String(mapWindowZIndex);
       infoPanelEl.classList.add("isSelected");
+      const appWindowLayerEl = document.getElementById("appWindowLayer");
+      if (appWindowLayerEl) {
+        appWindowLayerEl.style.zIndex = String(Math.max(1, mapWindowZIndex - 1));
+      }
     }
 
     const infoDockBtn = document.querySelector(".mapPage .mapDock [data-map-window='info']");

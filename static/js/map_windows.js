@@ -1271,7 +1271,35 @@
   }
 
   function bringToFront(el) {
-    zIndex += 1;
+    const contentChildren = Array.from(root.children || []);
+    let topPanelZ = 20;
+    contentChildren.forEach((panelEl) => {
+      if (!panelEl?.classList?.contains("mapWindow")) return;
+      const inlineZ = Number(panelEl.style?.zIndex);
+      if (Number.isFinite(inlineZ)) {
+        topPanelZ = Math.max(topPanelZ, inlineZ);
+        return;
+      }
+      const computedZ = Number(window.getComputedStyle(panelEl).zIndex);
+      if (Number.isFinite(computedZ)) topPanelZ = Math.max(topPanelZ, computedZ);
+    });
+
+    if (layer) {
+      layer.style.zIndex = String(topPanelZ + 2);
+    }
+
+    let topZ = Number.isFinite(zIndex) ? zIndex : 80;
+    layer?.querySelectorAll(".mapWindow").forEach((panelEl) => {
+      if (!panelEl) return;
+      const inlineZ = Number(panelEl.style?.zIndex);
+      if (Number.isFinite(inlineZ)) {
+        topZ = Math.max(topZ, inlineZ);
+        return;
+      }
+      const computedZ = Number(window.getComputedStyle(panelEl).zIndex);
+      if (Number.isFinite(computedZ)) topZ = Math.max(topZ, computedZ);
+    });
+    zIndex = topZ + 1;
     el.style.zIndex = String(zIndex);
     root.querySelectorAll(".mapWindow.isSelected").forEach((panelEl) => {
       panelEl.classList.remove("isSelected");

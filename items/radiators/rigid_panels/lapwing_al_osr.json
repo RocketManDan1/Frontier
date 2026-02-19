@@ -1,0 +1,21 @@
+{
+  "id": "lapwing_al_osr",
+  "name": "Al/OSR Panel \"Lapwing\"",
+  "research_node": "early_rigid_panel_radiator",
+  "research_unlock_level": 1,
+  "branch": "aluminum",
+  "mass_t": 3.5,
+  "substrate": "aluminum_honeycomb",
+  "coating": "optical_solar_reflector",
+  "emissivity": 0.88,
+  "operating_temp_k": 800,
+  "radiating_area_m2": 1200,
+  "input": {
+    "waste_heat_mw": 25
+  },
+  "output": {
+    "heat_rejection_mw": 25
+  },
+  "description": "Fixed aluminum honeycomb panels bonded with optical solar reflector (OSR) second-surface mirrors — the same approach used on early planetary spacecraft and the SNAP reactor test articles. Lightweight and manufacturable, but the 800 K operating limit and large panel footprint make it a transitional solution. Best suited to low-power ships where waste-heat loads are modest.",
+  "ui_tags": ["rigid_panel", "aluminum", "early"]
+}

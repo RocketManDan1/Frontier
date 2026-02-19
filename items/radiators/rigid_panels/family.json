@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "radiators_rigid_panel",
+  "display_name": "Rigid Panel Radiators",
+  "notes": [
+    "Rejects waste heat from generators, reactors, and other ship systems by thermal radiation.",
+    "heat_rejection_mw is the rated capacity at operating_temp_k; rejection scales as T^4.",
+    "Waste heat not covered by installed radiator capacity accumulates — ships must be sized accordingly.",
+    "Multiple units per vessel are permitted; rejection capacities sum.",
+    "Rigid panels offer higher specific rejection (MW/t) than deployable loops but cannot be repaired in the field."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_waste_heat",
+    "field": "waste_heat_mw"
+  },
+  "output_interface": {
+    "model": "thermal_radiation",
+    "field": "heat_rejection_mw"
+  },
+  "mainline_files": [
+    "lapwing_al_osr.json",
+    "heron_ti_hec.json",
+    "stork_cc_refractory.json",
+    "albatross_adv_cc.json"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "snap_sige_wren",
+  "name": "SNAP-SiGe \"Wren\"",
+  "research_node": "early_thermoelectric",
+  "research_unlock_level": 1,
+  "branch": "silicon_germanium",
+  "mass_t": 5.0,
+  "input": {
+    "thermal_mw_rated": 300
+  },
+  "output": {
+    "electric_mw": 18
+  },
+  "conversion_efficiency": 0.06,
+  "description": "A first-generation solid-state thermoelectric based on the US SNAP program's silicon-germanium couple heritage. No moving parts, no working fluid — just a thermal gradient driving current across SiGe junctions. Modest efficiency and high waste-heat load make radiator sizing the dominant challenge, but the simplicity is unmatched for early deployments.",
+  "ui_tags": ["thermoelectric", "silicon_germanium", "early"]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "sige_segmented_crane",
+  "name": "SiGe-Segmented \"Crane\"",
+  "research_node": "advanced_solid_state_thermoelectric",
+  "research_unlock_level": 1,
+  "branch": "cascade",
+  "mass_t": 24.5,
+  "input": {
+    "thermal_mw_rated": 2500
+  },
+  "output": {
+    "electric_mw": 287
+  },
+  "conversion_efficiency": 0.115,
+  "description": "A segmented cascade design that stacks a high-temperature SiGe stage above a mid-temperature PbTe stage, harvesting useful work from a wider band of the thermal gradient. The stepped couple geometry was originally ground-validated for deep-space planetary power studies. At this scale the radiator and structural mass remain challenging, but the conversion gain over single-material designs is decisive.",
+  "ui_tags": ["thermoelectric", "cascade", "advanced"]
+}
