@@ -4080,33 +4080,44 @@
       treeCache = t.tree || [];
     }
 
+    // ── State ──────────────────────────────────────────────
+    let selectedDest = null;
+    let currentExtraDvFraction = 0;
+    let departureTimeOverride = null; // null = "now"
+    let lastQuote = null;
+    const transferTreeOpenState = new Map();
+
+    function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    // ── Build overlay ──────────────────────────────────────
     const overlay = document.createElement("div");
     overlay.id = "modalOverlay";
     overlay.className = "modalOverlay";
+
+    const shipDv = Number(ship.delta_v_remaining_m_s || 0);
+    const shipFuel = Number(ship.fuel_kg || 0);
+    const shipFuelCap = Number(ship.fuel_capacity_kg || 0);
+    const shipFuelPct = shipFuelCap > 0 ? Math.round((shipFuel / shipFuelCap) * 100) : 0;
+
     overlay.innerHTML = `
-      <div class="modal">
-        <div class="modalHeader">
-          <div>
-            <div class="modalTitle">Plan Transfer</div>
-            <div class="muted small">${ship.name} • from ${ship.location_id}</div>
+      <div class="tpModal">
+        <div class="tpHeader">
+          <div class="tpHeaderLeft">
+            <div class="tpTitle">Transfer Planner</div>
+            <div class="tpSubtitle">${_esc(ship.name)} &bull; ${_esc(ship.location_id)} &bull; Δv ${Math.round(shipDv)} m/s &bull; Fuel ${shipFuelPct}%</div>
           </div>
-          <button class="iconBtn btnSecondary" id="modalClose">✕</button>
+          <button class="iconBtn btnSecondary" id="tpClose">✕</button>
         </div>
 
-        <div class="modalBody">
-          <div class="modalCol">
-            <div class="muted small" style="margin-bottom:8px;">Destination</div>
-            <div id="treeRoot"></div>
+        <div class="tpBody">
+          <div class="tpDestPanel">
+            <div class="tpDestLabel">Destination</div>
+            <div id="tpTreeRoot"></div>
           </div>
 
-          <div class="modalCol">
-            <div class="muted small" style="margin-bottom:8px;">Transfer details</div>
-            <div id="quoteBox" class="quoteBox">
-              <div class="muted">Select a destination…</div>
-            </div>
-            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:12px;">
-              <button id="cancelBtn" class="btnSecondary">Cancel</button>
-              <button id="confirmBtn" class="btnPrimary" disabled>Confirm</button>
+          <div class="tpDetailPanel" id="tpDetailPanel">
+            <div class="tpSection">
+              <div class="muted" style="text-align:center; padding:20px 0;">Select a destination to view transfer details</div>
             </div>
           </div>
         </div>
@@ -4114,18 +4125,58 @@
     `;
     document.body.appendChild(overlay);
 
-    document.getElementById("modalClose").onclick = closeModal;
-    document.getElementById("cancelBtn").onclick = closeModal;
+    document.getElementById("tpClose").onclick = closeModal;
     overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) closeModal(); });
     document.addEventListener("keydown", escClose);
 
-    const treeRoot = document.getElementById("treeRoot");
-    const quoteBox = document.getElementById("quoteBox");
-    const confirmBtn = document.getElementById("confirmBtn");
+    const treeRoot = document.getElementById("tpTreeRoot");
+    const detailPanel = document.getElementById("tpDetailPanel");
 
-    let selectedDest = null;
-    const transferTreeOpenState = new Map();
+    // ── Helpers ────────────────────────────────────────────
+    function fmtDuration(s) {
+      s = Math.max(0, Math.round(Number(s) || 0));
+      if (s < 3600) return `${Math.floor(s / 60)}m`;
+      const h = s / 3600;
+      if (h < 24) return `${h.toFixed(1)}h`;
+      const d = h / 24;
+      return `${d.toFixed(1)}d (${h.toFixed(0)}h)`;
+    }
 
+    function fmtGameDate(gameTimeS) {
+      // Game epoch 0 = 2040-01-01T00:00 UTC
+      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
+      const date = new Date(epochMs + gameTimeS * 1000);
+      return date.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    }
+
+    function gameTimeToISOInput(gameTimeS) {
+      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
+      const date = new Date(epochMs + gameTimeS * 1000);
+      return date.toISOString().slice(0, 16);
+    }
+
+    function isoInputToGameTime(isoStr) {
+      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
+      const d = new Date(isoStr + "Z");
+      if (isNaN(d.getTime())) return null;
+      return (d.getTime() - epochMs) / 1000;
+    }
+
+    function alignmentClass(pct) {
+      if (pct <= 25) return "tpAlignGood";
+      if (pct <= 60) return "tpAlignFair";
+      return "tpAlignPoor";
+    }
+
+    function alignmentLabel(pct) {
+      if (pct <= 15) return "Optimal";
+      if (pct <= 25) return "Good";
+      if (pct <= 45) return "Fair";
+      if (pct <= 70) return "Poor";
+      return "Bad";
+    }
+
+    // ── Destination tree ───────────────────────────────────
     function buildDestinationTree() {
       treeRoot.innerHTML = "";
       const wrap = document.createElement("div");
@@ -4143,42 +4194,261 @@
       treeRoot.appendChild(wrap);
     }
 
-    function setQuoteHtml(html) { quoteBox.innerHTML = html; }
+    // ── Fetch & render quote ───────────────────────────────
+    async function fetchAndRenderQuote() {
+      if (!selectedDest) return;
 
-    async function selectLeaf(node) {
-      selectedDest = node.id;
-      buildDestinationTree();
-      confirmBtn.disabled = true;
-      setQuoteHtml(`<div class="muted">Loading quote…</div>`);
+      const depTime = departureTimeOverride != null ? departureTimeOverride : serverNow();
+      const params = new URLSearchParams({
+        from_id: ship.location_id,
+        to_id: selectedDest,
+        departure_time: String(depTime),
+        extra_dv_fraction: String(currentExtraDvFraction),
+      });
+
+      detailPanel.innerHTML = `<div class="tpSection"><div class="muted" style="text-align:center; padding:12px;">Loading transfer data…</div></div>`;
 
       try {
-        const q = await (await fetch(
-          `/api/transfer_quote?from_id=${encodeURIComponent(ship.location_id)}&to_id=${encodeURIComponent(node.id)}`,
-          { cache: "no-store" }
-        )).json();
-
-        const dv = Math.round(q.dv_m_s);
-        const tof = q.tof_s;
-        const tofH = tof >= 3600 ? `${(tof / 3600).toFixed(1)} h` : `${(tof / 60).toFixed(1)} m`;
-        const path = (q.path || []).join(" → ");
-        const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, q.dv_m_s);
-        const fuelAfterKg = Math.max(0, Number(ship.fuel_kg || 0) - fuelNeedKg);
-
-        setQuoteHtml(`
-          <div><b>To:</b> ${locationsById.get(node.id)?.name || node.name} <span class="muted small">(${node.id})</span></div>
-          <div style="margin-top:8px;"><b>Δv:</b> ${dv} m/s</div>
-          <div><b>Time:</b> ${tofH}</div>
-          <div><b>Fuel use:</b> ${fuelNeedKg.toFixed(0)} kg</div>
-          <div><b>Fuel after burn:</b> ${fuelAfterKg.toFixed(0)} kg</div>
-          <div style="margin-top:8px;"><b>Path:</b></div>
-          <div class="pathBox">${path}</div>
-        `);
-
-        confirmBtn.disabled = false;
+        const resp = await fetch(`/api/transfer_quote_advanced?${params}`, { cache: "no-store" });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          detailPanel.innerHTML = `<div class="tpSection"><div class="muted">${_esc(err.detail || "No transfer data available.")}</div></div>`;
+          return;
+        }
+        const q = await resp.json();
+        lastQuote = q;
+        renderQuoteDetails(q, depTime);
       } catch (err) {
         console.error(err);
-        setQuoteHtml(`<div class="muted">No transfer data.</div>`);
+        detailPanel.innerHTML = `<div class="tpSection"><div class="muted">Failed to load transfer data.</div></div>`;
       }
+    }
+
+    function renderQuoteDetails(q, depTime) {
+      const destName = locationsById.get(q.to_id)?.name || q.to_id;
+      const path = q.path || [];
+      const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, q.dv_m_s);
+      const fuelAfterKg = Math.max(0, shipFuel - fuelNeedKg);
+      const fuelAfterPct = shipFuelCap > 0 ? Math.round((fuelAfterKg / shipFuelCap) * 100) : 0;
+      const hasFuel = fuelNeedKg <= shipFuel + 0.1;
+      const hasDv = q.dv_m_s <= shipDv + 0.1;
+
+      // Build path display
+      let pathHtml = "";
+      for (let i = 0; i < path.length; i++) {
+        const nid = path[i];
+        const nname = locationsById.get(nid)?.name || nid;
+        let cls = "tpPathNode";
+        if (i === 0) cls += " tpPathOrigin";
+        else if (i === path.length - 1) cls += " tpPathDest";
+        pathHtml += `<span class="${cls}">${_esc(nname)}</span>`;
+        if (i < path.length - 1) pathHtml += `<span class="tpPathArrow">▸</span>`;
+      }
+
+      // Orbital alignment section
+      let orbitalHtml = "";
+      if (q.is_interplanetary && q.orbital) {
+        const orb = q.orbital;
+        const alignCls = alignmentClass(orb.alignment_pct);
+        const alignLbl = alignmentLabel(orb.alignment_pct);
+        const synodicDays = orb.synodic_period_s ? (orb.synodic_period_s / 86400).toFixed(0) : "—";
+        const nextWindowDays = orb.next_window_s ? (orb.next_window_s / 86400).toFixed(0) : "—";
+        const dvPenaltyPct = Math.round((q.phase_multiplier - 1.0) * 100);
+
+        orbitalHtml = `
+          <div class="tpSection">
+            <div class="tpSectionTitle">Orbital Alignment</div>
+            <div class="tpRow">
+              <span class="tpLabel">Window quality</span>
+              <span class="tpVal"><span class="tpAlignBadge ${alignCls}">${alignLbl}</span></span>
+            </div>
+            <div class="tpRow">
+              <span class="tpLabel">Phase angle</span>
+              <span class="tpVal">${orb.phase_angle_deg}° <span class="muted">(optimal ${orb.optimal_phase_deg}°)</span></span>
+            </div>
+            <div class="tpRow">
+              <span class="tpLabel">Δv penalty</span>
+              <span class="tpVal ${dvPenaltyPct > 15 ? 'tpWarn' : dvPenaltyPct > 0 ? 'tpAccent' : ''}">${dvPenaltyPct > 0 ? "+" : ""}${dvPenaltyPct}%</span>
+            </div>
+            <div class="tpRow">
+              <span class="tpLabel">Synodic period</span>
+              <span class="tpVal">${synodicDays} days</span>
+            </div>
+            <div class="tpRow">
+              <span class="tpLabel">Next optimal window</span>
+              <span class="tpVal">${nextWindowDays !== "—" ? nextWindowDays + " days" : "—"}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Extra dv slider section
+      const sliderPct = Math.round(currentExtraDvFraction * 100);
+      const timeReduction = q.base_tof_s > 0 ? Math.round((1 - q.tof_s / q.base_tof_s) * 100) : 0;
+
+      const html = `
+        <!-- Departure Date -->
+        <div class="tpSection">
+          <div class="tpSectionTitle">Departure</div>
+          <div class="tpDateRow">
+            <button class="tpDateBtn ${departureTimeOverride == null ? 'active' : ''}" id="tpDateNowBtn">Now</button>
+            <input type="datetime-local" class="tpDateInput" id="tpDateInput"
+                   value="${gameTimeToISOInput(depTime)}"
+                   title="Set departure date (game time)">
+            <span class="muted" style="font-size:11px;">${fmtGameDate(depTime)}</span>
+          </div>
+        </div>
+
+        <!-- Route Overview -->
+        <div class="tpSection">
+          <div class="tpSectionTitle">Route — ${_esc(ship.location_id)} → ${_esc(destName)}</div>
+          <div class="tpPathWrap">${pathHtml}</div>
+          <div style="margin-top:8px;">
+            <div class="tpRow">
+              <span class="tpLabel">Hohmann Δv</span>
+              <span class="tpVal">${Math.round(q.base_dv_m_s)} m/s</span>
+            </div>
+            ${q.is_interplanetary ? `<div class="tpRow">
+              <span class="tpLabel">Phase-adjusted Δv</span>
+              <span class="tpVal">${Math.round(q.phase_adjusted_dv_m_s)} m/s <span class="muted">(×${q.phase_multiplier.toFixed(2)})</span></span>
+            </div>` : ""}
+            <div class="tpRow">
+              <span class="tpLabel">Hohmann transit time</span>
+              <span class="tpVal">${fmtDuration(q.base_tof_s)}</span>
+            </div>
+          </div>
+        </div>
+
+        ${orbitalHtml}
+
+        <!-- Delta-V / Time Tradeoff -->
+        <div class="tpSection">
+          <div class="tpSectionTitle">Burn Profile</div>
+          <div class="tpSliderWrap">
+            <div class="tpRow">
+              <span class="tpLabel">Extra Δv</span>
+              <span class="tpVal tpAccent" id="tpSliderReadout">+${sliderPct}%</span>
+            </div>
+            <div class="tpSliderRow">
+              <span class="muted" style="font-size:10px;">Min</span>
+              <input type="range" class="tpSlider" id="tpDvSlider"
+                     min="0" max="200" step="5" value="${sliderPct}">
+              <span class="muted" style="font-size:10px;">+200%</span>
+            </div>
+            <div class="tpSliderTicks">
+              <span>Hohmann</span>
+              <span>+50%</span>
+              <span>+100%</span>
+              <span>+150%</span>
+              <span>Brachistochrone</span>
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <div class="tpRow tpHighlight">
+              <span class="tpLabel"><b>Total Δv</b></span>
+              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}"><b>${Math.round(q.dv_m_s)} m/s</b></span>
+            </div>
+            <div class="tpRow">
+              <span class="tpLabel">Transit time</span>
+              <span class="tpVal">${fmtDuration(q.tof_s)} ${timeReduction > 0 ? `<span class="muted">(${timeReduction}% faster)</span>` : ""}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ship Cost -->
+        <div class="tpSection">
+          <div class="tpSectionTitle">Ship Cost</div>
+          <div class="tpRow">
+            <span class="tpLabel">Fuel required</span>
+            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}">${fuelNeedKg.toFixed(0)} kg</span>
+          </div>
+          <div class="tpRow">
+            <span class="tpLabel">Fuel remaining after</span>
+            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}">${fuelAfterKg.toFixed(0)} kg (${fuelAfterPct}%)</span>
+          </div>
+          <div class="tpRow">
+            <span class="tpLabel">Ship Δv remaining</span>
+            <span class="tpVal">${Math.round(shipDv)} m/s</span>
+          </div>
+          ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(q.dv_m_s)}, have ${Math.round(shipDv)})</span></div>` : ""}
+          ${!hasFuel && hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>` : ""}
+        </div>
+
+        <!-- Actions -->
+        <div class="tpActions">
+          <button id="tpCancelBtn" class="btnSecondary">Cancel</button>
+          <button id="tpConfirmBtn" class="btnPrimary" ${hasDv && hasFuel ? "" : "disabled"}>Confirm Transfer</button>
+        </div>
+      `;
+
+      detailPanel.innerHTML = html;
+
+      // Wire up controls
+      document.getElementById("tpCancelBtn").onclick = closeModal;
+
+      // Date controls
+      document.getElementById("tpDateNowBtn").onclick = () => {
+        departureTimeOverride = null;
+        fetchAndRenderQuote();
+      };
+
+      document.getElementById("tpDateInput").onchange = (e) => {
+        const gt = isoInputToGameTime(e.target.value);
+        if (gt != null) {
+          departureTimeOverride = gt;
+          fetchAndRenderQuote();
+        }
+      };
+
+      // Delta-v slider
+      const slider = document.getElementById("tpDvSlider");
+      const readout = document.getElementById("tpSliderReadout");
+
+      slider.oninput = () => {
+        const pct = Number(slider.value);
+        readout.textContent = `+${pct}%`;
+      };
+
+      slider.onchange = () => {
+        const pct = Number(slider.value);
+        currentExtraDvFraction = pct / 100;
+        fetchAndRenderQuote();
+      };
+
+      // Confirm button
+      document.getElementById("tpConfirmBtn").onclick = async () => {
+        if (!selectedDest) return;
+        const btn = document.getElementById("tpConfirmBtn");
+        btn.disabled = true;
+        btn.textContent = "Executing…";
+        try {
+          const resp = await fetch(`/api/ships/${encodeURIComponent(ship.id)}/transfer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to_location_id: selectedDest }),
+          });
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            btn.textContent = _esc(data.detail || "Transfer failed.");
+            btn.disabled = false;
+            return;
+          }
+          closeModal();
+          await syncState();
+          showShipPanel();
+        } catch (err) {
+          btn.textContent = "Transfer failed";
+          btn.disabled = false;
+        }
+      };
+    }
+
+    // ── Select destination leaf ─────────────────────────────
+    async function selectLeaf(node) {
+      selectedDest = node.id;
+      currentExtraDvFraction = 0;
+      buildDestinationTree();
+      await fetchAndRenderQuote();
     }
 
     buildDestinationTree();
@@ -4189,30 +4459,6 @@
         selectLeaf({ id: initialLoc.id, name: initialLoc.name || initialLoc.id });
       }
     }
-
-    confirmBtn.onclick = async () => {
-      if (!selectedDest) return;
-      confirmBtn.disabled = true;
-      try {
-        const resp = await fetch(`/api/ships/${encodeURIComponent(ship.id)}/transfer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to_location_id: selectedDest }),
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          setQuoteHtml(`<div class="muted">${data.detail || "Transfer failed."}</div>`);
-          confirmBtn.disabled = false;
-          return;
-        }
-      } finally {
-        if (confirmBtn.disabled) {
-          closeModal();
-          await syncState();
-          showShipPanel();
-        }
-      }
-    };
   }
 
   // ---------- Side panel ----------

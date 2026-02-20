@@ -5,6 +5,7 @@ Extracted from main.py — handles:
   /api/state
   /api/time
   /api/transfer_quote
+  /api/transfer_quote_advanced
   /api/ships/{ship_id}/transfer
   /api/ships/{ship_id}/inventory/jettison
   /api/ships/{ship_id}/deconstruct
@@ -12,10 +13,11 @@ Extracted from main.py — handles:
 """
 
 import json
+import math
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from auth_service import require_login
@@ -81,6 +83,257 @@ def api_transfer_quote(from_id: str, to_id: str, request: Request, conn: sqlite3
     }
 
     # Check if any locations on the path are surface sites
+    path_ids = [from_id, to_id]
+    try:
+        hops = json.loads(row["path_json"] or "[]")
+        if isinstance(hops, list):
+            path_ids.extend(str(h) for h in hops if isinstance(h, str))
+    except (json.JSONDecodeError, TypeError):
+        pass
+    path_ids_unique = list(dict.fromkeys(path_ids))
+    if path_ids_unique:
+        placeholders = ",".join("?" for _ in path_ids_unique)
+        site_rows = conn.execute(
+            f"SELECT location_id, body_id, gravity_m_s2 FROM surface_sites WHERE location_id IN ({placeholders})",
+            path_ids_unique,
+        ).fetchall()
+        if site_rows:
+            result["surface_sites"] = [
+                {
+                    "location_id": sr["location_id"],
+                    "body_id": sr["body_id"],
+                    "gravity_m_s2": float(sr["gravity_m_s2"]),
+                    "min_twr": 1.0,
+                }
+                for sr in site_rows
+            ]
+
+    return result
+
+
+# ── Orbital mechanics helpers for advanced quotes ──────────
+
+# Simplified Keplerian orbital elements (J2000 epoch: 2000-01-01T12:00 TT)
+# Each entry: (a_km, e, i_deg, Omega_deg, w_deg, M0_deg, period_s)
+_BODY_ORBITS: Dict[str, Dict[str, float]] = {
+    "mercury": {"a_km": 57_909_227.0, "period_s": 7_600_521.6},  # 87.969 d
+    "venus":   {"a_km": 108_209_475.0, "period_s": 19_414_166.4},  # 224.701 d
+    "earth":   {"a_km": 149_597_870.7, "period_s": 31_558_149.8},  # 365.256 d
+    "mars":    {"a_km": 227_943_824.0, "period_s": 59_355_072.0},  # 686.971 d
+}
+
+# Reference epoch for mean anomaly: game epoch 0 = 2040-01-01T00:00 UTC
+_EPOCH_MEAN_ANOMALY_DEG: Dict[str, float] = {
+    "mercury": 174.796,
+    "venus":   50.115,
+    "earth":   357.529,
+    "mars":    19.373,
+}
+
+# Which parent body does a location orbit?
+_LOCATION_PARENT_BODY: Dict[str, str] = {
+    "LEO": "earth", "HEO": "earth", "GEO": "earth",
+    "L1": "earth", "L2": "earth", "L3": "earth", "L4": "earth", "L5": "earth",
+    "LLO": "earth", "HLO": "earth",
+    "LUNA_SHACKLETON": "earth", "LUNA_PEARY": "earth", "LUNA_TRANQUILLITATIS": "earth",
+    "LUNA_IMBRIUM": "earth", "LUNA_ANORTHOSITE": "earth", "LUNA_KREEP": "earth",
+    "MERC_ORB": "mercury", "MERC_HEO": "mercury", "MERC_GEO": "mercury",
+    "VEN_ORB": "venus", "VEN_HEO": "venus", "VEN_GEO": "venus", "ZOOZVE": "venus",
+    "LMO": "mars", "HMO": "mars", "MGO": "mars",
+    "PHOBOS": "mars", "DEIMOS": "mars",
+    "SUN": "sun",
+}
+
+
+def _body_angle_at_time(body_id: str, game_time_s: float) -> Optional[float]:
+    """Return heliocentric longitude (radians) for a body at game_time_s."""
+    orb = _BODY_ORBITS.get(body_id)
+    if not orb:
+        return None
+    m0 = math.radians(_EPOCH_MEAN_ANOMALY_DEG.get(body_id, 0.0))
+    mean_motion = 2.0 * math.pi / orb["period_s"]
+    return m0 + mean_motion * game_time_s
+
+
+def _is_interplanetary(from_id: str, to_id: str) -> bool:
+    """True if the transfer crosses between different heliocentric bodies."""
+    a = _LOCATION_PARENT_BODY.get(from_id, "")
+    b = _LOCATION_PARENT_BODY.get(to_id, "")
+    if not a or not b or a == "sun" or b == "sun":
+        return False
+    return a != b
+
+
+def _phase_angle_multiplier(from_body: str, to_body: str, game_time_s: float) -> float:
+    """
+    Compute a delta-v multiplier based on the synodic phase angle.
+    Returns 1.0 at optimal Hohmann alignment, up to ~1.4 at worst alignment.
+    Uses a cosine model: multiplier = 1 + penalty * (1 - cos(phase - optimal)) / 2
+    """
+    theta_from = _body_angle_at_time(from_body, game_time_s)
+    theta_to = _body_angle_at_time(to_body, game_time_s)
+    if theta_from is None or theta_to is None:
+        return 1.0
+
+    # Current phase angle
+    phase = (theta_to - theta_from) % (2.0 * math.pi)
+
+    # Optimal Hohmann phase angle
+    a_from = _BODY_ORBITS[from_body]["a_km"]
+    a_to = _BODY_ORBITS[to_body]["a_km"]
+    a_transfer = 0.5 * (a_from + a_to)
+    optimal_phase = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((a_from + a_to) / a_to) ** (2.0 / 3.0))
+    if a_to < a_from:
+        optimal_phase = 2.0 * math.pi - abs(optimal_phase)
+    optimal_phase = optimal_phase % (2.0 * math.pi)
+
+    # Delta from optimal
+    delta = phase - optimal_phase
+    alignment = (1.0 - math.cos(delta)) / 2.0  # 0 = optimal, 1 = worst
+
+    # Penalty: up to 40% more delta-v at worst alignment
+    return 1.0 + 0.4 * alignment
+
+
+def _excess_dv_time_reduction(base_tof_s: float, base_dv_m_s: float, extra_dv_fraction: float) -> float:
+    """
+    Given extra delta-v (as fraction above base), compute reduced TOF.
+    Uses energy-based approximation: t_new = t_base * (v_base / v_new)
+    where v is characteristic velocity (proportional to sqrt of vis-viva energy).
+    extra_dv_fraction = 0 means Hohmann, 1.0 means 2x the delta-v.
+    """
+    if base_tof_s <= 0 or extra_dv_fraction <= 0:
+        return base_tof_s
+
+    # Energy scales roughly with v^2; extra dv increases transfer orbit energy
+    # Time reduction approximation: TOF ~ TOF_base / (1 + k*f) where f is fractional excess
+    # A more physical model: doubling dv roughly halves transit time for interplanetary
+    # Using: tof_new = tof_base / (1 + extra_dv_fraction)^0.6
+    reduction = 1.0 / ((1.0 + extra_dv_fraction) ** 0.6)
+    return max(3600.0, base_tof_s * reduction)  # Never less than 1 hour
+
+
+@router.get("/api/transfer_quote_advanced")
+def api_transfer_quote_advanced(
+    from_id: str,
+    to_id: str,
+    request: Request,
+    departure_time: Optional[float] = Query(None, description="Game time of departure (epoch seconds). Defaults to now."),
+    extra_dv_fraction: float = Query(0.0, ge=0.0, le=2.0, description="Fractional extra delta-v above Hohmann minimum (0=minimum, 1=double)"),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Advanced transfer quote with phase-angle effects and delta-v/time tradeoff.
+
+    Returns the base (Hohmann) costs plus adjusted values for the given
+    departure time and extra-dv fraction. Interplanetary transfers get
+    phase-angle modulation; intra-system transfers pass through unchanged.
+    """
+    require_login(conn, request)
+
+    row = conn.execute(
+        "SELECT dv_m_s,tof_s,path_json FROM transfer_matrix WHERE from_id=? AND to_id=?",
+        (from_id, to_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No transfer data for that pair")
+
+    base_dv = float(row["dv_m_s"])
+    base_tof = float(row["tof_s"])
+    path = json.loads(row["path_json"] or "[]")
+
+    dep_time = departure_time if departure_time is not None else game_now_s()
+
+    # Phase angle adjustment for interplanetary legs
+    from_body = _LOCATION_PARENT_BODY.get(from_id, "")
+    to_body = _LOCATION_PARENT_BODY.get(to_id, "")
+    is_interplanetary = _is_interplanetary(from_id, to_id)
+
+    phase_multiplier = 1.0
+    phase_angle_deg = None
+    optimal_phase_deg = None
+    alignment_pct = None
+    synodic_period_s = None
+    next_window_s = None
+
+    if is_interplanetary and from_body in _BODY_ORBITS and to_body in _BODY_ORBITS:
+        phase_multiplier = _phase_angle_multiplier(from_body, to_body, dep_time)
+
+        # Compute current phase angle for display
+        theta_from = _body_angle_at_time(from_body, dep_time)
+        theta_to = _body_angle_at_time(to_body, dep_time)
+        if theta_from is not None and theta_to is not None:
+            phase_rad = (theta_to - theta_from) % (2.0 * math.pi)
+            phase_angle_deg = round(math.degrees(phase_rad), 1)
+
+            # Optimal phase
+            a_from = _BODY_ORBITS[from_body]["a_km"]
+            a_to = _BODY_ORBITS[to_body]["a_km"]
+            opt = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((a_from + a_to) / a_to) ** (2.0 / 3.0))
+            if a_to < a_from:
+                opt = 2.0 * math.pi - abs(opt)
+            opt = opt % (2.0 * math.pi)
+            optimal_phase_deg = round(math.degrees(opt), 1)
+
+            delta = phase_rad - opt
+            alignment_pct = round((1.0 - math.cos(delta)) / 2.0 * 100, 1)
+
+            # Synodic period
+            p1 = _BODY_ORBITS[from_body]["period_s"]
+            p2 = _BODY_ORBITS[to_body]["period_s"]
+            synodic_period_s = round(abs(1.0 / (1.0 / p1 - 1.0 / p2)), 0)
+
+            # Find next optimal window (search forward in 1-day steps)
+            best_time = dep_time
+            best_mult = phase_multiplier
+            step = 86400.0  # 1 day
+            for i in range(1, int(synodic_period_s / step) + 2):
+                t = dep_time + i * step
+                m = _phase_angle_multiplier(from_body, to_body, t)
+                if m < best_mult:
+                    best_mult = m
+                    best_time = t
+            if best_time > dep_time:
+                next_window_s = round(best_time - dep_time, 0)
+
+    # Apply phase multiplier
+    adjusted_dv = base_dv * phase_multiplier
+
+    # Apply extra delta-v for faster transit
+    total_dv = adjusted_dv * (1.0 + extra_dv_fraction)
+    adjusted_tof = _excess_dv_time_reduction(base_tof, adjusted_dv, extra_dv_fraction)
+
+    result: Dict[str, Any] = {
+        "from_id": from_id,
+        "to_id": to_id,
+        "path": path,
+        # Base Hohmann values (static)
+        "base_dv_m_s": round(base_dv, 1),
+        "base_tof_s": round(base_tof, 1),
+        # Phase-adjusted minimum
+        "phase_adjusted_dv_m_s": round(adjusted_dv, 1),
+        "phase_multiplier": round(phase_multiplier, 4),
+        # Final values with extra-dv
+        "dv_m_s": round(total_dv, 1),
+        "tof_s": round(adjusted_tof, 1),
+        "extra_dv_fraction": round(extra_dv_fraction, 4),
+        # Orbital data
+        "is_interplanetary": is_interplanetary,
+        "departure_time": dep_time,
+    }
+
+    if is_interplanetary:
+        result["orbital"] = {
+            "from_body": from_body,
+            "to_body": to_body,
+            "phase_angle_deg": phase_angle_deg,
+            "optimal_phase_deg": optimal_phase_deg,
+            "alignment_pct": alignment_pct,
+            "synodic_period_s": synodic_period_s,
+            "next_window_s": next_window_s,
+        }
+
+    # Surface sites
     path_ids = [from_id, to_id]
     try:
         hops = json.loads(row["path_json"] or "[]")
