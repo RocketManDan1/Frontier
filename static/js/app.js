@@ -3972,7 +3972,7 @@
 
   // ---------- Move Planner modal ----------
   function closeModal() {
-    const el = document.getElementById("modalOverlay");
+    const el = document.getElementById("tpModalRoot");
     if (el) el.remove();
     document.removeEventListener("keydown", escClose);
   }
@@ -4097,8 +4097,8 @@
 
     // ── Build overlay ──────────────────────────────────────
     const overlay = document.createElement("div");
-    overlay.id = "modalOverlay";
-    overlay.className = "modalOverlay";
+    overlay.id = "tpModalRoot";
+    overlay.className = "modal";
 
     const shipDv = Number(ship.delta_v_remaining_m_s || 0);
     const shipFuel = Number(ship.fuel_kg || 0);
@@ -4106,6 +4106,7 @@
     const shipFuelPct = shipFuelCap > 0 ? Math.round((shipFuel / shipFuelCap) * 100) : 0;
 
     overlay.innerHTML = `
+      <div class="modalOverlay"></div>
       <div class="tpModal">
         <div class="tpHeader">
           <div class="tpHeaderLeft">
@@ -4132,7 +4133,7 @@
     document.body.appendChild(overlay);
 
     document.getElementById("tpClose").onclick = closeModal;
-    overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) closeModal(); });
+    overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay || e.target.classList.contains("modalOverlay")) closeModal(); });
     document.addEventListener("keydown", escClose);
 
     const treeRoot = document.getElementById("tpTreeRoot");

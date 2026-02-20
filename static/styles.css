@@ -3560,6 +3560,7 @@ body.fleetPage {
    ══════════════════════════════════════════════════════════ */
 
 .tpModal {
+  position: relative;
   width: min(1080px, 94vw);
   max-height: 90vh;
   overflow: hidden;
