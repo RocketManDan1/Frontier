@@ -14,6 +14,7 @@
   const APP_CONFIG = {
     fleet: { title: "Fleet", url: "/fleet", icon: "/static/img/dock/fleet.png" },
     shipyard: { title: "Shipyard", url: "/shipyard", icon: "/static/img/dock/shipyard.png" },
+    sites: { title: "Sites", url: "/sites", icon: "/static/img/dock/sites.svg" },
     research: { title: "Research", url: "/research", icon: "/static/img/dock/research.png" },
     profile: { title: "Profile", url: "/profile?embed=1", icon: "/static/img/dock/profile.png" },
     admin: { title: "Admin", url: "/admin", icon: "" },

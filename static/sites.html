@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sites &amp; Industry</title>
+    <link rel="stylesheet" href="/static/styles.css?v=layout31" />
+  </head>
+
+  <body class="sitesPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Sites &amp; Industry</div>
+            <div class="subtitle" id="sitesSubtitle">Celestial sites and industrial operations</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab active" href="/sites">Sites</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/profile">Profile</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <!-- Sub-tabs: Overview / Industrial -->
+      <div class="sitesSubTabs">
+        <button class="siteSubTab active" data-tab="overview">Overview</button>
+        <button class="siteSubTab" data-tab="industrial">Industrial</button>
+      </div>
+
+      <!-- ═══════════════════ OVERVIEW TAB ═══════════════════ -->
+      <div class="sitesTabContent" id="tabOverview">
+        <div class="sitesOverviewLayout">
+          <!-- Left: Sites list -->
+          <div class="panel sitesListPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Locations</span>
+              <input type="text" class="sitesSearch" id="sitesSearchInput" placeholder="Filter…" />
+            </div>
+            <div class="sitesFilterBar">
+              <button class="siteFilterBtn active" data-filter="all">All</button>
+              <button class="siteFilterBtn" data-filter="surface">Surface</button>
+              <button class="siteFilterBtn" data-filter="orbital">Orbital</button>
+              <button class="siteFilterBtn" data-filter="active">Has Industry</button>
+            </div>
+            <div class="tableWrap">
+              <table class="sitesTable" id="sitesTable">
+                <thead>
+                  <tr>
+                    <th>Location</th>
+                    <th>Type</th>
+                    <th>Ships</th>
+                    <th>Inventory</th>
+                    <th>Equipment</th>
+                    <th>Jobs</th>
+                  </tr>
+                </thead>
+                <tbody id="sitesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right: Site detail -->
+          <div class="panel siteDetailPanel" id="siteDetailPanel">
+            <div class="siteDetailPlaceholder" id="siteDetailPlaceholder">
+              <div class="muted">Select a location to view details</div>
+            </div>
+            <div class="siteDetailContent" id="siteDetailContent" style="display:none">
+              <div class="panelHeader">
+                <span class="panelTitle" id="siteDetailName">—</span>
+                <span class="badge" id="siteDetailType">—</span>
+              </div>
+
+              <!-- Site info -->
+              <div class="siteInfoGrid" id="siteInfoGrid"></div>
+
+              <!-- Resource deposits (surface only) -->
+              <div class="siteSection" id="siteDepositsSection" style="display:none">
+                <div class="siteSectionTitle">Resource Deposits</div>
+                <div class="siteDepositsGrid" id="siteDepositsGrid"></div>
+              </div>
+
+              <!-- Inventory -->
+              <div class="siteSection">
+                <div class="siteSectionTitle">Inventory</div>
+                <div class="invGrid" id="siteInventoryGrid"></div>
+                <div class="muted" id="siteInventoryEmpty">No inventory</div>
+              </div>
+
+              <!-- Deployed equipment -->
+              <div class="siteSection">
+                <div class="siteSectionTitle">Deployed Equipment</div>
+                <div class="invGrid" id="siteEquipmentGrid"></div>
+                <div class="muted" id="siteEquipmentEmpty">No deployed equipment</div>
+              </div>
+
+              <!-- Docked ships -->
+              <div class="siteSection">
+                <div class="siteSectionTitle">Docked Ships</div>
+                <div id="siteShipsList" class="siteShipsList"></div>
+                <div class="muted" id="siteShipsEmpty">No ships docked</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ INDUSTRIAL TAB ═══════════════════ -->
+      <div class="sitesTabContent" id="tabIndustrial" style="display:none">
+
+        <!-- Location selector for industrial view -->
+        <div class="panel industryLocationBar">
+          <label class="industryLabel">Site:</label>
+          <select id="industryLocationSelect" class="industrySelect">
+            <option value="">— Select a location —</option>
+          </select>
+          <span class="muted" id="industryLocationInfo"></span>
+        </div>
+
+        <div id="industryContent" style="display:none">
+
+          <!-- Top row: Equipment + Active jobs -->
+          <div class="industryTopRow">
+            <div class="panel industryEquipPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Deployed Equipment</span>
+                <button class="btnSmall" id="btnDeployEquip">Deploy</button>
+              </div>
+              <div class="industryEquipList" id="industryEquipList"></div>
+            </div>
+
+            <div class="panel industryJobsPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Active Jobs</span>
+              </div>
+              <div class="industryJobsList" id="industryJobsList"></div>
+            </div>
+          </div>
+
+          <!-- ═══ Production Chain Flow ═══ -->
+          <div class="panel industryChainPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Production Chain</span>
+            </div>
+            <div class="chainFlow" id="chainFlow">
+              <!-- Column 1: Raw Materials / Inputs -->
+              <div class="chainColumn">
+                <div class="chainColumnHeader">
+                  <span class="chainColumnIcon">◆</span>
+                  Raw Materials
+                </div>
+                <div class="chainColumnBody" id="chainRawMaterials"></div>
+              </div>
+
+              <div class="chainArrow">
+                <div class="chainArrowLine"></div>
+                <div class="chainArrowHead">▶</div>
+                <div class="chainArrowLabel">REFINE</div>
+              </div>
+
+              <!-- Column 2: Refinery Outputs / Processed -->
+              <div class="chainColumn">
+                <div class="chainColumnHeader">
+                  <span class="chainColumnIcon">⬡</span>
+                  Refined Materials
+                </div>
+                <div class="chainColumnBody" id="chainRefined"></div>
+              </div>
+
+              <div class="chainArrow">
+                <div class="chainArrowLine"></div>
+                <div class="chainArrowHead">▶</div>
+                <div class="chainArrowLabel">BUILD</div>
+              </div>
+
+              <!-- Column 3: Constructable Items -->
+              <div class="chainColumn">
+                <div class="chainColumnHeader">
+                  <span class="chainColumnIcon">⚙</span>
+                  Constructable
+                </div>
+                <div class="chainColumnBody" id="chainConstructable"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Available Recipes -->
+          <div class="panel industryRecipesPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Available Recipes</span>
+            </div>
+            <div class="industryRecipesList" id="industryRecipesList"></div>
+          </div>
+
+          <!-- Mining (surface sites only) -->
+          <div class="panel industryMiningPanel" id="industryMiningPanel" style="display:none">
+            <div class="panelHeader">
+              <span class="panelTitle">Mining Operations</span>
+            </div>
+            <div class="industryMiningContent" id="industryMiningContent"></div>
+          </div>
+
+          <!-- Job History -->
+          <div class="panel industryHistoryPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Job History</span>
+            </div>
+            <div class="industryHistoryList" id="industryHistoryList"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Deploy Modal -->
+      <div class="modal" id="deployModal" style="display:none">
+        <div class="modalOverlay"></div>
+        <div class="modalBody deployModalBody">
+          <div class="panelHeader">
+            <span class="panelTitle">Deploy Equipment</span>
+            <button class="btnSmall" id="deployModalClose">✕</button>
+          </div>
+          <p class="muted">Select equipment from location inventory to deploy:</p>
+          <div class="invGrid" id="deployableItemsGrid"></div>
+          <div class="muted" id="deployableEmpty">No deployable equipment in inventory</div>
+        </div>
+      </div>
+
+      <!-- Start Job Modal -->
+      <div class="modal" id="startJobModal" style="display:none">
+        <div class="modalOverlay"></div>
+        <div class="modalBody startJobModalBody">
+          <div class="panelHeader">
+            <span class="panelTitle">Start Production</span>
+            <button class="btnSmall" id="startJobModalClose">✕</button>
+          </div>
+          <div id="startJobContent"></div>
+        </div>
+      </div>
+
+      <!-- Start Mining Modal -->
+      <div class="modal" id="miningModal" style="display:none">
+        <div class="modalOverlay"></div>
+        <div class="modalBody miningModalBody">
+          <div class="panelHeader">
+            <span class="panelTitle">Start Mining</span>
+            <button class="btnSmall" id="miningModalClose">✕</button>
+          </div>
+          <div id="miningModalContent"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/clock.js"></script>
+    <script src="/static/js/item_display.js"></script>
+    <script src="/static/js/sites.js"></script>
+  </body>
+</html>

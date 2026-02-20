@@ -376,9 +376,10 @@
   function renderTypeTabs() {
     typeTabsEl.innerHTML = "";
     researchCatalog.techTypes.forEach((type) => {
+      const allTemplate = type.trees.every((t) => t.isTemplate);
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = `tab researchSubtab ${type.id === activeTypeId ? "active" : ""}`;
+      tab.className = `tab researchSubtab ${type.id === activeTypeId ? "active" : ""}${allTemplate ? " isTemplate" : ""}`;
       tab.textContent = type.label;
       tab.setAttribute("role", "tab");
       tab.addEventListener("click", () => {
@@ -400,7 +401,7 @@
     (type?.trees || []).forEach((tree) => {
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = `tab researchSubtab ${tree.id === activeTreeId ? "active" : ""}`;
+      tab.className = `tab researchSubtab ${tree.id === activeTreeId ? "active" : ""}${tree.isTemplate ? " isTemplate" : ""}`;
       tab.textContent = tree.label;
       tab.setAttribute("role", "tab");
       tab.addEventListener("click", () => {

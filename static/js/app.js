@@ -2360,7 +2360,10 @@
   const SHIP_TRAIL_DISTANCE_MULT = 1.55;
   const SHIP_PATH_DASH_LEN_MULT = 1.45;
   const SHIP_PATH_GAP_LEN_MULT = 1.1;
-  const SHIP_PATH_ALPHA = 0.2;
+  const SHIP_PATH_ALPHA = 0.28;
+  const SHIP_PATH_TRAVELED_ALPHA = 0.06;
+  const SHIP_PATH_CHEVRON_ALPHA = 0.45;
+  const SHIP_PATH_DEST_MARKER_ALPHA = 0.55;
   const SHIP_DOCK_BASE_RADIUS_PX = 22;
   const SHIP_DOCK_RING_STEP_PX = 26;
   const SHIP_IDTAG_FADE_IN_ZOOM = 0.85;
@@ -2824,10 +2827,10 @@
     return points[points.length - 1];
   }
 
-  function drawDashedTransitPath(pathGfx, curve, size, isSelected, displayScale = 1) {
+  function drawDashedTransitPath(pathGfx, curve, size, isSelected, displayScale = 1, shipProgress = 0) {
     if (!pathGfx || !curve) return;
 
-    const samples = 72;
+    const samples = 96;
     const points = [];
     for (let i = 0; i <= samples; i++) points.push(cubicPoint(curve, i / samples));
 
@@ -2839,24 +2842,94 @@
     }
 
     const total = cumulative[cumulative.length - 1] || 0;
-    const dashLen = Math.max(3, size * SHIP_PATH_DASH_LEN_MULT);
-    const gapLen = Math.max(2, size * SHIP_PATH_GAP_LEN_MULT);
+    if (total < 1) return;
     const scaleSafe = Math.max(0.05, Number(displayScale) || 1);
     const shipSizeFactor = clamp((Number(size) || 10) / 10, 0.42, 1.55);
-    const baseStrokePx = (isSelected ? 1.75 : 1.0) * shipSizeFactor;
-    const screenWidth = clamp((baseStrokePx * scaleSafe) / world.scale.x, 0.12 / world.scale.x, 2.4 / world.scale.x);
-    const color = isSelected ? 0xffffff : 0xffdfbe;
-    const alpha = isSelected ? 0.46 : SHIP_PATH_ALPHA;
+    const zoom = Math.max(0.0001, world.scale.x);
+
+    // --- Stroke widths (screen-pixel based, divided by zoom to stay constant on screen) ---
+    const baseStroke = (isSelected ? 2.4 : 1.5) * shipSizeFactor;
+    const lineWidth = Math.max(1.0, baseStroke) / zoom;
+    const thinWidth = Math.max(0.6, baseStroke * 0.5) / zoom;
+    const chevWidth = Math.max(0.8, baseStroke * 0.7) / zoom;
+
+    // --- Colors ---
+    const aheadColor = isSelected ? 0xb8d4ff : 0x8ab4e8;
+    const traveledColor = isSelected ? 0x6688aa : 0x556677;
+    const chevronColor = isSelected ? 0xddeeff : 0xaaccee;
+    const aheadAlpha = isSelected ? 0.55 : 0.38;
+    const traveledAlpha = isSelected ? 0.18 : 0.10;
+
+    // --- Split point along the path ---
+    const shipDist = clamp(shipProgress, 0, 1) * total;
 
     pathGfx.clear();
-    pathGfx.lineStyle(screenWidth, color, alpha);
 
-    for (let d = 0; d < total; d += dashLen + gapLen) {
+    // 1) Traveled portion (thin, dim line behind the ship)
+    if (shipDist > 1) {
+      pathGfx.lineStyle(thinWidth, traveledColor, traveledAlpha);
+      const startPt = pointOnPolyline(points, cumulative, 0);
+      pathGfx.moveTo(startPt.x, startPt.y);
+      const traveledSegments = 24;
+      for (let i = 1; i <= traveledSegments; i++) {
+        const d = (i / traveledSegments) * shipDist;
+        const pt = pointOnPolyline(points, cumulative, Math.min(total, d));
+        pathGfx.lineTo(pt.x, pt.y);
+      }
+    }
+
+    // 2) Ahead portion (smooth solid line from ship to destination)
+    const remainDist = total - shipDist;
+    if (remainDist > 1) {
+      pathGfx.lineStyle(lineWidth, aheadColor, aheadAlpha);
+      const startAhead = pointOnPolyline(points, cumulative, shipDist);
+      pathGfx.moveTo(startAhead.x, startAhead.y);
+      const aheadSegments = 48;
+      for (let i = 1; i <= aheadSegments; i++) {
+        const d = shipDist + (i / aheadSegments) * remainDist;
+        const pt = pointOnPolyline(points, cumulative, Math.min(total, d));
+        pathGfx.lineTo(pt.x, pt.y);
+      }
+    }
+
+    // 3) Directional chevron dashes along the ahead portion
+    const dashLen = Math.max(3, size * SHIP_PATH_DASH_LEN_MULT * 0.7);
+    const gapLen = Math.max(4, size * SHIP_PATH_GAP_LEN_MULT * 1.8);
+    const animOffset = ((performance.now() / 1000) * dashLen * 2) % (dashLen + gapLen);
+
+    pathGfx.lineStyle(chevWidth, chevronColor, isSelected ? 0.55 : SHIP_PATH_CHEVRON_ALPHA);
+    for (let d = shipDist + animOffset; d < total; d += dashLen + gapLen) {
+      const fadeIn = smoothstep(shipDist, shipDist + remainDist * 0.05, d);
+      const fadeOut = 1 - smoothstep(total - remainDist * 0.08, total, d);
+      const segAlpha = fadeIn * fadeOut * (isSelected ? 0.55 : SHIP_PATH_CHEVRON_ALPHA);
+      if (segAlpha < 0.01) continue;
+      pathGfx.lineStyle(chevWidth, chevronColor, segAlpha);
       const a = pointOnPolyline(points, cumulative, d);
       const b = pointOnPolyline(points, cumulative, Math.min(total, d + dashLen));
       pathGfx.moveTo(a.x, a.y);
       pathGfx.lineTo(b.x, b.y);
     }
+
+    // 4) Destination diamond marker
+    const destPt = points[points.length - 1];
+    const markerSize = Math.max(3, 5) / zoom;
+    const destAlpha = isSelected ? 0.7 : SHIP_PATH_DEST_MARKER_ALPHA;
+    pathGfx.lineStyle(Math.max(0.5, 1.0) / zoom, chevronColor, destAlpha);
+    pathGfx.beginFill(aheadColor, destAlpha * 0.4);
+    pathGfx.moveTo(destPt.x, destPt.y - markerSize);
+    pathGfx.lineTo(destPt.x + markerSize, destPt.y);
+    pathGfx.lineTo(destPt.x, destPt.y + markerSize);
+    pathGfx.lineTo(destPt.x - markerSize, destPt.y);
+    pathGfx.closePath();
+    pathGfx.endFill();
+
+    // 5) Origin dot
+    const originPt = points[0];
+    const originSize = Math.max(2, 3) / zoom;
+    pathGfx.lineStyle(0);
+    pathGfx.beginFill(traveledColor, traveledAlpha * 2.5);
+    pathGfx.drawCircle(originPt.x, originPt.y, originSize);
+    pathGfx.endFill();
   }
 
   // ---------- Parking offsets ----------
@@ -3271,11 +3344,41 @@
 
       let dot;
       if (LPOINT_IDS.has(loc.id)) {
-        dot = new PIXI.Graphics();
-        dot.beginFill(0xffffff, 0.16);
-        dot.lineStyle(1, 0xffffff, 0.3);
-        dot.drawRect(-3, -3, 6, 6);
-        dot.endFill();
+        dot = new PIXI.Container();
+        // Soft outer glow
+        const glow = new PIXI.Graphics();
+        glow.beginFill(0x88bbff, 0.06);
+        glow.drawCircle(0, 0, 6);
+        glow.endFill();
+        glow.beginFill(0x88bbff, 0.04);
+        glow.drawCircle(0, 0, 9);
+        glow.endFill();
+        dot.addChild(glow);
+        // Diamond shape
+        const diamond = new PIXI.Graphics();
+        diamond.lineStyle(0.8, 0xaaccff, 0.7);
+        diamond.beginFill(0x6699cc, 0.25);
+        diamond.moveTo(0, -2.5);
+        diamond.lineTo(2.5, 0);
+        diamond.lineTo(0, 2.5);
+        diamond.lineTo(-2.5, 0);
+        diamond.closePath();
+        diamond.endFill();
+        dot.addChild(diamond);
+        // Inner bright dot
+        const core = new PIXI.Graphics();
+        core.beginFill(0xddeeff, 0.6);
+        core.drawCircle(0, 0, 0.75);
+        core.endFill();
+        dot.addChild(core);
+        // Crosshair lines
+        const cross = new PIXI.Graphics();
+        cross.lineStyle(0.5, 0xaaccff, 0.3);
+        cross.moveTo(0, -4.5); cross.lineTo(0, -3);
+        cross.moveTo(0, 3);    cross.lineTo(0, 4.5);
+        cross.moveTo(-4.5, 0); cross.lineTo(-3, 0);
+        cross.moveTo(3, 0);    cross.lineTo(4.5, 0);
+        dot.addChild(cross);
       } else if (loc.id === "PHOBOS") {
         dot = makeMoonMarker(true);
       } else if (loc.id === "DEIMOS") {
@@ -3283,9 +3386,9 @@
       } else if (isAsteroid) {
         dot = makeAsteroidMarker();
       } else {
+        // Invisible marker — no visual circle, but still interactive
         dot = new PIXI.Graphics();
-        dot.beginFill(0xffffff, 0.10);
-        dot.lineStyle(2, 0xffffff, 0.22);
+        dot.beginFill(0xffffff, 0.0);
         dot.drawCircle(0, 0, 9);
         dot.endFill();
       }
@@ -3798,7 +3901,7 @@
 
         if (pathGfx) {
           const isSelected = ship.id === selectedShipId;
-          drawDashedTransitPath(pathGfx, gfx.curve, size || 10, isSelected, effectiveShipScale);
+          drawDashedTransitPath(pathGfx, gfx.curve, size || 10, isSelected, effectiveShipScale, tt);
         }
 
         container.visible = true;

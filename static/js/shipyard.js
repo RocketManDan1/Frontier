@@ -17,16 +17,22 @@
   let selectedItemIds = [];
   let buildSourceLocations = [];
   let sourceRefreshTimer = null;
+  let lastCatalogHash = "";
 
   const GARAGE_FOLDERS = [
     { id: "reactors", label: "Reactors" },
     { id: "thrusters", label: "Thrusters" },
     { id: "generators", label: "Generators" },
     { id: "radiators", label: "Radiators" },
+    { id: "constructors", label: "Constructors" },
+    { id: "refineries", label: "Refineries" },
+    { id: "robonauts", label: "Robonauts" },
     { id: "storage", label: "Storage" },
   ];
 
   const collapsedFolders = new Set();
+  let garageCardCache = new Map(); // item_id → {card, part}
+  let garageBuiltForSource = ""; // track which source the garage was built for
 
   function setMsg(text, isError) {
     msgEl.textContent = text || "";
@@ -124,9 +130,20 @@
     }
   }
 
+  function computeCatalogHash(data) {
+    try {
+      const ids = (data?.parts || []).map((p) => p.item_id).sort().join(",");
+      const locs = (data?.build_source_locations || []).map((l) => `${l.id}:${l.inventory_part_qty}:${l.inventory_resource_mass_kg}`).sort().join(";");
+      return `${ids}|${locs}`;
+    } catch { return ""; }
+  }
+
   async function refreshSourcesOnly() {
     const before = String(buildLocationId || "LEO");
     const data = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
+    const hash = computeCatalogHash(data);
+    if (hash && hash === lastCatalogHash) return;
+    lastCatalogHash = hash;
     applyCatalogData(data, true);
     renderSourceLocations();
     const after = String(buildLocationId || "LEO");
@@ -342,57 +359,33 @@
 
   function partFolderId(part) {
     const rawCategory = String(part?.category_id || part?.type || "").toLowerCase();
+
+    // Exact category_id matches first (highest priority)
+    if (rawCategory === "reactor") return "reactors";
+    if (rawCategory === "thruster") return "thrusters";
+    if (rawCategory === "generator") return "generators";
+    if (rawCategory === "radiator") return "radiators";
+    if (rawCategory === "constructor") return "constructors";
+    if (rawCategory === "refinery") return "refineries";
+    if (rawCategory === "robonaut") return "robonauts";
+    if (rawCategory === "storage") return "storage";
+
+    // Fuzzy fallbacks for inventory parts with non-standard categories
     const name = String(part?.name || "").toLowerCase();
 
-    if (
-      rawCategory.includes("reactor") ||
-      rawCategory === "fission" ||
-      rawCategory === "fusion"
-    ) {
-      return "reactors";
-    }
+    if (rawCategory.includes("reactor") || rawCategory === "fission" || rawCategory === "fusion") return "reactors";
+    if (rawCategory.includes("thruster") || rawCategory.includes("engine") || name.includes("thruster") || name.includes("engine")) return "thrusters";
+    if (rawCategory.includes("generator") || rawCategory === "power" || rawCategory === "power_generator") return "generators";
+    if (rawCategory.includes("radiator") || rawCategory === "cooler" || rawCategory === "cooling") return "radiators";
+    if (rawCategory.includes("constructor") || rawCategory.includes("fabricat")) return "constructors";
+    if (rawCategory.includes("refiner") || rawCategory.includes("smelter") || rawCategory.includes("processing")) return "refineries";
+    if (rawCategory.includes("robonaut") || rawCategory.includes("drone") || rawCategory.includes("rover")) return "robonauts";
 
-    if (
-      rawCategory.includes("thruster") ||
-      rawCategory.includes("engine") ||
-      Number(part?.thrust_kn) > 0 ||
-      Number(part?.isp_s) > 0 ||
-      name.includes("thruster") ||
-      name.includes("engine")
-    ) {
-      return "thrusters";
-    }
-
-    if (
-      rawCategory.includes("generator") ||
-      rawCategory === "power" ||
-      rawCategory === "power_generator" ||
-      Number(part?.electric_mw) > 0
-    ) {
-      return "generators";
-    }
-
-    if (
-      rawCategory.includes("radiator") ||
-      rawCategory === "cooler" ||
-      rawCategory === "cooling" ||
-      Number(part?.heat_rejection_mw) > 0
-    ) {
-      return "radiators";
-    }
-
-    if (
-      rawCategory.includes("storage") ||
-      rawCategory.includes("tank") ||
-      rawCategory.includes("cargo") ||
-      Number(part?.capacity_m3) > 0 ||
-      Number(part?.fuel_capacity_kg) > 0 ||
-      Number(part?.water_kg) > 0 ||
-      name.includes("storage") ||
-      name.includes("tank")
-    ) {
-      return "storage";
-    }
+    // Numeric heuristics (last resort)
+    if (Number(part?.thrust_kn) > 0 || Number(part?.isp_s) > 0) return "thrusters";
+    if (Number(part?.heat_rejection_mw) > 0) return "radiators";
+    if (Number(part?.capacity_m3) > 0 || Number(part?.fuel_capacity_kg) > 0 || Number(part?.water_kg) > 0) return "storage";
+    if (name.includes("storage") || name.includes("tank")) return "storage";
 
     return "storage";
   }
@@ -406,7 +399,57 @@
     return GARAGE_FOLDERS.map((folder) => [folder.label, byGroup.get(folder.id) || []]);
   }
 
-  function renderGarage() {
+  function renderGarage(forceRebuild) {
+    const sourceKey = buildLocationId + ":" + garageParts.map((p) => p.item_id).join(",");
+    const needsRebuild = forceRebuild || sourceKey !== garageBuiltForSource;
+
+    if (needsRebuild) {
+      garageBuiltForSource = sourceKey;
+      garageCardCache.clear();
+      fullRebuildGarage();
+    } else {
+      updateGarageQuantities();
+    }
+  }
+
+  function updateGarageQuantities() {
+    garageCardCache.forEach(({ card, part }) => {
+      const selectedCount = selectedCountByItemId(part.item_id);
+      const availableQty = Number(part.available_qty);
+      const isLimited = Number.isFinite(availableQty);
+      const remaining = isLimited ? Math.max(0, Math.floor(availableQty - selectedCount)) : Infinity;
+      const wasDisabled = card.classList.contains("isDisabled");
+      const shouldDisable = isLimited && remaining <= 0;
+
+      // Update quantity badge
+      let badge = card.querySelector(".invCellQty");
+      if (isLimited && remaining > 1) {
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "invCellQty";
+          card.prepend(badge);
+        }
+        badge.textContent = remaining >= 1000 ? `${(remaining / 1000).toFixed(1)}k` : String(Math.round(remaining));
+      } else if (badge) {
+        badge.remove();
+      }
+
+      // Update disabled state
+      if (shouldDisable && !wasDisabled) {
+        card.classList.add("isDisabled");
+        card.style.opacity = "0.4";
+        card.style.pointerEvents = "none";
+        card.draggable = false;
+      } else if (!shouldDisable && wasDisabled) {
+        card.classList.remove("isDisabled");
+        card.style.opacity = "";
+        card.style.pointerEvents = "";
+        card.draggable = true;
+      }
+    });
+  }
+
+  function fullRebuildGarage() {
     const groups = groupedGarageParts(garageParts);
     garageEl.innerHTML = "";
 
@@ -430,7 +473,7 @@
       heading.addEventListener("click", () => {
         if (collapsedFolders.has(fId)) collapsedFolders.delete(fId);
         else collapsedFolders.add(fId);
-        renderGarage();
+        renderGarage(true);
       });
       group.appendChild(heading);
 
@@ -465,7 +508,10 @@
           });
 
           card.addEventListener("click", () => {
-            if (isLimited && remaining <= 0) return;
+            const sc = selectedCountByItemId(part.item_id);
+            const aq = Number(part.available_qty);
+            const il = Number.isFinite(aq);
+            if (il && Math.max(0, Math.floor(aq - sc)) <= 0) return;
             addSelectedPart(part.item_id);
           });
 
@@ -482,6 +528,7 @@
           }
 
           strip.appendChild(card);
+          garageCardCache.set(part.item_id, { card, part });
         });
       }
 
@@ -652,7 +699,13 @@
     statsEl.innerHTML = renderDeltaVPanel(stats) + renderPowerBalance(powerBalance);
   }
 
+  let previewTimer = null;
   async function refreshPreview() {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(doRefreshPreview, 150);
+  }
+
+  async function doRefreshPreview() {
     try {
       const data = await fetchJson("/api/shipyard/preview", {
         method: "POST",
@@ -713,7 +766,7 @@
       if (sourceRefreshTimer) clearInterval(sourceRefreshTimer);
       sourceRefreshTimer = setInterval(() => {
         refreshSourcesOnly().catch(() => {});
-      }, 5000);
+      }, 30000);
     } catch (err) {
       setMsg(err?.message || "Failed to load shipyard catalog.", true);
       renderGarage();

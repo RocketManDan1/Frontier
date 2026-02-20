@@ -2464,6 +2464,17 @@ def shipyard(request: Request):
     return FileResponse(str(APP_DIR / "static" / "shipyard.html"))
 
 
+@app.get("/sites")
+def sites(request: Request):
+    conn = connect_db()
+    try:
+        if not get_current_user(conn, request):
+            return RedirectResponse(url="/login", status_code=302)
+    finally:
+        conn.close()
+    return FileResponse(str(APP_DIR / "static" / "sites.html"))
+
+
 @app.get("/profile")
 def profile(request: Request):
     conn = connect_db()
