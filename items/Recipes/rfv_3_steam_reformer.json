@@ -1,0 +1,38 @@
+{
+  "recipe_id": "rfv_3_steam_reformer",
+  "name": "Assemble RFV-3 \"Steam Reformer\"",
+  "output_item_id": "rfv_3_steam_reformer",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 17.14
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 17.14
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 10.71
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 9.29
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 8.57
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 8.58
+    }
+  ],
+  "build_time_s": 6000,
+  "facility_type": "shipyard",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 3,
+  "power_kw": 940,
+  "byproducts": []
+}

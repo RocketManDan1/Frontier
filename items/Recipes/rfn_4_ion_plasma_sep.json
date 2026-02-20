@@ -1,0 +1,46 @@
+{
+  "recipe_id": "rfn_4_ion_plasma_sep",
+  "name": "Assemble RFN-4 \"Ion Plasma Sep\"",
+  "output_item_id": "rfn_4_ion_plasma_sep",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 58.5
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 58.5
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 42.25
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 42.25
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 39.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 32.5
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 32.5
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 19.5
+    }
+  ],
+  "build_time_s": 22200,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 3090,
+  "byproducts": []
+}

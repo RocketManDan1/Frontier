@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "refineries_lithic",
+  "display_name": "Lithic Processing Refinery",
+  "notes": [
+    "Processes silicate and oxide raw materials into advanced ceramics, semiconductor-grade compounds, and megastructure-class structural matrix.",
+    "throughput_mult scales how quickly a batch completes relative to the recipe's base build_time_s.",
+    "efficiency is the fraction of listed input materials consumed per batch; values below 1.0 represent material savings from process optimization.",
+    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "max_concurrent_recipes is the number of recipe slots that can run in parallel.",
+    "Draws electric_mw from the ship or base power bus at all times the facility is active.",
+    "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "rfl_1_sagger.json",
+    "rfl_2_calciner.json",
+    "rfl_3_plasmatron.json",
+    "rfl_4_synthesiser.json"
+  ]
+}

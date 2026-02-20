@@ -1,0 +1,26 @@
+{
+  "recipe_id": "rbn_1b_cyclops",
+  "name": "Assemble RBN-1B \"Cyclops\"",
+  "output_item_id": "rbn_1b_cyclops",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 3.52
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 1.92
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 0.96
+    }
+  ],
+  "build_time_s": 600,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 1,
+  "power_kw": 100,
+  "byproducts": []
+}

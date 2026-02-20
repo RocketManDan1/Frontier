@@ -1,0 +1,20 @@
+{
+  "id": "rfm_2_induction_forge",
+  "name": "RFM-2 \"Induction Forge\"",
+  "research_node": "vacuum_metallurgy",
+  "research_unlock_level": 2,
+  "branch": "metallurgy",
+  "mass_t": 38,
+  "power_requirements": {
+    "electric_mw": 2.8
+  },
+  "performance": {
+    "throughput_mult": 2.0,
+    "efficiency": 0.92,
+    "max_recipe_tier": 2,
+    "max_concurrent_recipes": 2,
+    "specialization": "metallurgy"
+  },
+  "description": "The Induction Forge combines vacuum induction melting (VIM) — the standard production route for aerospace-grade nickel superalloys at Rolls-Royce, GE Aviation, and Safran — with a carbon fiber pyrolysis chamber that converts carbon-volatile feedstock directly into continuous-fiber tow suitable for composite layup. VIM suspends the melt in an induction coil's electromagnetic field inside a vacuum vessel, isolating it from any crucible contamination and allowing close control of dissolved gas levels. The resulting ingots have inclusion ratings low enough for rotating turbomachinery components and orbital pressure vessels. The co-located pyrolysis chamber runs at 1,300–1,500°C in an inert argon sweep to convert polyacrylonitrile (PAN) or pitch precursors derived from carbon volatiles into high-modulus carbon fiber — the same oxidation-stabilization and carbonization steps used by Toray and SGL Group, adapted for batch operation in a sealed chamber. The two-chamber layout allows one melt cycle and one fiber run to proceed simultaneously, doubling effective throughput. The 8% material savings over the Bloomery comes primarily from reduced slag formation enabled by the cleaner VIM process.",
+  "ui_tags": ["VIM", "carbon_fiber", "tier_2", "aerospace_alloys"]
+}

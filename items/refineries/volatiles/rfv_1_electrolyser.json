@@ -1,0 +1,20 @@
+{
+  "id": "rfv_1_electrolyser",
+  "name": "RFV-1 \"Electrolyser\"",
+  "research_node": "basic_chemical_processing",
+  "research_unlock_level": 1,
+  "branch": "volatiles_cryogenics",
+  "mass_t": 6,
+  "power_requirements": {
+    "electric_mw": 0.25
+  },
+  "performance": {
+    "throughput_mult": 1.0,
+    "efficiency": 1.0,
+    "max_recipe_tier": 1,
+    "max_concurrent_recipes": 1,
+    "specialization": "volatiles_cryogenics"
+  },
+  "description": "The Electrolyser is the simplest and most essential chemical processing unit in the volatiles branch: a proton-exchange membrane (PEM) electrolyser stack derived directly from industrial water-splitting technology deployed today by ITM Power, Nel ASA, and Siemens Energy for green hydrogen production. Water ice feedstock is melted by waste heat from the power bus, de-ionized through a resin-bed demineralizer to protect the membrane, and split at the cell stack into hydrogen and oxygen streams by DC current. The two product gases are compressed by oil-free diaphragm compressors, stored in composite overwrap pressure vessels (COPV), and further cooled by Joule-Thomson expansion to produce liquid oxygen (LOX) and liquid hydrogen (LH₂) for propellant storage. At tier-1, the unit is a single-stack design with no redundancy — any membrane cell failure requires a stack swap from the spares locker. Despite its simplicity, the Electrolyser underpins every subsequent volatiles operation: the hydrogen it produces feeds the Sabatier and Fischer-Tropsch reactions at higher tiers, and the oxygen byproduct drives life support and combustion wherever needed. Power draw is dominated by the electrolysis stack; the compression and liquefaction systems draw the remainder.",
+  "ui_tags": ["PEM_electrolysis", "hydrolox", "tier_1", "propellant"]
+}

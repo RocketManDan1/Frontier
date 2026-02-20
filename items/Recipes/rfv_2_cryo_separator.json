@@ -1,0 +1,26 @@
+{
+  "recipe_id": "rfv_2_cryo_separator",
+  "name": "Assemble RFV-2 \"Cryo Separator\"",
+  "output_item_id": "rfv_2_cryo_separator",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 14.67
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 8.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 4.0
+    }
+  ],
+  "build_time_s": 2400,
+  "facility_type": "shipyard",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 2,
+  "power_kw": 370,
+  "byproducts": []
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "refineries_volatiles",
+  "display_name": "Volatiles & Cryogenics Refinery",
+  "notes": [
+    "Processes volatile and molecular feedstocks (water ice, carbon and nitrogen volatiles, carbon-chain organics) into propellants, cryogenic polymers, and biosphere support materials.",
+    "throughput_mult scales batch completion speed relative to the recipe's base build_time_s.",
+    "efficiency is the fraction of listed input materials consumed; values below 1.0 represent improved molecular yield.",
+    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "max_concurrent_recipes is the number of recipe slots running in parallel.",
+    "Draws electric_mw from the ship or base power bus continuously while active.",
+    "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "rfv_1_electrolyser.json",
+    "rfv_2_cryo_separator.json",
+    "rfv_3_steam_reformer.json",
+    "rfv_4_plasma_cracker.json"
+  ]
+}

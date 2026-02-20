@@ -1,0 +1,38 @@
+{
+  "recipe_id": "rfm_3_vacuum_arc",
+  "name": "Assemble RFM-3 \"Vacuum Arc\"",
+  "output_item_id": "rfm_3_vacuum_arc",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 37.71
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 37.71
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 23.57
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 20.43
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 18.86
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 18.86
+    }
+  ],
+  "build_time_s": 10500,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 1510,
+  "byproducts": []
+}

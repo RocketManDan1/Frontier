@@ -1,0 +1,38 @@
+{
+  "recipe_id": "gcn_3b_archon",
+  "name": "Assemble GCN-3B \"Archon\"",
+  "output_item_id": "gcn_3b_archon",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 29.14
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 29.14
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 18.21
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 15.79
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 14.57
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 14.58
+    }
+  ],
+  "build_time_s": 8700,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 1290,
+  "byproducts": []
+}

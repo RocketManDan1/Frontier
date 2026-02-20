@@ -1,0 +1,34 @@
+{
+  "recipe_id": "rbn_2b_zenith",
+  "name": "Assemble RBN-2B \"Zenith\"",
+  "output_item_id": "rbn_2b_zenith",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 6.5
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 7.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 5.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 4.5
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 2.0
+    }
+  ],
+  "build_time_s": 2400,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 2,
+  "power_kw": 360,
+  "byproducts": []
+}

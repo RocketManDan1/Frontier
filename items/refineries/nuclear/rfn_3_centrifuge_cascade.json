@@ -1,0 +1,20 @@
+{
+  "id": "rfn_3_centrifuge_cascade",
+  "name": "RFN-3 \"Centrifuge Cascade\"",
+  "research_node": "centrifuge_enrichment",
+  "research_unlock_level": 3,
+  "branch": "nuclear_exotic",
+  "mass_t": 95,
+  "power_requirements": {
+    "electric_mw": 18.0
+  },
+  "performance": {
+    "throughput_mult": 4.0,
+    "efficiency": 0.80,
+    "max_recipe_tier": 3,
+    "max_concurrent_recipes": 4,
+    "specialization": "nuclear_exotic"
+  },
+  "description": "The Centrifuge Cascade is modeled on the gaseous centrifuge enrichment technology commercialized by the URENCO consortium (UK-Netherlands-Germany) beginning in the 1970s and later independently developed by the US Enrichment Corporation (USEC) at Paducah and Portsmouth. Each centrifuge machine spins UF₆ gas at 50,000–70,000 RPM inside a corrosion-resistant carbon-fiber rotor, creating a centrifugal gradient 1,000,000 times Earth gravity at the rotor wall — strong enough to separate isotopes by mass difference. Individual machines provide only a small separation factor (~1.3), but cascading hundreds or thousands in series and parallel multiplies the effect to produce weapons-grade or power-reactor-grade output from natural uranium feed. The facility contains 128 centrifuge machines arranged in four independently operable cascades of 32, with a fifth and sixth cascade dedicated to exotic isotope separation (Li-6, He-3, specific rare-earth isotopes) for fusion fuel and superconductor feedstock. The 20% efficiency advantage over the Thermal Diffuser arises partly from the higher intrinsic separation factor and partly from the ability to route exotic-isotope streams through the dedicated separations cascades rather than accepting full feedstock loss. At full utilization the four main cascades run simultaneously, enabling the four-slot concurrent-recipe capability.",
+  "ui_tags": ["gas_centrifuge", "URENCO", "cascade", "tier_3", "fusion_fuel"]
+}

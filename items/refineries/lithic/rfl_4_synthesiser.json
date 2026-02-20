@@ -1,0 +1,20 @@
+{
+  "id": "rfl_4_synthesiser",
+  "name": "RFL-4 \"Synthesiser\"",
+  "research_node": "molecular_deposition",
+  "research_unlock_level": 4,
+  "branch": "lithic_processing",
+  "mass_t": 180,
+  "power_requirements": {
+    "electric_mw": 15.0
+  },
+  "performance": {
+    "throughput_mult": 8.0,
+    "efficiency": 0.68,
+    "max_recipe_tier": 4,
+    "max_concurrent_recipes": 6,
+    "specialization": "lithic_processing"
+  },
+  "description": "The Synthesiser is the apex of lithic process engineering: a combined molecular beam epitaxy (MBE), physical vapor deposition (PVD), and high-flux plasma sintering facility capable of growing atomically precise ceramic and semiconductor structures layer by layer. The design heritage runs from the first MBE chambers built at Bell Labs in the 1960s through the MOCVD reactors that define modern III-V semiconductor manufacturing — scaled, ruggedized, and redesigned for vacuum operation without Earth's atmospheric contamination buffer. The six independent growth chambers are served by a central ultra-high-vacuum (UHV) interconnect at 10⁻¹⁰ torr, allowing wafers and substrates to transfer between chambers without breaking vacuum — a critical requirement for multi-layer heterostructure growth. The 32% feedstock efficiency improvement over base tier arises from atomic-layer precision: virtually no material is deposited where it is not needed, and exhaust effluent is recaptured and metered back into the source flange. At this tier, the Synthesiser is less a refinery than a fabrication instrument — the boundary between raw material processing and precision manufacturing has dissolved. Multiple installations at a large orbital station begin to resemble a semiconductor foundry.",
+  "ui_tags": ["MBE", "PVD", "UHV", "tier_4", "atomic_deposition"]
+}

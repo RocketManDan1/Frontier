@@ -1,0 +1,38 @@
+{
+  "recipe_id": "rfn_3_centrifuge_cascade",
+  "name": "Assemble RFN-3 \"Centrifuge Cascade\"",
+  "output_item_id": "rfn_3_centrifuge_cascade",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 32.57
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 32.57
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 20.36
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 17.64
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 16.29
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 16.28
+    }
+  ],
+  "build_time_s": 9600,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 1380,
+  "byproducts": []
+}

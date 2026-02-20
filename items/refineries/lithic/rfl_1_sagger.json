@@ -1,0 +1,20 @@
+{
+  "id": "rfl_1_sagger",
+  "name": "RFL-1 \"Sagger\"",
+  "research_node": "basic_material_processing",
+  "research_unlock_level": 1,
+  "branch": "lithic_processing",
+  "mass_t": 8,
+  "power_requirements": {
+    "electric_mw": 0.35
+  },
+  "performance": {
+    "throughput_mult": 1.0,
+    "efficiency": 1.0,
+    "max_recipe_tier": 1,
+    "max_concurrent_recipes": 1,
+    "specialization": "lithic_processing"
+  },
+  "description": "The Sagger takes its name from the refractory clay boxes — saggers — used for centuries in ceramics kilns to shield wares from direct flame and ash contamination. The unit is a continuous rotary kiln and spray-calcination chamber derived directly from industrial Portland-cement and alumina-calcination technology scaled for microgravity operation. Raw silicate rock and oxide feedstock enter through an airlock-fed hopper, tumble through a heated refractory tube at controlled residence times, and exit as a calcined powder ready for sintering or wet-chemical processing downstream. All bearings are magnetic, eliminating tribological failure in vacuum. The Sagger can produce basic ceramics (advanced_ceramics) and consolidate bulk regolith into megastructure-grade matrix (megastructure_mass) at tier-1 throughput. It is deliberately dumb: no plasma, no vapor-phase chemistry, no isotope handling. That simplicity makes it the standard first installation for any new settlement — something a two-person crew can commission in a day using tools from the landing kit.",
+  "ui_tags": ["kiln", "rotary_calcination", "tier_1", "ceramics"]
+}

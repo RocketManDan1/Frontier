@@ -1,0 +1,20 @@
+{
+  "id": "rfl_2_calciner",
+  "name": "RFL-2 \"Calciner\"",
+  "research_node": "advanced_ceramics_fabrication",
+  "research_unlock_level": 2,
+  "branch": "lithic_processing",
+  "mass_t": 22,
+  "power_requirements": {
+    "electric_mw": 1.4
+  },
+  "performance": {
+    "throughput_mult": 2.0,
+    "efficiency": 0.92,
+    "max_recipe_tier": 2,
+    "max_concurrent_recipes": 2,
+    "specialization": "lithic_processing"
+  },
+  "description": "The Calciner is a second-generation lithic facility built around a multi-zone tunnel furnace with independently controlled temperature profiles in each zone — a design borrowed from modern structural-ceramic and glass-ceramic manufacturing. The real capability advance over the Sagger is the addition of a sol-gel wet chemistry module: silicate feedstock can be dissolved, purified by selective precipitation, and re-dried into extremely pure precursor powders before thermal processing. This purity unlock is what enables semiconductor-grade silicon carbide and silicon nitride production (semiconductor_materials). The two-chamber design runs one batch through wet prep while a second is in the thermal stage, doubling effective throughput. A 8% feedstock recovery improvement over the Sagger comes from recapturing calcination off-gases and recycling their condensate back into the sol-gel loop — a process first demonstrated on Earth in the alumina refining industry and adapted here for in-situ resource utilization. Power draw includes resistive heating elements, the wet-chemistry pumps, and the gas-handling system for off-gas recovery.",
+  "ui_tags": ["tunnel_kiln", "sol_gel", "tier_2", "semiconductors"]
+}

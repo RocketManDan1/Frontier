@@ -1,0 +1,46 @@
+{
+  "recipe_id": "gcn_4a_titan",
+  "name": "Assemble GCN-4A \"Titan\"",
+  "output_item_id": "gcn_4a_titan",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 40.5
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 40.5
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 29.25
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 29.25
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 27.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 22.5
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 22.5
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 13.5
+    }
+  ],
+  "build_time_s": 17100,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 2480,
+  "byproducts": []
+}

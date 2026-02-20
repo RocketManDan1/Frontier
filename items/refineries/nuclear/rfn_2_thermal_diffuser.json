@@ -1,0 +1,20 @@
+{
+  "id": "rfn_2_thermal_diffuser",
+  "name": "RFN-2 \"Thermal Diffuser\"",
+  "research_node": "isotope_separation",
+  "research_unlock_level": 2,
+  "branch": "nuclear_exotic",
+  "mass_t": 35,
+  "power_requirements": {
+    "electric_mw": 6.0
+  },
+  "performance": {
+    "throughput_mult": 2.0,
+    "efficiency": 0.92,
+    "max_recipe_tier": 2,
+    "max_concurrent_recipes": 2,
+    "specialization": "nuclear_exotic"
+  },
+  "description": "The Thermal Diffuser is a direct descendant of the S-50 liquid thermal diffusion plant built at Oak Ridge in 1944-45 as part of the Manhattan Project — the first large-scale isotope separation process to operate, pre-dating the calutrons and gaseous diffusion plants that ultimately won the war. The operating principle exploits the Soret effect: in a fluid with a temperature gradient, heavier isotopes migrate toward the cooler wall while lighter isotopes migrate toward the hot wall, producing a slow but continuous partial separation. The unit converts radioactive ore feedstock to uranium hexafluoride (UF₆) by fluorination in a sealed chamber, then passes the gas through an array of twelve concentric-tube thermal diffusion columns — each an inner heated pipe and an outer cooled wall — where partial enrichment accumulates over multiple passes through a cascade configuration. This process requires large amounts of heat exchange power and is inherently inefficient (the S-50 consumed more electricity than the entire city of Knoxville for a relatively small isotopic gain), but requires no spinning machinery and has no vibration-sensitive components — making it more suitable for microgravity deployment than centrifuges. The output feeds directly into the Pelletiser's sintering stage to produce low-grade reactor pellets at higher-than-natural fissile content.",
+  "ui_tags": ["thermal_diffusion", "UF6", "Soret_effect", "tier_2", "enrichment"]
+}

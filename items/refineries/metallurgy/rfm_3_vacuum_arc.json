@@ -1,0 +1,20 @@
+{
+  "id": "rfm_3_vacuum_arc",
+  "name": "RFM-3 \"Vacuum Arc\"",
+  "research_node": "electron_beam_metallurgy",
+  "research_unlock_level": 3,
+  "branch": "metallurgy",
+  "mass_t": 110,
+  "power_requirements": {
+    "electric_mw": 10.0
+  },
+  "performance": {
+    "throughput_mult": 4.0,
+    "efficiency": 0.80,
+    "max_recipe_tier": 3,
+    "max_concurrent_recipes": 4,
+    "specialization": "metallurgy"
+  },
+  "description": "The Vacuum Arc takes its name from the vacuum arc remelting (VAR) process, but pairs it with an electron beam melt (EBM) furnace in a tandem configuration that covers both the refractory-metal and the superalloy processing routes. VAR — standard production for aerospace titanium (Boeing 787, SpaceX Merlin) and nickel disk alloys — passes a high-current DC arc through a consumable electrode inside a water-cooled copper mold under hard vacuum, melting the electrode tip-first and allowing controlled solidification. The EBM section fires a 10–60 kW electron beam at the feedstock surface inside a separate 10⁻⁵ torr chamber, enabling processing of high-vapor-pressure refractory metals (tungsten, molybdenum, rhenium) that would evaporate or oxidize under any other process. Four independently controlled melt stations allow simultaneous processing of different alloy grades, and the facility's digital solidification-rate controller produces columnar grain structures that double fatigue life compared to conventionally cast material. The 20% efficiency gain arises from closed-loop composition tracking — the electron beam's spectroscopic emission analysis continuously verifies melt chemistry in real time, eliminating the off-spec batches common at lower tiers.",
+  "ui_tags": ["VAR", "EBM", "tier_3", "refractory_metals"]
+}

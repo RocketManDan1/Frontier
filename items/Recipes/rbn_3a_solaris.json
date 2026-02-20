@@ -1,0 +1,38 @@
+{
+  "recipe_id": "rbn_3a_solaris",
+  "name": "Assemble RBN-3A \"Solaris\"",
+  "output_item_id": "rbn_3a_solaris",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 15.09
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 15.09
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 12.34
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 9.6
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 8.23
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 8.22
+    }
+  ],
+  "build_time_s": 6000,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 920,
+  "byproducts": []
+}

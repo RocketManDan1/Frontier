@@ -1,0 +1,20 @@
+{
+  "id": "rfn_4_ion_plasma_sep",
+  "name": "RFN-4 \"Ion Plasma Sep\"",
+  "research_node": "plasma_isotope_separation",
+  "research_unlock_level": 4,
+  "branch": "nuclear_exotic",
+  "mass_t": 260,
+  "power_requirements": {
+    "electric_mw": 50.0
+  },
+  "performance": {
+    "throughput_mult": 8.0,
+    "efficiency": 0.68,
+    "max_recipe_tier": 4,
+    "max_concurrent_recipes": 6,
+    "specialization": "nuclear_exotic"
+  },
+  "description": "The Ion Plasma Sep is the endgame of isotope separation technology: a combined ion-cyclotron resonance (ICR) plasma separator and laser isotope separation (LIS) facility that can achieve high enrichment factors in a single stage — a task requiring hundreds of centrifuge machines at lower tiers. The ICR principle exploits the fact that ions of different mass orbit a magnetic field at different cyclotron frequencies; a resonant RF field applied at exactly one isotope's frequency selectively heats and expels that isotope while leaving others in the plasma cold, producing near-complete isotopic separation in microseconds. The LIS section (based on the SILEX — Separation of Isotopes by Laser EXcitation — process developed in Australia and licensed to GE-Hitachi) selectively photoionizes specific isotopes using tuned laser pulses, allowing electrostatic collection of the target species with isotopic purity approaching 99.99%. Six chambers operate in combination: two ICR separators for heavy fissile isotopes (U-235, Pu-239) and rare fission products, two SILEX chambers for light exotic isotopes (Li-6, He-3, B-10), and two dedicated exotic-element synthesis chambers for precision production of transuranic and rare-earth compounds required for advanced superconductors and high-grade reactor pellets. The 32% feedstock efficiency gain reflects the near-unity separation factor — at this technology level, virtually every target atom in the feedstock is captured and routed to product rather than waste.",
+  "ui_tags": ["ICR_plasma", "SILEX", "laser_isotope", "tier_4", "advanced_enrichment"]
+}

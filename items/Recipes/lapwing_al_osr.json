@@ -1,0 +1,26 @@
+{
+  "recipe_id": "lapwing_al_osr",
+  "name": "Assemble Al/OSR Panel \"Lapwing\"",
+  "output_item_id": "lapwing_al_osr",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 3.85
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 2.1
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 1.05
+    }
+  ],
+  "build_time_s": 600,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 1,
+  "power_kw": 100,
+  "byproducts": []
+}

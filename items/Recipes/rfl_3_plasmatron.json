@@ -1,0 +1,38 @@
+{
+  "recipe_id": "rfl_3_plasmatron",
+  "name": "Assemble RFL-3 \"Plasmatron\"",
+  "output_item_id": "rfl_3_plasmatron",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 20.57
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 20.57
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 12.86
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 11.14
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 10.29
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 10.28
+    }
+  ],
+  "build_time_s": 6900,
+  "facility_type": "shipyard",
+  "refinery_category": "lithic_processing",
+  "min_tech_tier": 3,
+  "power_kw": 1050,
+  "byproducts": []
+}

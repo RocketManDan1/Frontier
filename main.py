@@ -20,6 +20,7 @@ from auth_router import router as auth_router
 from auth_service import ensure_default_admin_account, get_current_user, require_admin, require_login
 from catalog_router import router as catalog_router
 import catalog_service
+from industry_router import router as industry_router
 from inventory_router import router as inventory_router
 from location_router import router as location_router
 from shipyard_router import router as shipyard_router
@@ -50,6 +51,7 @@ app.include_router(admin_game_router)
 app.include_router(auth_router)
 app.include_router(catalog_router)
 app.include_router(fleet_router)
+app.include_router(industry_router)
 app.include_router(inventory_router)
 app.include_router(location_router)
 app.include_router(shipyard_router)
@@ -513,6 +515,11 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
 @lru_cache(maxsize=1)
 def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_constructor_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_refinery_catalog()
 
 
 @lru_cache(maxsize=1)
@@ -1091,6 +1098,7 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
         radiator_catalog=load_radiator_catalog(),
         robonaut_catalog=load_robonaut_catalog(),
         constructor_catalog=load_constructor_catalog(),
+        refinery_catalog=load_refinery_catalog(),
     )
 
 
@@ -2153,6 +2161,7 @@ def build_shipyard_catalog_payload() -> Dict[str, Any]:
         radiator_catalog=load_radiator_catalog(),
         robonaut_catalog=load_robonaut_catalog(),
         constructor_catalog=load_constructor_catalog(),
+        refinery_catalog=load_refinery_catalog(),
     )
 
 

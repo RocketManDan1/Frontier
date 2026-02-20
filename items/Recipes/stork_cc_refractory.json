@@ -1,0 +1,38 @@
+{
+  "recipe_id": "stork_cc_refractory",
+  "name": "Assemble C/C Refractory \"Stork\"",
+  "output_item_id": "stork_cc_refractory",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "carbon_composites",
+      "qty": 4.5
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 2.83
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 2.31
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 1.67
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 0.9
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 0.65
+    }
+  ],
+  "build_time_s": 1500,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 270,
+  "byproducts": []
+}

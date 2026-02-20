@@ -1,0 +1,20 @@
+{
+  "id": "rfv_3_steam_reformer",
+  "name": "RFV-3 \"Steam Reformer\"",
+  "research_node": "catalytic_reforming",
+  "research_unlock_level": 3,
+  "branch": "volatiles_cryogenics",
+  "mass_t": 50,
+  "power_requirements": {
+    "electric_mw": 4.2
+  },
+  "performance": {
+    "throughput_mult": 4.0,
+    "efficiency": 0.80,
+    "max_recipe_tier": 3,
+    "max_concurrent_recipes": 4,
+    "specialization": "volatiles_cryogenics"
+  },
+  "description": "The Steam Reformer is a multi-reaction chemical plant that runs three catalytic processes in parallel across its four chambers: steam methane reforming (SMR), the Sabatier reaction (CO₂ + 4H₂ → CH₄ + 2H₂O), and Fischer-Tropsch (FT) synthesis of higher hydrocarbons from syngas. SMR is the backbone of industrial hydrogen production on Earth (97% of all H₂ is made this way); the Sabatier is the CO₂ conversion process used on the ISS to recycle carbon dioxide back into methane propellant. FT synthesis — the same chemistry that powered Germany's World War II synthetic fuel program and South Africa's Sasol plants through apartheid-era oil embargoes — produces long-chain hydrocarbons from the CO + H₂ syngas mixture, yielding high-energy propellant feedstocks (high_energy_propellant_feedstock) and the precursor organics for cryo-polymers and biosphere materials. The four chambers give the flexibility to balance the process mix in response to feedstock availability and demand. The 20% material efficiency advantage comes from tight heat integration: the exothermic FT reaction provides thermal energy to the endothermic SMR reaction through a counter-flow heat exchanger, cutting the external electric heating demand significantly.",
+  "ui_tags": ["SMR", "Sabatier", "Fischer_Tropsch", "tier_3", "syngas"]
+}

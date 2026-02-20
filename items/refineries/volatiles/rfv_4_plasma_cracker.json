@@ -1,0 +1,20 @@
+{
+  "id": "rfv_4_plasma_cracker",
+  "name": "RFV-4 \"Plasma Cracker\"",
+  "research_node": "thermochemical_cracking",
+  "research_unlock_level": 4,
+  "branch": "volatiles_cryogenics",
+  "mass_t": 140,
+  "power_requirements": {
+    "electric_mw": 12.0
+  },
+  "performance": {
+    "throughput_mult": 8.0,
+    "efficiency": 0.68,
+    "max_recipe_tier": 4,
+    "max_concurrent_recipes": 6,
+    "specialization": "volatiles_cryogenics"
+  },
+  "description": "The Plasma Cracker is a non-equilibrium plasma thermochemical reactor that supersedes catalytic reforming by replacing thermal activation with direct electron-impact dissociation of molecular feedstocks. Where the Steam Reformer relies on surface catalysts operating at 800–900°C, the Plasma Cracker drives the same bond-breaking reactions at near-ambient bulk temperature using a non-thermal plasma — electrons at 10,000–50,000 K in a gas that remains below 200°C overall. This decoupling of electron energy from gas temperature eliminates catalyst poisoning, enables direct cracking of refractory organics that would foul a conventional reformer, and allows rapid on/off cycling without thermal soak delays. The technology descends from dielectric barrier discharge (DBD) plasma reactors under active development at DIFFER (Netherlands), Eindhoven University, and several commercial spinouts for methane-to-methanol conversion. Six chambers, each with independently tunable power density and residence time, can simultaneously crack different feedstock grades — from simple water ice to complex nitrogen-volatile or sulfur-bearing organic streams — without cross-contamination. The 32% feedstock efficiency advantage arises from the ability to convert nearly every carbon and hydrogen atom in the feedstock stream into targeted product molecules, leaving only inert residue rather than the CO₂ and water byproducts inherent in thermal reforming.",
+  "ui_tags": ["plasma_DBD", "thermochemical", "tier_4", "molecular_cracking"]
+}

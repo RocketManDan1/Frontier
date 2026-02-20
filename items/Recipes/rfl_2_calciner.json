@@ -1,0 +1,26 @@
+{
+  "recipe_id": "rfl_2_calciner",
+  "name": "Assemble RFL-2 \"Calciner\"",
+  "output_item_id": "rfl_2_calciner",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 20.17
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 11.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 5.5
+    }
+  ],
+  "build_time_s": 3000,
+  "facility_type": "shipyard",
+  "refinery_category": "lithic_processing",
+  "min_tech_tier": 2,
+  "power_kw": 450,
+  "byproducts": []
+}

@@ -1,0 +1,20 @@
+{
+  "id": "rfn_1_pelletiser",
+  "name": "RFN-1 \"Pelletiser\"",
+  "research_node": "basic_nuclear_fuels",
+  "research_unlock_level": 1,
+  "branch": "nuclear_exotic",
+  "mass_t": 12,
+  "power_requirements": {
+    "electric_mw": 0.8
+  },
+  "performance": {
+    "throughput_mult": 1.0,
+    "efficiency": 1.0,
+    "max_recipe_tier": 1,
+    "max_concurrent_recipes": 1,
+    "specialization": "nuclear_exotic"
+  },
+  "description": "The Pelletiser replicates in compact form the UO₂ fuel pellet fabrication process used in every commercial light-water reactor on Earth — a process first industrialized in the 1950s and now producing tens of thousands of tonnes of fuel annually at facilities like BNFL Springfields and Westinghouse Columbia. Radioactive ore feedstock is milled to a controlled particle size distribution, blended with binders and sintering aids, pressed in a hydraulic die to net-pellet diameter and length tolerances of ±0.01 mm, and sintered at 1,700°C in a hydrogen atmosphere to achieve >95% theoretical density. The hydrogen atmosphere prevents oxidation during sintering and is recirculated through a palladium-membrane purifier to maintain purity. Each pellet is then center-ground to final diameter on an in-line cylindrical grinder before optical dimensional inspection and radiological assay. Output pellets meet the dimensional and density specifications for standard fuel-rod assembly. The Pelletiser handles only natural or lightly enriched radioactive feedstock at tier-1 — it has no isotope separation capability. That means it can produce low-grade reactor pellets directly but cannot upgrade fissile content beyond the feedstock's native isotopic ratio.",
+  "ui_tags": ["cold_press", "sinter", "tier_1", "reactor_pellets"]
+}

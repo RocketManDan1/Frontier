@@ -1,0 +1,20 @@
+{
+  "id": "rfv_2_cryo_separator",
+  "name": "RFV-2 \"Cryo Separator\"",
+  "research_node": "cryogenic_separation",
+  "research_unlock_level": 2,
+  "branch": "volatiles_cryogenics",
+  "mass_t": 16,
+  "power_requirements": {
+    "electric_mw": 1.2
+  },
+  "performance": {
+    "throughput_mult": 2.0,
+    "efficiency": 0.92,
+    "max_recipe_tier": 2,
+    "max_concurrent_recipes": 2,
+    "specialization": "volatiles_cryogenics"
+  },
+  "description": "The Cryo Separator is a cryogenic distillation column paired with a multi-stream heat exchanger and a carbon-chain polymerization chamber — the combination that unlocks cryo-polymer and biosphere-support material synthesis from raw volatile feedstocks. Cryogenic distillation is the industrial standard for separating atmospheric gases on Earth (Air Products, Linde Group operate facilities processing millions of tonnes per year); at this scale, the column processes the mixed volatile stream from asteroid or comet-derived feedstock into pure nitrogen, oxygen, argon, and carbon-chain fraction streams at the required purity grades. The separated carbon-volatile fraction feeds a continuous-flow catalytic polymerization reactor where controlled molecular weight distribution and crosslink density are achieved by varying temperature, pressure, and residence time — the same principles used in low-temperature polymer synthesis for aerospace thermal protection systems. The two-chamber layout (one distillation, one polymerization) runs simultaneous batches of different products. The 8% feedstock improvement over the Electrolyser comes from the closed-loop heat integration: the cryogenic cold duty from liquefying one stream pre-cools the feed for the next, reducing the total refrigeration power.",
+  "ui_tags": ["cryogenic_distillation", "polymerization", "tier_2", "cryo_polymers"]
+}

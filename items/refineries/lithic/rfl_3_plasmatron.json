@@ -1,0 +1,20 @@
+{
+  "id": "rfl_3_plasmatron",
+  "name": "RFL-3 \"Plasmatron\"",
+  "research_node": "plasma_synthesis",
+  "research_unlock_level": 3,
+  "branch": "lithic_processing",
+  "mass_t": 60,
+  "power_requirements": {
+    "electric_mw": 5.5
+  },
+  "performance": {
+    "throughput_mult": 4.0,
+    "efficiency": 0.80,
+    "max_recipe_tier": 3,
+    "max_concurrent_recipes": 4,
+    "specialization": "lithic_processing"
+  },
+  "description": "The Plasmatron replaces resistive and sol-gel processing with a plasma torch as the primary energy delivery mechanism — a design philosophy proven in plasma-spray thermal barrier coatings for gas turbines (Pratt & Whitney, GE Aviation) and later adapted for rapid sintering of complex oxides. An RF-coupled inductive plasma torch operating at 5,000–15,000 K instantaneously dissociates silicate feedstock to atomic species, which then recombine in a controlled quench zone into precisely engineered nanocrystalline phases impossible to achieve with conventional thermal ramps. The four parallel processing chambers are fed by a single plasma generator through a gas-distribution manifold, and each chamber can run a different recipe simultaneously, giving the four-slot concurrent-recipe capability. The 20% efficiency improvement over the Calciner comes from the plasma torch's ability to process stoichiometrically perfect feedstock mixtures with near-zero phase contamination, reducing waste and rework. Coupled with plasma-enhanced CVD coating modules, the Plasmatron can deposit conformal ceramic films onto substrates — a capability required for next-generation photovoltaic and sensor components.",
+  "ui_tags": ["plasma_torch", "PECVD", "tier_3", "nanocrystalline"]
+}

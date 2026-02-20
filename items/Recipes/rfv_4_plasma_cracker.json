@@ -1,0 +1,46 @@
+{
+  "recipe_id": "rfv_4_plasma_cracker",
+  "name": "Assemble RFV-4 \"Plasma Cracker\"",
+  "output_item_id": "rfv_4_plasma_cracker",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 31.5
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 31.5
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 22.75
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 22.75
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 21.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 17.5
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 17.5
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 10.5
+    }
+  ],
+  "build_time_s": 14400,
+  "facility_type": "shipyard",
+  "refinery_category": "volatiles_cryogenics",
+  "min_tech_tier": 4,
+  "power_kw": 2130,
+  "byproducts": []
+}

@@ -1,0 +1,46 @@
+{
+  "recipe_id": "rfm_4_plasma_refinery",
+  "name": "Assemble RFM-4 \"Plasma Refinery\"",
+  "output_item_id": "rfm_4_plasma_refinery",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 67.5
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 67.5
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 48.75
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 48.75
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 45.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 37.5
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 37.5
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 22.5
+    }
+  ],
+  "build_time_s": 24300,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 3370,
+  "byproducts": []
+}

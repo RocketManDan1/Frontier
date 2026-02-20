@@ -1,0 +1,38 @@
+{
+  "recipe_id": "sige_segmented_crane",
+  "name": "Assemble SiGe-Segmented \"Crane\"",
+  "output_item_id": "sige_segmented_crane",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 7.7
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 7.7
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 7.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 4.9
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 4.2
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 3.5
+    }
+  ],
+  "build_time_s": 4200,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 800,
+  "byproducts": []
+}

@@ -1,0 +1,20 @@
+{
+  "id": "rfm_1_bloomery",
+  "name": "RFM-1 \"Bloomery\"",
+  "research_node": "basic_metallurgy",
+  "research_unlock_level": 1,
+  "branch": "metallurgy",
+  "mass_t": 14,
+  "power_requirements": {
+    "electric_mw": 0.55
+  },
+  "performance": {
+    "throughput_mult": 1.0,
+    "efficiency": 1.0,
+    "max_recipe_tier": 1,
+    "max_concurrent_recipes": 1,
+    "specialization": "metallurgy"
+  },
+  "description": "The Bloomery is named after the ancient ironmaking bloomery furnace — humanity's first metallurgical reactor — in recognition that the unit performs the same fundamental operation: reducing metal oxides with a reductant (carbon monoxide in the original, electric arc plasma here) to yield elemental metal. The core is a small-format electric arc furnace (EAF), the same technology that produces roughly 70% of US steel today, scaled to 14 tonnes and re-engineered for vacuum operation by replacing the conventional open-bath design with a hermetic sealed-crucible variant. Iron and aluminum oxide feedstocks are charged through a vacuum lock, the arc strikes between consumable graphite electrodes and a water-cooled copper hearth, and molten metal pools at the bottom for tapping through a bottom-pour valve into casting molds. Carbon volatiles fed into the arc atmosphere participate in carbothermic reduction, yielding CO exhaust that is captured and recycled. The resulting ingot quality is adequate for structural shapes but lacks the cleanliness needed for aerospace fatigue-critical applications — that requires the Induction Forge or better. The Bloomery is, however, repairable with stock from any general workshop.",
+  "ui_tags": ["electric_arc", "carbothermic", "tier_1", "structural_alloys"]
+}

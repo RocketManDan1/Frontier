@@ -1,0 +1,46 @@
+{
+  "recipe_id": "advanced_skut_egret",
+  "name": "Assemble ASC-Skutterudite \"Egret\"",
+  "output_item_id": "advanced_skut_egret",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 9.45
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 8.93
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 8.4
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 7.88
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 6.3
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 5.25
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 3.68
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 2.61
+    }
+  ],
+  "build_time_s": 7200,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 1350,
+  "byproducts": []
+}

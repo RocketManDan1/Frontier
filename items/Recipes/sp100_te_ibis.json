@@ -1,0 +1,34 @@
+{
+  "recipe_id": "sp100_te_ibis",
+  "name": "Assemble SP-100 TE \"Ibis\"",
+  "output_item_id": "sp100_te_ibis",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 6.4
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 4.8
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 4.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 3.2
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 1.6
+    }
+  ],
+  "build_time_s": 2400,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 2,
+  "power_kw": 400,
+  "byproducts": []
+}

@@ -148,12 +148,58 @@ def _migration_0004_surface_sites(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0005_industry(conn: sqlite3.Connection) -> None:
+    """Add deployed equipment and production/mining job tables."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS deployed_equipment (
+          id TEXT PRIMARY KEY,
+          location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          item_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          deployed_at REAL NOT NULL,
+          deployed_by TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'idle',
+          config_json TEXT NOT NULL DEFAULT '{}',
+          FOREIGN KEY (deployed_by) REFERENCES users(username) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_deployed_equip_location
+          ON deployed_equipment(location_id);
+        CREATE INDEX IF NOT EXISTS idx_deployed_equip_category
+          ON deployed_equipment(location_id, category);
+
+        CREATE TABLE IF NOT EXISTS production_jobs (
+          id TEXT PRIMARY KEY,
+          location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          equipment_id TEXT NOT NULL REFERENCES deployed_equipment(id) ON DELETE CASCADE,
+          job_type TEXT NOT NULL,
+          recipe_id TEXT,
+          resource_id TEXT,
+          status TEXT NOT NULL DEFAULT 'active',
+          started_at REAL NOT NULL,
+          completes_at REAL NOT NULL,
+          inputs_json TEXT NOT NULL DEFAULT '[]',
+          outputs_json TEXT NOT NULL DEFAULT '[]',
+          created_by TEXT NOT NULL,
+          completed_at REAL,
+          FOREIGN KEY (created_by) REFERENCES users(username) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_production_jobs_location
+          ON production_jobs(location_id, status);
+        CREATE INDEX IF NOT EXISTS idx_production_jobs_equipment
+          ON production_jobs(equipment_id, status);
+        """
+    )
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
         Migration("0002_ships_runtime_columns", "Add ships runtime/stat columns", _migration_0002_ships_runtime_columns),
     Migration("0003_location_inventory", "Add scalable location inventory stack table", _migration_0003_location_inventory),
     Migration("0004_surface_sites", "Add surface sites and resource distribution tables", _migration_0004_surface_sites),
+    Migration("0005_industry", "Add deployed equipment and production/mining job tables", _migration_0005_industry),
     ]
 
 

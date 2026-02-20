@@ -1,0 +1,46 @@
+{
+  "recipe_id": "gcn_4b_demiurge",
+  "name": "Assemble GCN-4B \"Demiurge\"",
+  "output_item_id": "gcn_4b_demiurge",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 78.75
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 78.75
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 56.88
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 56.88
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 52.5
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 43.75
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 43.75
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 26.24
+    }
+  ],
+  "build_time_s": 27300,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 3700,
+  "byproducts": []
+}

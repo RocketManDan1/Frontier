@@ -1,0 +1,34 @@
+{
+  "recipe_id": "gcn_2a_hephaestus",
+  "name": "Assemble GCN-2A \"Hephaestus\"",
+  "output_item_id": "gcn_2a_hephaestus",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 6.33
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 3.67
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 3.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 2.33
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 1.34
+    }
+  ],
+  "build_time_s": 1800,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 2,
+  "power_kw": 280,
+  "byproducts": []
+}

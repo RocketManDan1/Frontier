@@ -1,0 +1,38 @@
+{
+  "recipe_id": "nerva2_aegis",
+  "name": "Assemble NERVA-2 \"Aegis\"",
+  "output_item_id": "nerva2_aegis",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 0.67
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 0.51
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 0.46
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 0.36
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 0.31
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 0.26
+    }
+  ],
+  "build_time_s": 600,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 170,
+  "byproducts": []
+}

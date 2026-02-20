@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "refineries_metallurgy",
+  "display_name": "Metallurgical Refinery",
+  "notes": [
+    "Processes metallic ore feedstocks and carbon precursors into structural alloys, carbon-fiber composites, and advanced aerospace materials.",
+    "throughput_mult scales batch completion speed relative to the recipe's base build_time_s.",
+    "efficiency is the fraction of listed input materials consumed; values below 1.0 represent yield improvements from process control.",
+    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "max_concurrent_recipes is the number of recipe slots running in parallel.",
+    "Draws electric_mw from the ship or base power bus continuously while active.",
+    "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "rfm_1_bloomery.json",
+    "rfm_2_induction_forge.json",
+    "rfm_3_vacuum_arc.json",
+    "rfm_4_plasma_refinery.json"
+  ]
+}

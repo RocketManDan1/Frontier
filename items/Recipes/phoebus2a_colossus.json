@@ -1,0 +1,38 @@
+{
+  "recipe_id": "phoebus2a_colossus",
+  "name": "Assemble Phoebus-2A \"Colossus\"",
+  "output_item_id": "phoebus2a_colossus",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 0.84
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 0.65
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 0.58
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 0.45
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 0.39
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 0.33
+    }
+  ],
+  "build_time_s": 900,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 190,
+  "byproducts": []
+}

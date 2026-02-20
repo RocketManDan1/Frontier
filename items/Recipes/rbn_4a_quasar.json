@@ -1,0 +1,46 @@
+{
+  "recipe_id": "rbn_4a_quasar",
+  "name": "Assemble RBN-4A \"Quasar\"",
+  "output_item_id": "rbn_4a_quasar",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 49.5
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 44.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 49.5
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 38.5
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 27.5
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 27.5
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 22.0
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 16.5
+    }
+  ],
+  "build_time_s": 19500,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 2800,
+  "byproducts": []
+}

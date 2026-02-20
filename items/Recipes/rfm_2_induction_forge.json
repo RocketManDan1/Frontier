@@ -1,0 +1,26 @@
+{
+  "recipe_id": "rfm_2_induction_forge",
+  "name": "Assemble RFM-2 \"Induction Forge\"",
+  "output_item_id": "rfm_2_induction_forge",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 34.83
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 19.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 9.5
+    }
+  ],
+  "build_time_s": 4500,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 2,
+  "power_kw": 620,
+  "byproducts": []
+}

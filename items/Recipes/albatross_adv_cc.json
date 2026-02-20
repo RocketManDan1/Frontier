@@ -1,0 +1,42 @@
+{
+  "recipe_id": "albatross_adv_cc",
+  "name": "Assemble Adv. C/C Panel \"Albatross\"",
+  "output_item_id": "albatross_adv_cc",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "carbon_composites",
+      "qty": 4.99
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 2.36
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 2.1
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 1.57
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 1.05
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 0.66
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.39
+    }
+  ],
+  "build_time_s": 1800,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 360,
+  "byproducts": []
+}

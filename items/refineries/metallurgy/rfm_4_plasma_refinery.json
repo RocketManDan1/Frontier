@@ -1,0 +1,20 @@
+{
+  "id": "rfm_4_plasma_refinery",
+  "name": "RFM-4 \"Plasma Refinery\"",
+  "research_node": "plasma_metallurgy",
+  "research_unlock_level": 4,
+  "branch": "metallurgy",
+  "mass_t": 300,
+  "power_requirements": {
+    "electric_mw": 25.0
+  },
+  "performance": {
+    "throughput_mult": 8.0,
+    "efficiency": 0.68,
+    "max_recipe_tier": 4,
+    "max_concurrent_recipes": 6,
+    "specialization": "metallurgy"
+  },
+  "description": "The Plasma Refinery is the engineering pinnacle of metallurgy: a facility in which atmospheric plasma arcs at 8,000–20,000 K serve simultaneously as the energy source, refining medium, and deposition instrument. The design descends from the transferred-arc plasma furnaces used in ferro-alloy production (Hatch, SMS group) and from the plasma spray forming research at Sandia National Laboratories, but operates at a scale and sophistication orders of magnitude beyond its precursors. The six processing chambers span the full metallurgical spectrum: two are plasma arc skull furnaces for ultra-clean remelting of complex multi-element alloys, two run plasma spray deposition to build near-net-shape structural components directly from feedstock powder, and two contain Bridgman directional solidification crucibles for single-crystal and oxide-dispersion-strengthened (ODS) alloy growth. The 32% feedstock efficiency advantage over base tier comes from full composition closure: the closed-cycle plasma produces no dross or slag, lost metal is recaptured from chamber walls as condensate and re-fed, and the near-net-shape spray forming chambers eliminate the machining waste inherent in cast-and-wrought approaches. Running at full throughput across all six chambers, the Plasma Refinery can supply the structural metal needs of a small orbital colony from asteroid-derived ore alone.",
+  "ui_tags": ["plasma_arc", "ODS_alloys", "single_crystal", "tier_4"]
+}

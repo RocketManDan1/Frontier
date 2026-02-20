@@ -799,6 +799,54 @@ def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog
 
 
+def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all refinery items from items/refineries/<family>/*.json."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    ref_root = APP_DIR / "items" / "refineries"
+    if not ref_root.exists() or not ref_root.is_dir():
+        return catalog
+    for family_dir in sorted(
+        [p for p in ref_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+    ):
+        family_path = family_dir / "family.json"
+        if not family_path.exists():
+            continue
+        try:
+            family = _load_json_file(family_path)
+        except ValueError:
+            continue
+        mainline_files = [str(v) for v in (family.get("mainline_files") or []) if str(v).strip()]
+        for rel in mainline_files:
+            file_path = family_dir / rel
+            if not file_path.exists():
+                continue
+            try:
+                entry = _load_json_file(file_path)
+            except ValueError:
+                continue
+            item_id = str(entry.get("id") or "").strip()
+            if not item_id:
+                continue
+            perf = entry.get("performance") or {}
+            power_req = entry.get("power_requirements") or {}
+            catalog[item_id] = {
+                "item_id": item_id,
+                "name": str(entry.get("name") or item_id),
+                "type": "refinery",
+                "category_id": "refinery",
+                "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+                "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
+                "throughput_mult": max(0.0, float(perf.get("throughput_mult") or 1.0)),
+                "efficiency": max(0.0, float(perf.get("efficiency") or 1.0)),
+                "max_recipe_tier": max(1, int(perf.get("max_recipe_tier") or 1)),
+                "max_concurrent_recipes": max(1, int(perf.get("max_concurrent_recipes") or 1)),
+                "specialization": str(perf.get("specialization") or ""),
+                "branch": str(entry.get("branch") or ""),
+                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+            }
+    return catalog
+
+
 def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Compute the thermal/electric/waste-heat balance from a list of normalized parts."""
     reactor_thermal_mw = 0.0
@@ -809,6 +857,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     radiator_heat_rejection_mw = 0.0
     robonaut_electric_mw = 0.0
     constructor_electric_mw = 0.0
+    refinery_electric_mw = 0.0
 
     for part in parts:
         cat = str(part.get("category_id") or part.get("type") or "").lower()
@@ -826,6 +875,8 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
             robonaut_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
         elif cat == "constructor":
             constructor_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
+        elif cat == "refinery":
+            refinery_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
 
     # Total thermal demand = thruster + generator input
     total_thermal_demand_mw = thruster_thermal_mw + generator_thermal_mw_input
@@ -835,7 +886,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     waste_heat_surplus_mw = generator_waste_heat_mw - radiator_heat_rejection_mw
 
     # Electric balance: generator output minus all electric consumers
-    electric_surplus_mw = generator_electric_mw - robonaut_electric_mw - constructor_electric_mw
+    electric_surplus_mw = generator_electric_mw - robonaut_electric_mw - constructor_electric_mw - refinery_electric_mw
 
     # Throttle cap: if reactor can't supply thruster, throttle is limited
     if thruster_thermal_mw > 0.0 and reactor_thermal_mw > 0.0:
@@ -857,6 +908,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
         "waste_heat_surplus_mw": round(waste_heat_surplus_mw, 1),
         "robonaut_electric_mw": round(robonaut_electric_mw, 1),
         "constructor_electric_mw": round(constructor_electric_mw, 1),
+        "refinery_electric_mw": round(refinery_electric_mw, 1),
         "electric_surplus_mw": round(electric_surplus_mw, 1),
         "max_throttle": round(max_throttle, 4),
     }
@@ -1273,6 +1325,7 @@ def normalize_parts(
     radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     robonaut_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     constructor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    refinery_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     if not isinstance(raw_parts, list):
         return []
@@ -1282,6 +1335,7 @@ def normalize_parts(
     _radiator_catalog = radiator_catalog or {}
     _robonaut_catalog = robonaut_catalog or {}
     _constructor_catalog = constructor_catalog or {}
+    _refinery_catalog = refinery_catalog or {}
 
     normalized: List[Dict[str, Any]] = []
     for entry in raw_parts:
@@ -1309,6 +1363,9 @@ def normalize_parts(
                 continue
             if label in _constructor_catalog:
                 normalized.append(dict(_constructor_catalog[label]))
+                continue
+            if label in _refinery_catalog:
+                normalized.append(dict(_refinery_catalog[label]))
                 continue
             category_id = canonical_item_category(label)
             normalized.append({"name": label, "type": category_id, "category_id": category_id})
@@ -1347,6 +1404,11 @@ def normalize_parts(
                 continue
             if raw_item_id and raw_item_id in _constructor_catalog:
                 merged = dict(_constructor_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
+                continue
+            if raw_item_id and raw_item_id in _refinery_catalog:
+                merged = dict(_refinery_catalog[raw_item_id])
                 merged.update(entry)
                 normalized.append(merged)
                 continue
@@ -1506,6 +1568,7 @@ def build_shipyard_catalog_payload(
     radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     robonaut_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     constructor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    refinery_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     parts: List[Dict[str, Any]] = []
 
@@ -1600,6 +1663,25 @@ def build_shipyard_catalog_payload(
                 "excavation_type": str(item.get("excavation_type") or ""),
                 "operational_environment": str(item.get("operational_environment") or "surface_gravity"),
                 "min_surface_gravity_ms2": float(item.get("min_surface_gravity_ms2") or 0.0),
+                "branch": str(item.get("branch") or ""),
+                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+            }
+        )
+
+    for item in (refinery_catalog or {}).values():
+        parts.append(
+            {
+                "item_id": item.get("item_id"),
+                "name": item.get("name"),
+                "type": "refinery",
+                "category_id": "refinery",
+                "mass_kg": float(item.get("mass_kg") or 0.0),
+                "electric_mw": float(item.get("electric_mw") or 0.0),
+                "throughput_mult": float(item.get("throughput_mult") or 1.0),
+                "efficiency": float(item.get("efficiency") or 1.0),
+                "max_recipe_tier": int(item.get("max_recipe_tier") or 1),
+                "max_concurrent_recipes": int(item.get("max_concurrent_recipes") or 1),
+                "specialization": str(item.get("specialization") or ""),
                 "branch": str(item.get("branch") or ""),
                 "research_unlock_level": int(item.get("research_unlock_level") or 1),
             }

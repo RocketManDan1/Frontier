@@ -1,0 +1,46 @@
+{
+  "recipe_id": "gcnr4000_hyperion",
+  "name": "Assemble GCNR-4000 \"Hyperion\"",
+  "output_item_id": "gcnr4000_hyperion",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 2.06
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 1.69
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 1.41
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 1.31
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 1.12
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 0.94
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 0.47
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 0.37
+    }
+  ],
+  "build_time_s": 2100,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 480,
+  "byproducts": []
+}

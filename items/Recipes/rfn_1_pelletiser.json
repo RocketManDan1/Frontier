@@ -1,0 +1,26 @@
+{
+  "recipe_id": "rfn_1_pelletiser",
+  "name": "Assemble RFN-1 \"Pelletiser\"",
+  "output_item_id": "rfn_1_pelletiser",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 13.2
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 7.2
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 3.6
+    }
+  ],
+  "build_time_s": 1800,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 1,
+  "power_kw": 220,
+  "byproducts": []
+}
