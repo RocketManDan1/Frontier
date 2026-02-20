@@ -125,11 +125,35 @@ def _migration_0003_location_inventory(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0004_surface_sites(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS surface_sites (
+          location_id TEXT PRIMARY KEY REFERENCES locations(id) ON DELETE CASCADE,
+          body_id TEXT NOT NULL,
+          orbit_node_id TEXT NOT NULL,
+          gravity_m_s2 REAL NOT NULL DEFAULT 0.0
+        );
+        CREATE INDEX IF NOT EXISTS idx_surface_sites_body ON surface_sites(body_id);
+
+        CREATE TABLE IF NOT EXISTS surface_site_resources (
+          site_location_id TEXT NOT NULL REFERENCES surface_sites(location_id) ON DELETE CASCADE,
+          resource_id TEXT NOT NULL,
+          mass_fraction REAL NOT NULL DEFAULT 0.0,
+          PRIMARY KEY (site_location_id, resource_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_site_resources_lookup
+          ON surface_site_resources(site_location_id);
+        """
+    )
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
         Migration("0002_ships_runtime_columns", "Add ships runtime/stat columns", _migration_0002_ships_runtime_columns),
     Migration("0003_location_inventory", "Add scalable location inventory stack table", _migration_0003_location_inventory),
+    Migration("0004_surface_sites", "Add surface sites and resource distribution tables", _migration_0004_surface_sites),
     ]
 
 

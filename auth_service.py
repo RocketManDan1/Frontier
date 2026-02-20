@@ -11,6 +11,19 @@ from fastapi import HTTPException, Request
 
 SESSION_COOKIE_NAME = "session_token"
 AUTH_PASSWORD_SALT = os.environ.get("AUTH_PASSWORD_SALT", "earthmoon_auth_salt_v1")
+DEV_SKIP_AUTH = os.environ.get("DEV_SKIP_AUTH", "").strip().lower() in ("1", "true", "yes")
+
+
+class _FakeAdminRow:
+    """Dict-like object returned when auth is bypassed via DEV_SKIP_AUTH."""
+    def __getitem__(self, key: str) -> Any:
+        return {"username": "admin", "is_admin": 1, "created_at": 0.0}.get(key)
+    def __contains__(self, key: str) -> bool:
+        return key in ("username", "is_admin", "created_at")
+    def get(self, key: str, default: Any = None) -> Any:
+        return self[key] if key in self else default
+
+_FAKE_ADMIN = _FakeAdminRow()
 
 
 def hash_password(username: str, password: str) -> str:
@@ -45,6 +58,8 @@ def get_user_by_session_token(conn: sqlite3.Connection, token: str) -> Optional[
 
 
 def get_current_user(conn: sqlite3.Connection, request: Request) -> Optional[sqlite3.Row]:
+    if DEV_SKIP_AUTH:
+        return _FAKE_ADMIN  # type: ignore[return-value]
     token = (request.cookies.get(SESSION_COOKIE_NAME) or "").strip()
     if not token:
         return None
@@ -52,6 +67,8 @@ def get_current_user(conn: sqlite3.Connection, request: Request) -> Optional[sql
 
 
 def require_login(conn: sqlite3.Connection, request: Request) -> sqlite3.Row:
+    if DEV_SKIP_AUTH:
+        return _FAKE_ADMIN  # type: ignore[return-value]
     user = get_current_user(conn, request)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -59,6 +76,8 @@ def require_login(conn: sqlite3.Connection, request: Request) -> sqlite3.Row:
 
 
 def require_admin(conn: sqlite3.Connection, request: Request) -> sqlite3.Row:
+    if DEV_SKIP_AUTH:
+        return _FAKE_ADMIN  # type: ignore[return-value]
     user = require_login(conn, request)
     if not int(user["is_admin"]):
         raise HTTPException(status_code=403, detail="Admin access required")

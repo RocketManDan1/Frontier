@@ -210,6 +210,13 @@
       "anchor_body_id": "moon"
     },
     {
+      "id": "grp_moon_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_moon",
+      "sort_order": 30,
+      "anchor_body_id": "moon"
+    },
+    {
       "id": "grp_mars_orbits",
       "name": "Orbits",
       "parent_id": "grp_mars",
@@ -333,5 +340,151 @@
     { "from_id": "ZOOZVE", "to_id": "VEN_ORB", "dv_m_s": 900, "tof_s": 259200 },
     { "from_id": "VEN_HEO", "to_id": "ZOOZVE", "dv_m_s": 900, "tof_s": 172800 },
     { "from_id": "ZOOZVE", "to_id": "VEN_HEO", "dv_m_s": 700, "tof_s": 172800 }
+  ],
+  "surface_sites": [
+    {
+      "id": "LUNA_SHACKLETON",
+      "name": "Shackleton Rim (S Pole)",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 10,
+      "angle_deg": -90,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.45,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.12,
+        "magnesium_oxides": 0.07,
+        "titanium_oxides": 0.02,
+        "water_ice": 0.18,
+        "sulfur_compounds": 0.02,
+        "precious_rare_metals": 0.002,
+        "radioactives": 0.001,
+        "helium_3": 0.0001,
+        "strategic_elements": 0.002
+      }
+    },
+    {
+      "id": "LUNA_PEARY",
+      "name": "Peary Plateau (N Pole)",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 20,
+      "angle_deg": 90,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.50,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.13,
+        "magnesium_oxides": 0.08,
+        "titanium_oxides": 0.015,
+        "water_ice": 0.12,
+        "sulfur_compounds": 0.015,
+        "precious_rare_metals": 0.0015,
+        "radioactives": 0.001,
+        "helium_3": 0.0001,
+        "strategic_elements": 0.002
+      }
+    },
+    {
+      "id": "LUNA_TRANQUILLITATIS",
+      "name": "Mare Tranquillitatis",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 30,
+      "angle_deg": 20,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.42,
+        "iron_oxides": 0.14,
+        "aluminum_oxides": 0.08,
+        "magnesium_oxides": 0.10,
+        "titanium_oxides": 0.08,
+        "water_ice": 0.002,
+        "sulfur_compounds": 0.02,
+        "precious_rare_metals": 0.003,
+        "radioactives": 0.002,
+        "helium_3": 0.0002,
+        "strategic_elements": 0.004
+      }
+    },
+    {
+      "id": "LUNA_IMBRIUM",
+      "name": "Mare Imbrium (High-Ti)",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 40,
+      "angle_deg": 45,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.40,
+        "iron_oxides": 0.16,
+        "aluminum_oxides": 0.07,
+        "magnesium_oxides": 0.09,
+        "titanium_oxides": 0.10,
+        "water_ice": 0.001,
+        "sulfur_compounds": 0.02,
+        "precious_rare_metals": 0.003,
+        "radioactives": 0.003,
+        "helium_3": 0.0002,
+        "strategic_elements": 0.004
+      }
+    },
+    {
+      "id": "LUNA_ANORTHOSITE",
+      "name": "Anorthosite Highlands",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 50,
+      "angle_deg": 150,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.55,
+        "iron_oxides": 0.04,
+        "aluminum_oxides": 0.18,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.01,
+        "water_ice": 0.001,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.002,
+        "radioactives": 0.003,
+        "helium_3": 0.0001,
+        "strategic_elements": 0.002
+      }
+    },
+    {
+      "id": "LUNA_KREEP",
+      "name": "KREEP Highlands",
+      "body_id": "moon",
+      "orbit_node_id": "LLO",
+      "parent_group_id": "grp_moon_sites",
+      "sort_order": 60,
+      "angle_deg": -30,
+      "landing_dv_m_s": 1870,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.48,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.16,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.02,
+        "water_ice": 0.001,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.006,
+        "radioactives": 0.006,
+        "helium_3": 0.0001,
+        "strategic_elements": 0.008
+      }
+    }
   ]
 }

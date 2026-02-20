@@ -295,6 +295,48 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
 
         add_row((mid, name, parent_id, 0, sort_order, float(x), float(y)))
 
+    # ── Surface Sites ──────────────────────────────────────
+    surface_sites = config.get("surface_sites", [])
+    if not isinstance(surface_sites, list):
+        raise CelestialConfigError("surface_sites must be an array")
+
+    body_by_id: Dict[str, Dict[str, Any]] = {}
+    for body in bodies:
+        bid = str(body.get("id") or "").strip()
+        if bid:
+            body_by_id[bid] = body
+
+    for site in surface_sites:
+        if not isinstance(site, dict):
+            raise CelestialConfigError("surface_sites[] entries must be objects")
+        sid = _require_str(site, "id", "surface_sites[]")
+        name = _require_str(site, "name", f"surface_sites[{sid}]")
+        body_id = _require_str(site, "body_id", f"surface_sites[{sid}]")
+        parent_id = _require_str(site, "parent_group_id", f"surface_sites[{sid}]")
+        orbit_node_id = _require_str(site, "orbit_node_id", f"surface_sites[{sid}]")
+        sort_order = _as_int(site.get("sort_order", 100), f"surface_sites[{sid}].sort_order")
+        angle_deg = _get_angle_deg(site)
+
+        if body_id not in body_pos:
+            raise CelestialConfigError(f"surface_sites[{sid}] references unknown body_id: {body_id}")
+        if orbit_node_id not in leaf_ids:
+            raise CelestialConfigError(f"surface_sites[{sid}] references unknown orbit_node_id: {orbit_node_id}")
+
+        body_def = body_by_id[body_id]
+        radius_km = _as_float(body_def.get("radius_km", 0.0), f"bodies[{body_id}].radius_km")
+        bx, by = body_pos[body_id]
+        a = math.radians(angle_deg)
+        x = bx + radius_km * math.cos(a)
+        y = by + radius_km * math.sin(a)
+
+        add_row((sid, name, parent_id, 0, sort_order, float(x), float(y)))
+
+        # Generate bidirectional transfer edges for landing/ascent
+        landing_dv = _as_float(site.get("landing_dv_m_s", 1870), f"surface_sites[{sid}].landing_dv_m_s")
+        landing_tof = _as_float(site.get("landing_tof_s", 3600), f"surface_sites[{sid}].landing_tof_s")
+        edge_rows.append((orbit_node_id, sid, float(landing_dv), float(landing_tof)))
+        edge_rows.append((sid, orbit_node_id, float(landing_dv), float(landing_tof)))
+
     for loc_id, _, parent_id, _, _, _, _ in location_rows:
         if parent_id and parent_id not in location_ids:
             raise CelestialConfigError(f"Location {loc_id} references unknown parent_id: {parent_id}")
@@ -328,6 +370,57 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
 def load_locations_and_edges(path: Path = CONFIG_PATH) -> Tuple[List[LocationRow], List[EdgeRow]]:
     config = load_celestial_config(path)
     return build_locations_and_edges(config)
+
+
+# ── Surface Site data types ────────────────────────────────
+
+SurfaceSiteRow = Tuple[str, str, str, float]  # (location_id, body_id, orbit_node_id, gravity_m_s2)
+SurfaceSiteResourceRow = Tuple[str, str, float]  # (site_location_id, resource_id, mass_fraction)
+
+
+def build_surface_site_data(config: Dict[str, Any]) -> Tuple[List[SurfaceSiteRow], List[SurfaceSiteResourceRow]]:
+    """Parse surface_sites from config and return rows for DB tables."""
+    bodies = config.get("bodies", [])
+    body_by_id: Dict[str, Dict[str, Any]] = {}
+    for body in (bodies if isinstance(bodies, list) else []):
+        bid = str(body.get("id") or "").strip()
+        if bid:
+            body_by_id[bid] = body
+
+    surface_sites = config.get("surface_sites", [])
+    if not isinstance(surface_sites, list):
+        return [], []
+
+    site_rows: List[SurfaceSiteRow] = []
+    resource_rows: List[SurfaceSiteResourceRow] = []
+
+    for site in surface_sites:
+        if not isinstance(site, dict):
+            continue
+        sid = _require_str(site, "id", "surface_sites[]")
+        body_id = _require_str(site, "body_id", f"surface_sites[{sid}]")
+        orbit_node_id = _require_str(site, "orbit_node_id", f"surface_sites[{sid}]")
+
+        body_def = body_by_id.get(body_id)
+        if not body_def:
+            raise CelestialConfigError(f"surface_sites[{sid}] references unknown body_id: {body_id}")
+        gravity = _as_float(body_def.get("gravity_m_s2", 0.0), f"bodies[{body_id}].gravity_m_s2")
+
+        site_rows.append((sid, body_id, orbit_node_id, gravity))
+
+        resource_dist = site.get("resource_distribution", {})
+        if isinstance(resource_dist, dict):
+            for resource_id, fraction in resource_dist.items():
+                frac = float(fraction)
+                if frac > 0:
+                    resource_rows.append((sid, str(resource_id).strip(), frac))
+
+    return site_rows, resource_rows
+
+
+def load_surface_site_data(path: Path = CONFIG_PATH) -> Tuple[List[SurfaceSiteRow], List[SurfaceSiteResourceRow]]:
+    config = load_celestial_config(path)
+    return build_surface_site_data(config)
 
 
 def build_location_metadata(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -427,6 +520,29 @@ def build_location_metadata(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
         if merged_meta:
             metadata_by_location_id[mid] = {
                 **metadata_by_location_id.get(mid, {}),
+                **merged_meta,
+            }
+
+    # Surface sites
+    surface_sites = config.get("surface_sites", [])
+    if isinstance(surface_sites, list):
+        for site in surface_sites:
+            if not isinstance(site, dict):
+                continue
+            sid = _optional_str(site, "id")
+            if not sid:
+                continue
+            site_meta = extract_metadata(site)
+            body_id = _optional_str(site, "body_id")
+            inherited_meta = body_metadata_by_body_id.get(body_id or "", {})
+            merged_meta = {
+                **inherited_meta,
+                **site_meta,
+                "is_surface_site": True,
+                "body_id": body_id,
+            }
+            metadata_by_location_id[sid] = {
+                **metadata_by_location_id.get(sid, {}),
                 **merged_meta,
             }
 
