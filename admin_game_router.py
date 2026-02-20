@@ -38,6 +38,10 @@ def _main():
 
 # ── Pydantic models ────────────────────────────────────────
 
+class TeleportShipReq(BaseModel):
+    to_location_id: str
+
+
 class SpawnShipReq(BaseModel):
     name: str
     location_id: str
@@ -276,5 +280,57 @@ def api_admin_refuel_ship(ship_id: str, request: Request, conn: sqlite3.Connecti
                 stats["fuel_capacity_kg"],
                 stats["isp_s"],
             ),
+        },
+    }
+
+
+@router.post("/api/admin/ships/{ship_id}/teleport")
+def api_admin_teleport_ship(
+    ship_id: str,
+    req: TeleportShipReq,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Admin-only: instantly move a ship to any location."""
+    require_admin(conn, request)
+
+    sid = (ship_id or "").strip()
+    dest = (req.to_location_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="ship_id is required")
+    if not dest:
+        raise HTTPException(status_code=400, detail="to_location_id is required")
+
+    ship = conn.execute("SELECT id, name, location_id FROM ships WHERE id = ?", (sid,)).fetchone()
+    if not ship:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    loc = conn.execute("SELECT id, name FROM locations WHERE id = ?", (dest,)).fetchone()
+    if not loc:
+        raise HTTPException(status_code=404, detail=f"Location '{dest}' not found")
+
+    conn.execute(
+        """
+        UPDATE ships
+        SET location_id = ?,
+            from_location_id = NULL,
+            to_location_id = NULL,
+            departed_at = NULL,
+            arrives_at = NULL,
+            transfer_path_json = '[]'
+        WHERE id = ?
+        """,
+        (dest, sid),
+    )
+    conn.commit()
+
+    return {
+        "ok": True,
+        "ship": {
+            "id": ship["id"],
+            "name": ship["name"],
+            "from_location": ship["location_id"],
+            "location_id": dest,
+            "location_name": loc["name"],
         },
     }

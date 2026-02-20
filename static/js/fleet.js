@@ -111,6 +111,9 @@
         category: category,
         mass_kg: Number(p.mass_kg) || 0,
         subtitle: category,
+        branch: p.branch || "",
+        family: p.thruster_family || "",
+        techLevel: p.research_unlock_level || "",
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
       container.appendChild(cell);

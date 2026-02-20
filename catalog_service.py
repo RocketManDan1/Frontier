@@ -373,6 +373,7 @@ def _normalize_main_from_item(entry: Dict[str, Any]) -> Dict[str, Any]:
         "isp_s": performance.get("isp_s"),
         "max_thrust_kN": performance.get("max_thrust_kN"),
         "branch": str(entry.get("branch") or "core"),
+        "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
         "consumables": {
             "reaction_mass": str(consumables.get("reaction_mass") or ""),
             "fissiles": {
@@ -502,6 +503,7 @@ def load_thruster_main_catalog() -> Dict[str, Dict[str, Any]]:
                 "thrust_kn": max(0.0, float(main.get("max_thrust_kN") or 0.0)),
                 "thermal_mw": float(main.get("P_req_mw_th") or 0.0),
                 "reaction_mass": str((main.get("consumables") or {}).get("reaction_mass") or ""),
+                "research_unlock_level": max(1, int(main.get("research_unlock_level") or 1)),
             }
 
     return catalog
@@ -605,6 +607,7 @@ def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
                 "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
                 "thermal_mw": max(0.0, float(output.get("thermal_mw") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
+                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
             }
     return catalog
 
@@ -655,6 +658,7 @@ def load_generator_catalog() -> Dict[str, Dict[str, Any]]:
                 "conversion_efficiency": efficiency,
                 "waste_heat_mw": waste_heat_mw,
                 "branch": str(entry.get("branch") or ""),
+                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
             }
     return catalog
 
@@ -698,6 +702,7 @@ def load_radiator_catalog() -> Dict[str, Dict[str, Any]]:
                 "heat_rejection_mw": max(0.0, float(out.get("heat_rejection_mw") or 0.0)),
                 "operating_temp_k": max(0.0, float(entry.get("operating_temp_k") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
+                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
             }
     return catalog
 
@@ -1582,6 +1587,7 @@ def build_shipyard_catalog_payload(
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
                 "branch": str(item.get("branch") or ""),
+                "research_unlock_level": int(item.get("research_unlock_level") or 1),
             }
         )
 
@@ -1598,6 +1604,7 @@ def build_shipyard_catalog_payload(
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
                 "family": str(item.get("thruster_family") or ""),
                 "branch": str(item.get("branch") or ""),
+                "research_unlock_level": int(item.get("research_unlock_level") or 1),
             }
         )
 
@@ -1614,6 +1621,7 @@ def build_shipyard_catalog_payload(
                 "conversion_efficiency": float(item.get("conversion_efficiency") or 0.0),
                 "waste_heat_mw": float(item.get("waste_heat_mw") or 0.0),
                 "branch": str(item.get("branch") or ""),
+                "research_unlock_level": int(item.get("research_unlock_level") or 1),
             }
         )
 
@@ -1628,6 +1636,7 @@ def build_shipyard_catalog_payload(
                 "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0.0),
                 "operating_temp_k": float(item.get("operating_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
+                "research_unlock_level": int(item.get("research_unlock_level") or 1),
             }
         )
 

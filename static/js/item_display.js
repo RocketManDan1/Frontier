@@ -182,6 +182,9 @@ window.ItemDisplay = (function () {
     if (o.stats) cell.dataset.tooltipStats = String(o.stats);
     if (o.tooltipLines) cell.dataset.tooltipExtra = JSON.stringify(o.tooltipLines);
     if (o.phase) cell.dataset.tooltipPhase = String(o.phase);
+    if (o.branch) cell.dataset.tooltipBranch = String(o.branch);
+    if (o.techLevel) cell.dataset.tooltipTechLevel = String(o.techLevel);
+    if (o.family) cell.dataset.tooltipFamily = String(o.family);
 
     // Tooltip events
     cell.addEventListener("pointerenter", (e) => showTooltip(cell, e));
@@ -229,6 +232,21 @@ window.ItemDisplay = (function () {
 
     if (d.tooltipCategory || d.tooltipSubtitle) {
       html += `<div class="invTooltipSub">${escapeHtml(d.tooltipSubtitle || d.tooltipCategory)}</div>`;
+    }
+
+    // Tech tree / branch / level
+    const branch = d.tooltipBranch || "";
+    const family = d.tooltipFamily || "";
+    const techLevel = d.tooltipTechLevel || "";
+    if (branch || family || techLevel) {
+      const treeName = (family || branch).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const branchName = (family && branch) ? branch.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "";
+      let techHtml = '<div class="invTooltipTech">';
+      if (treeName) techHtml += `<span class="invTooltipTechTree">${escapeHtml(treeName)}</span>`;
+      if (branchName) techHtml += ` <span class="invTooltipTechBranch">/ ${escapeHtml(branchName)}</span>`;
+      if (techLevel) techHtml += `<span class="invTooltipTechLevel">Tech ${escapeHtml(techLevel)}</span>`;
+      techHtml += '</div>';
+      html += techHtml;
     }
 
     html += `<div class="invTooltipDivider"></div>`;

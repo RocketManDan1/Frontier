@@ -1522,6 +1522,9 @@
           mass_kg: Number(p?.mass_kg) || 0,
           quantity: Math.max(0, Math.floor(Number(p?.quantity) || 0)),
           subtitle: category,
+          branch: partData.branch || "",
+          family: partData.thruster_family || "",
+          techLevel: partData.research_unlock_level || "",
         });
         partGrid.appendChild(cell);
       });
@@ -2088,6 +2091,9 @@
         category: category,
         mass_kg: Number(p.mass_kg) || 0,
         subtitle: category,
+        branch: p.branch || "",
+        family: p.thruster_family || "",
+        techLevel: p.research_unlock_level || "",
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
       grid.appendChild(cell);
@@ -4377,6 +4383,7 @@
         <!-- Actions -->
         <div class="tpActions">
           <button id="tpCancelBtn" class="btnSecondary">Cancel</button>
+          ${window.gameAuth && window.gameAuth.user && window.gameAuth.user.is_admin ? `<button id="tpTeleportBtn" class="btnSecondary" style="background:rgba(255,140,0,0.15);border-color:rgba(255,140,0,0.5);color:#ffa500;">⚡ Teleport</button>` : ""}
           <button id="tpConfirmBtn" class="btnPrimary" ${hasDv && hasFuel ? "" : "disabled"}>Confirm Transfer</button>
         </div>
       `;
@@ -4385,6 +4392,35 @@
 
       // Wire up controls
       document.getElementById("tpCancelBtn").onclick = closeModal;
+
+      // Teleport button (admin only)
+      const tpTeleportBtn = document.getElementById("tpTeleportBtn");
+      if (tpTeleportBtn) {
+        tpTeleportBtn.onclick = async () => {
+          if (!selectedDest) return;
+          tpTeleportBtn.disabled = true;
+          tpTeleportBtn.textContent = "Teleporting…";
+          try {
+            const resp = await fetch(`/api/admin/ships/${encodeURIComponent(ship.id)}/teleport`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ to_location_id: selectedDest }),
+            });
+            if (!resp.ok) {
+              const data = await resp.json().catch(() => ({}));
+              tpTeleportBtn.textContent = _esc(data.detail || "Teleport failed");
+              tpTeleportBtn.disabled = false;
+              return;
+            }
+            closeModal();
+            await syncState();
+            showShipPanel();
+          } catch (err) {
+            tpTeleportBtn.textContent = "Teleport failed";
+            tpTeleportBtn.disabled = false;
+          }
+        };
+      }
 
       // Date controls
       document.getElementById("tpDateNowBtn").onclick = () => {

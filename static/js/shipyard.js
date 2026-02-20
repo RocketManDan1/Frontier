@@ -336,6 +336,9 @@
           quantity: Number(options.quantity) || 0,
           draggable: !!options.draggable,
           className: "shipyardItemCell",
+          branch: part?.branch || "",
+          family: part?.family || part?.thruster_family || "",
+          techLevel: part?.research_unlock_level || "",
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         })
       : (() => {

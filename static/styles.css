@@ -659,6 +659,31 @@ body.embedMode .pagePanel {
   letter-spacing: 0.04em;
 }
 
+.invTooltipTech {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.invTooltipTechTree {
+  color: rgba(100, 200, 255, 0.85);
+  font-weight: 600;
+}
+
+.invTooltipTechBranch {
+  color: rgba(163, 184, 203, 0.62);
+}
+
+.invTooltipTechLevel {
+  margin-left: auto;
+  color: rgba(255, 210, 100, 0.9);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 .invTooltipDivider {
   height: 1px;
   background: rgba(109, 182, 255, 0.18);
@@ -1726,27 +1751,21 @@ body.fleetPage {
   margin-top: 6px;
 }
 
-.modalOverlay {
+.modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  backdrop-filter: blur(2px);
 }
 
-.modal {
-  width: min(980px, 92vw);
-  max-height: 86vh;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(122, 170, 222, 0.4);
-  background:
-    linear-gradient(180deg, rgba(24, 40, 60, 0.42), transparent 22%),
-    var(--panel-solid);
-  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.62);
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+  z-index: -1;
 }
 
 .modalHeader {
@@ -1770,6 +1789,16 @@ body.fleetPage {
 }
 
 .modalBody {
+  position: relative;
+  width: min(980px, 92vw);
+  max-height: 86vh;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 170, 222, 0.4);
+  background:
+    linear-gradient(180deg, rgba(24, 40, 60, 0.42), transparent 22%),
+    var(--panel-solid);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.62);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
@@ -3456,6 +3485,7 @@ body.fleetPage {
 /* ── Deploy modal ───────────────────────────────────────── */
 
 .deployModalBody, .startJobModalBody, .miningModalBody {
+  display: block;
   max-width: 500px;
   max-height: 70vh;
   overflow-y: auto;
