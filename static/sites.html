@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Sites &amp; Industry</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout31" />
+    <link rel="stylesheet" href="/static/styles.css?v=layout34" />
   </head>
 
   <body class="sitesPage">
@@ -137,10 +137,18 @@
 
             <div class="panel industryJobsPanel">
               <div class="panelHeader">
-                <span class="panelTitle">Active Jobs</span>
+                <span class="panelTitle">Refinery Jobs</span>
               </div>
-              <div class="industryJobsList" id="industryJobsList"></div>
+              <div class="industryJobsList" id="industryRefineJobsList"></div>
             </div>
+          </div>
+
+          <!-- Construction jobs row -->
+          <div class="panel industryConstructPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Construction Jobs</span>
+            </div>
+            <div class="industryJobsList" id="industryConstructJobsList"></div>
           </div>
 
           <!-- ═══ Production Chain Flow ═══ -->
@@ -190,12 +198,20 @@
             </div>
           </div>
 
-          <!-- Available Recipes -->
+          <!-- Refining Recipes -->
           <div class="panel industryRecipesPanel">
             <div class="panelHeader">
-              <span class="panelTitle">Available Recipes</span>
+              <span class="panelTitle">Refining Recipes</span>
             </div>
-            <div class="industryRecipesList" id="industryRecipesList"></div>
+            <div class="industryRecipesList" id="industryRefineRecipesList"></div>
+          </div>
+
+          <!-- Construction Recipes -->
+          <div class="panel industryRecipesPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Construction Recipes</span>
+            </div>
+            <div class="industryRecipesList" id="industryConstructRecipesList"></div>
           </div>
 
           <!-- Mining (surface sites only) -->

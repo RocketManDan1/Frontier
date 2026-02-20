@@ -344,9 +344,11 @@
   function renderIndustry() {
     if (!industryData) return;
     renderIndustryEquipment();
-    renderIndustryJobs();
+    renderRefineJobs();
+    renderConstructJobs();
     renderProductionChain();
-    renderAvailableRecipes();
+    renderRefineRecipes();
+    renderConstructRecipes();
     renderMiningSection();
     renderJobHistory();
   }
@@ -372,6 +374,7 @@
           <span class="eqDetail">${cfg.electric_mw || 0} MW</span>`;
       } else {
         details = `<span class="eqDetail">${cfg.mining_rate_kg_per_hr || 0} kg/hr mining</span>
+          <span class="eqDetail">${cfg.construction_rate_kg_per_hr || 0} kg/hr build</span>
           <span class="eqDetail">${cfg.electric_mw || 0} MW</span>`;
       }
 
@@ -386,6 +389,8 @@
           ${eq.status === "idle" && eq.category === "refinery" ?
             `<button class="btnSmall btnStart" data-equip-id="${eq.id}">Start Job</button>` : ""}
           ${eq.status === "idle" && eq.category === "constructor" ?
+            `<button class="btnSmall btnBuild" data-equip-id="${eq.id}">Start Build</button>` : ""}
+          ${eq.status === "idle" && eq.category === "constructor" ?
             `<button class="btnSmall btnMine" data-equip-id="${eq.id}">Start Mining</button>` : ""}
           ${eq.status === "idle" ?
             `<button class="btnSmall btnUndeploy" data-equip-id="${eq.id}">Undeploy</button>` : ""}
@@ -397,6 +402,9 @@
     list.querySelectorAll(".btnStart").forEach(btn => {
       btn.addEventListener("click", () => openStartJobModal(btn.dataset.equipId));
     });
+    list.querySelectorAll(".btnBuild").forEach(btn => {
+      btn.addEventListener("click", () => openStartBuildModal(btn.dataset.equipId));
+    });
     list.querySelectorAll(".btnMine").forEach(btn => {
       btn.addEventListener("click", () => openMiningModal(btn.dataset.equipId));
     });
@@ -405,33 +413,19 @@
     });
   }
 
-  /* ── Active jobs panel ───────────────────────────────────── */
+  /* ── Refinery jobs panel ───────────────────────────────── */
 
-  function renderIndustryJobs() {
-    const list = document.getElementById("industryJobsList");
-    const jobs = industryData.active_jobs || [];
+  function renderRefineJobs() {
+    const list = document.getElementById("industryRefineJobsList");
+    const jobs = (industryData.active_jobs || []).filter(j => j.job_type === "refine");
 
     if (!jobs.length) {
-      list.innerHTML = '<div class="muted" style="padding:12px">No active jobs</div>';
+      list.innerHTML = '<div class="muted" style="padding:12px">No active refinery jobs</div>';
       return;
     }
 
     const now = serverNow();
     list.innerHTML = jobs.map(job => {
-      if (job.job_type === "mine") {
-        return `<div class="industryJobRow mining">
-          <div class="jobIcon">⛏</div>
-          <div class="jobInfo">
-            <div class="jobName">Mining: ${esc(job.resource_name || job.resource_id)}</div>
-            <div class="jobMeta">${esc(job.equipment_name)} · ${job.rate_kg_per_hr} kg/hr</div>
-            <div class="jobMeta muted">Total mined: ${fmtKg(job.total_mined_kg)}</div>
-          </div>
-          <div class="jobProgress"><span class="badge badgeActive">Mining</span></div>
-          <button class="btnSmall btnCancel" data-job-id="${job.id}" data-job-type="mine">Stop</button>
-        </div>`;
-      }
-
-      // Refine job
       const started = job.started_at;
       const completes = job.completes_at;
       const totalDur = Math.max(1, completes - started);
@@ -450,6 +444,59 @@
           <span class="jobPct">${pct.toFixed(0)}%</span>
         </div>
         <button class="btnSmall btnCancel" data-job-id="${job.id}" data-job-type="refine">Cancel</button>
+      </div>`;
+    }).join("");
+
+    list.querySelectorAll(".btnCancel").forEach(btn => {
+      btn.addEventListener("click", () => cancelJob(btn.dataset.jobId));
+    });
+  }
+
+  /* ── Construction jobs panel ─────────────────────────────── */
+
+  function renderConstructJobs() {
+    const list = document.getElementById("industryConstructJobsList");
+    const jobs = (industryData.active_jobs || []).filter(j => j.job_type === "construct" || j.job_type === "mine");
+
+    if (!jobs.length) {
+      list.innerHTML = '<div class="muted" style="padding:12px">No active construction or mining jobs</div>';
+      return;
+    }
+
+    const now = serverNow();
+    list.innerHTML = jobs.map(job => {
+      if (job.job_type === "mine") {
+        return `<div class="industryJobRow mining">
+          <div class="jobIcon">⛏</div>
+          <div class="jobInfo">
+            <div class="jobName">Mining: ${esc(job.resource_name || job.resource_id)}</div>
+            <div class="jobMeta">${esc(job.equipment_name)} · ${job.rate_kg_per_hr} kg/hr</div>
+            <div class="jobMeta muted">Total mined: ${fmtKg(job.total_mined_kg)}</div>
+          </div>
+          <div class="jobProgress"><span class="badge badgeActive">Mining</span></div>
+          <button class="btnSmall btnCancel" data-job-id="${job.id}" data-job-type="mine">Stop</button>
+        </div>`;
+      }
+
+      // Construct job
+      const started = job.started_at;
+      const completes = job.completes_at;
+      const totalDur = Math.max(1, completes - started);
+      const elapsed = Math.min(now - started, totalDur);
+      const pct = Math.min(100, Math.max(0, (elapsed / totalDur) * 100));
+      const remaining = Math.max(0, completes - now);
+
+      return `<div class="industryJobRow construct">
+        <div class="jobIcon">🔧</div>
+        <div class="jobInfo">
+          <div class="jobName">${esc(job.recipe_name || job.recipe_id)}</div>
+          <div class="jobMeta">${esc(job.equipment_name)} · ETA: ${fmtDuration(remaining)}</div>
+        </div>
+        <div class="jobProgress">
+          <div class="bar"><div class="barFill" style="width:${pct.toFixed(1)}%"></div></div>
+          <span class="jobPct">${pct.toFixed(0)}%</span>
+        </div>
+        <button class="btnSmall btnCancel" data-job-id="${job.id}" data-job-type="construct">Cancel</button>
       </div>`;
     }).join("");
 
@@ -477,32 +524,36 @@
     const resourceCatalog = {};
     resources.forEach(r => { resourceCatalog[r.item_id || r.resource_id] = r; });
 
-    // Determine which item_ids are raw vs refined using recipe outputs
+    // Two-pass classification: first collect all outputs, then classify inputs
     const refinedIds = new Set();
-    const rawInputIds = new Set();
     const constructableIds = new Set();
 
-    const allRecipes = recipes;
-    allRecipes.forEach(recipe => {
+    // Pass 1: classify all recipe outputs
+    recipes.forEach(recipe => {
       const outId = recipe.output_item_id;
       if (recipe.facility_type === "shipyard") {
         constructableIds.add(outId);
       } else {
         refinedIds.add(outId);
       }
+    });
+
+    // Pass 2: raw = recipe inputs that are NOT themselves recipe outputs
+    const rawInputIds = new Set();
+    recipes.forEach(recipe => {
       (recipe.inputs || []).forEach(inp => {
-        if (!refinedIds.has(inp.item_id)) {
+        if (!refinedIds.has(inp.item_id) && !constructableIds.has(inp.item_id)) {
           rawInputIds.add(inp.item_id);
         }
       });
     });
 
-    // Raw materials: in stock + needed as inputs
+    // Raw materials: inventory items that are raw inputs or not a recipe output
     const rawItems = [];
     const seenRaw = new Set();
     resources.forEach(r => {
       const rid = r.item_id || r.resource_id;
-      if (!refinedIds.has(rid) || rawInputIds.has(rid)) {
+      if (rawInputIds.has(rid) || (!refinedIds.has(rid) && !constructableIds.has(rid))) {
         rawItems.push(r);
         seenRaw.add(rid);
       }
@@ -578,17 +629,148 @@
     }
   }
 
-  /* ── Available recipes ───────────────────────────────────── */
+  /* ── Refining recipes ──────────────────────────────────── */
 
-  function renderAvailableRecipes() {
-    const list = document.getElementById("industryRecipesList");
-    const recipes = industryData.available_recipes || [];
+  function renderRefineRecipes() {
+    const list = document.getElementById("industryRefineRecipesList");
+    const recipes = (industryData.available_recipes || []).filter(r => r.facility_type !== "shipyard");
 
     if (!recipes.length) {
-      list.innerHTML = '<div class="muted" style="padding:12px">No recipes available. Deploy refineries to unlock recipes.</div>';
+      list.innerHTML = '<div class="muted" style="padding:12px">No refining recipes available. Deploy refineries to unlock recipes.</div>';
       return;
     }
 
+    renderRecipeList(list, recipes, "refinery");
+  }
+
+  /* ── Construction recipes ────────────────────────────────── */
+
+  function renderConstructRecipes() {
+    const list = document.getElementById("industryConstructRecipesList");
+    const recipes = (industryData.available_recipes || []).filter(r => r.facility_type === "shipyard");
+
+    if (!recipes.length) {
+      list.innerHTML = '<div class="muted" style="padding:12px">No construction recipes available. Deploy constructors to unlock recipes.</div>';
+      return;
+    }
+
+    // Group by output_category (part type) instead of refinery_category
+    const groups = {};
+    recipes.forEach(r => {
+      const cat = r.output_category || "other";
+      (groups[cat] = groups[cat] || []).push(r);
+    });
+
+    const categoryOrder = ["thruster", "reactor", "generator", "radiator", "refinery", "constructor", "robonaut", "other"];
+    const categoryLabels = {
+      thruster: "Thrusters",
+      reactor: "Reactors",
+      generator: "Generators",
+      radiator: "Radiators",
+      refinery: "Refineries",
+      constructor: "Constructors",
+      robonaut: "Robonauts",
+      other: "Other",
+    };
+    const categoryIcons = {
+      thruster: "🚀",
+      reactor: "⚛",
+      generator: "⚡",
+      radiator: "☀",
+      refinery: "⚗",
+      constructor: "⛏",
+      robonaut: "🤖",
+      other: "■",
+    };
+
+    let html = "";
+    const sortedCats = categoryOrder.filter(c => groups[c]);
+    // Also add any unexpected categories
+    Object.keys(groups).forEach(c => { if (!sortedCats.includes(c)) sortedCats.push(c); });
+
+    for (const catId of sortedCats) {
+      const catRecipes = groups[catId];
+      const icon = categoryIcons[catId] || "■";
+      const label = categoryLabels[catId] || catId;
+      const count = catRecipes.length;
+
+      html += `<div class="recipeCategoryGroup collapsibleGroup">
+        <div class="recipeCategoryHeader collapsibleHeader" data-collapsed="false">
+          <span class="collapseToggle">▾</span>
+          <span>${icon} ${esc(label)}</span>
+          <span class="recipeCategoryCount">${count}</span>
+        </div>
+        <div class="collapsibleBody">`;
+
+      catRecipes.forEach(recipe => {
+        const inputsHtml = (recipe.inputs_status || []).map(inp => {
+          const ok = inp.sufficient;
+          return `<span class="recipeInput ${ok ? "sufficient" : "insufficient"}">
+            ${esc(inp.name)}: ${inp.qty_available.toFixed(2)}/${inp.qty_needed.toFixed(2)}
+          </span>`;
+        }).join("");
+
+        const canStart = recipe.can_start;
+        const idleEquip = recipe.idle_constructors || [];
+        const noEquipMsg = "No idle constructor";
+
+        html += `<div class="recipeRow ${canStart ? "canStart" : "cantStart"}">
+          <div class="recipeInfo">
+            <div class="recipeName">${esc(recipe.name)}</div>
+            <div class="recipeInputs">${inputsHtml}</div>
+            <div class="recipeMeta">
+              <span>Time: ${fmtDuration(recipe.build_time_s)}</span>
+              <span>Tier ${recipe.min_tech_tier}</span>
+              <span>${recipe.power_kw} kW</span>
+            </div>
+          </div>
+          <div class="recipeOutput">
+            <span class="recipeOutputLabel">→ ${esc(recipe.output_item_id?.replace(/_/g, " ") || "?")} ×${recipe.output_qty}</span>
+          </div>
+          <div class="recipeAction">
+            ${canStart && idleEquip.length ?
+              `<button class="btnSmall btnStartRecipe" data-recipe-id="${recipe.recipe_id}"
+                data-equip-id="${idleEquip[0].id}">Build</button>` :
+              `<span class="muted">${!idleEquip.length ? noEquipMsg : "Missing inputs"}</span>`
+            }
+          </div>
+        </div>`;
+      });
+
+      html += `</div></div>`;
+    }
+
+    list.innerHTML = html;
+
+    // Wire collapsible headers
+    list.querySelectorAll(".collapsibleHeader").forEach(header => {
+      header.addEventListener("click", () => {
+        const collapsed = header.dataset.collapsed === "true";
+        header.dataset.collapsed = collapsed ? "false" : "true";
+        header.querySelector(".collapseToggle").textContent = collapsed ? "▾" : "▸";
+        const body = header.nextElementSibling;
+        body.style.display = collapsed ? "" : "none";
+      });
+    });
+
+    // Wire start buttons
+    list.querySelectorAll(".btnStartRecipe").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await postJSON("/api/industry/jobs/start", {
+            equipment_id: btn.dataset.equipId,
+            recipe_id: btn.dataset.recipeId,
+          });
+          loadIndustryContent();
+          loadSites();
+        } catch (e) {
+          alert("Failed: " + e.message);
+        }
+      });
+    });
+  }
+
+  function renderRecipeList(list, recipes, equipType) {
     // Group by refinery_category
     const groups = {};
     recipes.forEach(r => {
@@ -618,7 +800,10 @@
         }).join("");
 
         const canStart = recipe.can_start;
-        const idleRefs = recipe.idle_refineries || [];
+        const idleEquip = equipType === "constructor"
+          ? (recipe.idle_constructors || [])
+          : (recipe.idle_refineries || []);
+        const noEquipMsg = equipType === "constructor" ? "No idle constructor" : "No idle refinery";
 
         html += `<div class="recipeRow ${canStart ? "canStart" : "cantStart"}">
           <div class="recipeInfo">
@@ -634,10 +819,10 @@
             <span class="recipeOutputLabel">→ ${esc(recipe.output_item_id?.replace(/_/g, " ") || "?")} ×${recipe.output_qty}</span>
           </div>
           <div class="recipeAction">
-            ${canStart && idleRefs.length ?
+            ${canStart && idleEquip.length ?
               `<button class="btnSmall btnStartRecipe" data-recipe-id="${recipe.recipe_id}"
-                data-equip-id="${idleRefs[0].id}">Produce</button>` :
-              `<span class="muted">${!idleRefs.length ? "No idle refinery" : "Missing inputs"}</span>`
+                data-equip-id="${idleEquip[0].id}">${equipType === "constructor" ? "Build" : "Produce"}</button>` :
+              `<span class="muted">${!idleEquip.length ? noEquipMsg : "Missing inputs"}</span>`
             }
           </div>
         </div>`;
@@ -821,6 +1006,7 @@
     const spec = cfg.specialization || "";
     const maxTier = cfg.max_recipe_tier || 1;
     const recipes = (industryData.available_recipes || []).filter(r => {
+      if (r.facility_type === "shipyard") return false; // Only refinery recipes
       const matchSpec = !spec || r.refinery_category === spec;
       const matchTier = (r.min_tech_tier || 0) <= maxTier;
       return matchSpec && matchTier;
@@ -841,6 +1027,55 @@
           <div class="recipeInputs">${inputStr}</div>
           <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×${r.output_qty} · ${fmtDuration(r.build_time_s)}</div>
           ${r.can_start ? `<button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}">Start</button>` : '<span class="muted">Missing inputs</span>'}
+        </div>`;
+      }).join("")}</div>`;
+
+    content.querySelectorAll(".btnConfirmJob").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await postJSON("/api/industry/jobs/start", {
+            equipment_id: btn.dataset.equipId,
+            recipe_id: btn.dataset.recipeId,
+          });
+          modal.style.display = "none";
+          loadIndustryContent();
+          loadSites();
+        } catch (e) {
+          alert("Failed: " + e.message);
+        }
+      });
+    });
+  }
+
+  /* Start build modal (constructor → shipyard recipes) */
+  function openStartBuildModal(equipId) {
+    const modal = document.getElementById("startJobModal");
+    const content = document.getElementById("startJobContent");
+    modal.style.display = "";
+
+    const equip = (industryData.equipment || []).find(e => e.id === equipId);
+    if (!equip) { content.innerHTML = '<div class="muted">Equipment not found</div>'; return; }
+
+    // Constructors can run any shipyard recipe
+    const recipes = (industryData.available_recipes || []).filter(r => {
+      return r.facility_type === "shipyard";
+    });
+
+    if (!recipes.length) {
+      content.innerHTML = `<div class="muted">No construction recipes available for ${esc(equip.name)}</div>`;
+      return;
+    }
+
+    content.innerHTML = `<div class="startJobEquipName">${esc(equip.name)} (Constructor)</div>
+      <div class="startJobRecipes">${recipes.map(r => {
+        const inputStr = (r.inputs_status || []).map(i =>
+          `<span class="${i.sufficient ? "sufficient" : "insufficient"}">${esc(i.name)}: ${i.qty_available.toFixed(2)}/${i.qty_needed.toFixed(2)}</span>`
+        ).join(", ");
+        return `<div class="startJobRecipeRow ${r.can_start ? "canStart" : "cantStart"}">
+          <div class="recipeName">${esc(r.name)}</div>
+          <div class="recipeInputs">${inputStr}</div>
+          <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×${r.output_qty} · ${fmtDuration(r.build_time_s)}</div>
+          ${r.can_start ? `<button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}">Build</button>` : '<span class="muted">Missing inputs</span>'}
         </div>`;
       }).join("")}</div>`;
 
@@ -970,7 +1205,10 @@
 
     // Also refresh job progress bars every second
     setInterval(() => {
-      if (currentTab === "industrial" && industryData) renderIndustryJobs();
+      if (currentTab === "industrial" && industryData) {
+        renderRefineJobs();
+        renderConstructJobs();
+      }
     }, 1000);
   }
 

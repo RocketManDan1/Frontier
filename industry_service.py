@@ -327,7 +327,9 @@ def start_production_job(
     username: str,
 ) -> Dict[str, Any]:
     """
-    Start a production job on a deployed refinery.
+    Start a production job on a deployed refinery or constructor.
+    - Refineries run refinery/factory recipes (job_type='refine').
+    - Constructors run shipyard recipes (job_type='construct').
     Consumes input resources from location inventory upfront.
     Job completes after build_time_s game-seconds.
     """
@@ -340,8 +342,8 @@ def start_production_job(
         raise ValueError("Equipment not found")
     if equip["status"] != "idle":
         raise ValueError(f"Equipment is currently {equip['status']}, not idle")
-    if equip["category"] != "refinery":
-        raise ValueError("Production jobs require a refinery")
+    if equip["category"] not in ("refinery", "constructor"):
+        raise ValueError("Production jobs require a refinery or constructor")
 
     config = json.loads(equip["config_json"] or "{}")
     location_id = equip["location_id"]
@@ -361,21 +363,28 @@ def start_production_job(
     if not recipe:
         raise ValueError(f"Recipe '{recipe_id}' not found")
 
-    # Check specialization match
-    specialization = str(config.get("specialization") or "")
-    recipe_category = str(recipe.get("refinery_category") or "")
-    if specialization and recipe_category and specialization != recipe_category:
-        raise ValueError(
-            f"Refinery specialization '{specialization}' does not match recipe category '{recipe_category}'"
-        )
+    # Determine job type based on equipment category + recipe facility_type
+    facility_type = str(recipe.get("facility_type") or "")
+    equip_category = equip["category"]
 
-    # Check tech tier
-    max_tier = int(config.get("max_recipe_tier") or 1)
-    min_tier = int(recipe.get("min_tech_tier") or 0)
-    if min_tier > max_tier:
-        raise ValueError(
-            f"Recipe requires tier {min_tier}, refinery max is {max_tier}"
-        )
+    if equip_category == "constructor":
+        # Constructors can only run shipyard recipes (construction)
+        if facility_type != "shipyard":
+            raise ValueError("Constructors can only run construction (shipyard) recipes")
+        job_type = "construct"
+    else:
+        # Refineries run refinery/factory recipes
+        if facility_type == "shipyard":
+            raise ValueError("Refineries cannot run construction recipes — use a constructor")
+        job_type = "refine"
+
+        # Check specialization match (refineries only)
+        specialization = str(config.get("specialization") or "")
+        recipe_category = str(recipe.get("refinery_category") or "")
+        if specialization and recipe_category and specialization != recipe_category:
+            raise ValueError(
+                f"Refinery specialization '{specialization}' does not match recipe category '{recipe_category}'"
+            )
 
     # Consume inputs from location inventory
     import main as _main
@@ -428,8 +437,14 @@ def start_production_job(
 
     # Calculate completion time
     now = game_now_s()
-    throughput_mult = max(0.01, float(config.get("throughput_mult") or 1.0))
     base_time = float(recipe.get("build_time_s") or 600)
+    if equip_category == "constructor":
+        # Constructors use construction_rate_kg_per_hr as a speed multiplier
+        # Higher rate = faster builds.  Normalize around 50 kg/hr baseline.
+        construction_rate = max(1.0, float(config.get("construction_rate_kg_per_hr") or 50.0))
+        throughput_mult = construction_rate / 50.0
+    else:
+        throughput_mult = max(0.01, float(config.get("throughput_mult") or 1.0))
     actual_time = base_time / throughput_mult
     completes_at = now + actual_time
 
@@ -437,7 +452,7 @@ def start_production_job(
     outputs = []
     output_item_id = str(recipe.get("output_item_id") or "").strip()
     output_qty = float(recipe.get("output_qty") or 0.0)
-    efficiency = max(0.0, float(config.get("efficiency") or 1.0))
+    efficiency = max(0.0, float(config.get("efficiency") or 1.0)) if equip_category == "refinery" else 1.0
     if output_item_id and output_qty > 0:
         outputs.append({"item_id": output_item_id, "qty": output_qty * efficiency})
     for bp in (recipe.get("byproducts") or []):
@@ -452,9 +467,9 @@ def start_production_job(
         INSERT INTO production_jobs
           (id, location_id, equipment_id, job_type, recipe_id, status,
            started_at, completes_at, inputs_json, outputs_json, created_by)
-        VALUES (?, ?, ?, 'refine', ?, 'active', ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
         """,
-        (job_id, location_id, equipment_id, recipe_id, now, completes_at,
+        (job_id, location_id, equipment_id, job_type, recipe_id, now, completes_at,
          _json_dumps([{"item_id": inp["item_id"], "qty": inp["qty"]} for inp in inputs if inp.get("item_id")]),
          _json_dumps(outputs), username),
     )
@@ -727,7 +742,7 @@ def get_active_jobs(conn: sqlite3.Connection, location_id: str) -> List[Dict[str
             "created_by": r["created_by"],
         }
 
-        if job_type == "refine":
+        if job_type in ("refine", "construct"):
             recipe = recipes.get(r["recipe_id"] or "")
             entry["recipe_id"] = r["recipe_id"]
             entry["recipe_name"] = recipe.get("name", r["recipe_id"]) if recipe else r["recipe_id"]
@@ -787,13 +802,16 @@ def get_available_recipes_for_location(
     location_id: str,
 ) -> List[Dict[str, Any]]:
     """
-    Get all recipes that could be run at a location, based on deployed refineries.
+    Get all recipes that could be run at a location, based on deployed equipment.
+    - Refinery/factory recipes matched to deployed refineries (by specialization + tier).
+    - Shipyard recipes matched to deployed constructors (any constructor can build any).
     Also annotates each recipe with whether the location has sufficient inputs.
     """
     equipment = get_deployed_equipment(conn, location_id)
     refineries = [e for e in equipment if e["category"] == "refinery"]
+    constructors = [e for e in equipment if e["category"] == "constructor"]
 
-    if not refineries:
+    if not refineries and not constructors:
         return []
 
     # Gather location inventory for availability checks
@@ -807,21 +825,43 @@ def get_available_recipes_for_location(
     all_recipes = catalog_service.load_recipe_catalog()
     resource_catalog = catalog_service.load_resource_catalog()
 
+    # Build output_item_id → category_id map from all part catalogs
+    _output_category_map: Dict[str, str] = {}
+    for _loader, _cat in [
+        (catalog_service.load_thruster_main_catalog, "thruster"),
+        (catalog_service.load_reactor_catalog, "reactor"),
+        (catalog_service.load_generator_catalog, "generator"),
+        (catalog_service.load_radiator_catalog, "radiator"),
+        (catalog_service.load_robonaut_catalog, "robonaut"),
+        (catalog_service.load_constructor_catalog, "constructor"),
+        (catalog_service.load_refinery_catalog, "refinery"),
+    ]:
+        try:
+            for _item_id in _loader():
+                _output_category_map[_item_id] = _cat
+        except Exception:
+            pass
+
     result = []
     for recipe in sorted(all_recipes.values(), key=lambda r: r.get("name", "")):
         recipe_cat = str(recipe.get("refinery_category") or "")
-        recipe_tier = int(recipe.get("min_tech_tier") or 0)
+        facility_type = str(recipe.get("facility_type") or "")
 
-        # Find compatible refineries
         compatible_refineries = []
-        for ref in refineries:
-            cfg = ref.get("config") or {}
-            spec = str(cfg.get("specialization") or "")
-            max_tier = int(cfg.get("max_recipe_tier") or 1)
-            if spec == recipe_cat and max_tier >= recipe_tier:
-                compatible_refineries.append(ref)
+        compatible_constructors = []
 
-        if not compatible_refineries:
+        if facility_type == "shipyard":
+            # Shipyard recipes: any constructor can build
+            compatible_constructors = list(constructors)
+        else:
+            # Refinery/factory recipes: match by specialization (no tier restriction)
+            for ref in refineries:
+                cfg = ref.get("config") or {}
+                spec = str(cfg.get("specialization") or "")
+                if spec == recipe_cat:
+                    compatible_refineries.append(ref)
+
+        if not compatible_refineries and not compatible_constructors:
             continue
 
         # Check input availability
@@ -843,13 +883,20 @@ def get_available_recipes_for_location(
                 "sufficient": sufficient,
             })
 
-        # Find idle compatible refineries
+        # Find idle equipment
         idle_refineries = [r for r in compatible_refineries if r["status"] == "idle"]
+        idle_constructors = [c for c in compatible_constructors if c["status"] == "idle"]
+        has_idle = len(idle_refineries) > 0 or len(idle_constructors) > 0
+
+        # Determine output category for grouping
+        out_id = str(recipe.get("output_item_id") or "")
+        output_category = _output_category_map.get(out_id, "other")
 
         result.append({
             **recipe,
+            "output_category": output_category,
             "inputs_status": inputs_status,
-            "can_start": can_start and len(idle_refineries) > 0,
+            "can_start": can_start and has_idle,
             "compatible_refineries": [
                 {"id": r["id"], "name": r["name"], "status": r["status"]}
                 for r in compatible_refineries
@@ -857,6 +904,14 @@ def get_available_recipes_for_location(
             "idle_refineries": [
                 {"id": r["id"], "name": r["name"]}
                 for r in idle_refineries
+            ],
+            "compatible_constructors": [
+                {"id": c["id"], "name": c["name"], "status": c["status"]}
+                for c in compatible_constructors
+            ],
+            "idle_constructors": [
+                {"id": c["id"], "name": c["name"]}
+                for c in idle_constructors
             ],
         })
 

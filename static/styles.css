@@ -2831,9 +2831,27 @@ body.fleetPage {
    SITES & INDUSTRY PAGE
    ═══════════════════════════════════════════════════════════ */
 
+.sitesPage .app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sitesPage .top.panel {
+  flex-shrink: 0;
+}
+
+.sitesTabContent {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 /* ── Sub-tabs ───────────────────────────────────────────── */
 
 .sitesSubTabs {
+  flex-shrink: 0;
   display: flex;
   gap: 2px;
   padding: 0 16px;
@@ -2897,15 +2915,17 @@ body.fleetPage {
   grid-template-columns: 1fr 400px;
   gap: 12px;
   padding: 0 16px 16px;
-  min-height: 60vh;
+  height: 100%;
+  min-height: 0;
 }
 
 @media (max-width: 1020px) {
   .sitesOverviewLayout { grid-template-columns: 1fr; }
 }
 
-.sitesListPanel { overflow: hidden; display: flex; flex-direction: column; }
-.siteDetailPanel { overflow-y: auto; max-height: 80vh; }
+.sitesListPanel { overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.sitesListPanel .tableWrap { flex: 1 1 0; overflow-y: auto; min-height: 0; }
+.siteDetailPanel { overflow-y: auto; min-height: 0; }
 
 .panelHeader {
   display: flex;
@@ -3118,6 +3138,10 @@ body.fleetPage {
 
 /* ── Industry location bar ──────────────────────────────── */
 
+#tabIndustrial {
+  padding-bottom: 16px;
+}
+
 .industryLocationBar {
   display: flex;
   align-items: center;
@@ -3160,7 +3184,8 @@ body.fleetPage {
 }
 
 .industryEquipPanel, .industryJobsPanel, .industryChainPanel,
-.industryRecipesPanel, .industryMiningPanel, .industryHistoryPanel {
+.industryRecipesPanel, .industryMiningPanel, .industryHistoryPanel,
+.industryConstructPanel {
   margin: 0 16px 8px;
 }
 
@@ -3373,6 +3398,36 @@ body.fleetPage {
   padding: 8px 14px;
   background: rgba(89,185,230,0.05);
   border-bottom: 1px solid var(--border-soft);
+}
+
+/* ── Collapsible recipe groups ──────────────────────────── */
+
+.collapsibleHeader {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.collapsibleHeader:hover {
+  background: rgba(89,185,230,0.10);
+}
+
+.collapseToggle {
+  font-size: 12px;
+  width: 12px;
+  text-align: center;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.recipeCategoryCount {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .recipeRow {
