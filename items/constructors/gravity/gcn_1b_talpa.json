@@ -1,0 +1,20 @@
+{
+  "id": "gcn_1b_talpa",
+  "name": "GCN-1B \"Talpa\"",
+  "research_node": "early_gravity_construction",
+  "research_unlock_level": 2,
+  "branch": "percussive_sintering",
+  "mass_t": 4.8,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 2.2
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 75,
+    "construction_rate_kg_per_hr": 84,
+    "excavation_type": "percussive_drill_bucket"
+  },
+  "description": "The Talpa — Latin for mole, and namesake of DLR's HP³ penetrating heat probe carried to Mars by InSight — represents the second tier-1 gravity constructor variant, augmenting the Antaeus's bucket-drum system with a resonant percussive drill module and an inline microwave sintering nozzle. The drill module uses a self-hammering mechanism derived from the Ultrasonic/Sonic Driller/Corer (USDC) technology developed at JPL: a piezoelectric stack drives a free-floating hammering mass at tens of kilohertz, disaggregating compacted regolith and fractured rock at a fraction of the static preload force required by conventional rotary drill bits — a decisive advantage in low-gravity environments where any drill tends to push the vehicle away rather than down. Excavated material feeds the bucket conveyor and into a holding bin. The microwave sintering nozzle, inspired by NASA MSFC's experiments in in-situ regolith consolidation, sweeps the work surface at 2.45 GHz and fuses regolith grains in place to form a consolidated bearing surface or low-form wall without added binder. The combination raises mining throughput to 75 kg/hr and construction rate to 28 kg/hr, while the sinter capability unlocks foundation preparation that the pure-mechanical Antaeus cannot perform.",
+  "ui_tags": ["percussive_drill", "microwave_sintering", "tier_1", "early"]
+}

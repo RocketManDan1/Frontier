@@ -1,0 +1,20 @@
+{
+  "id": "gcn_4b_demiurge",
+  "name": "GCN-4B \"Demiurge\"",
+  "research_node": "industrial_plasma_gravity_construction",
+  "research_unlock_level": 2,
+  "branch": "molecular_plasma_fabrication",
+  "mass_t": 350.0,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 220.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 1350,
+    "construction_rate_kg_per_hr": 1440,
+    "excavation_type": "plasma_molecular_full_cycle"
+  },
+  "description": "The Demiurge — from the Greek δημιουργός, craftsman of worlds, the Platonic figure who shapes raw matter into ordered creation — is the apex gravity constructor and represents the convergence of mining and fabrication into a single closed-loop industrial system. Its excavation system operates twelve plasma arc electrodes across a 6 m face at 10 kW each, but the defining innovation is the downstream Chemistry-On-Demand (COD) processing train that runs in direct series with the excavation head. Disaggregated plasma products are not merely separated by phase or magnetic signature: they are routed through a high-temperature molten-oxide electrolysis (MOX) reactor running at 1600°C, electrochemically splitting silicates and oxides into pure metal streams (Fe, Al, Mg, Ti, Si) and oxygen as a continuous process. The metal streams bypassed for structural use enter an induction-heated rapid solidification unit producing near-net-shape billets at a rate that feeds the construction head without intermediate storage. The construction system is a five-arm mobile gantry supporting wire-arc, laser powder-bed, electron beam, and hot isostatic pressing (HIP) end-effectors simultaneously. This allows the Demiurge to mine regolith, electrolyse it into constituent metals, and additively manufacture finished structural components — all in one unbroken workflow. At 1,350 kg/hr mining and 480 kg/hr construction output the Demiurge can sustain the growth of a full-scale permanent surface installation from raw ground alone. Named for Plato's great craftsman who looked upon the eternal forms and built the material world to match them.",
+  "ui_tags": ["molecular_plasma", "mox_electrolysis", "full_cycle_fabrication", "tier_4"]
+}

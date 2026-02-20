@@ -1,0 +1,20 @@
+{
+  "id": "gcn_1a_antaeus",
+  "name": "GCN-1A \"Antaeus\"",
+  "research_node": "early_gravity_construction",
+  "research_unlock_level": 1,
+  "branch": "mechanical_excavation",
+  "mass_t": 2.5,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 0.8
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 50,
+    "construction_rate_kg_per_hr": 54,
+    "excavation_type": "bucket_drum_mechanical"
+  },
+  "description": "The baseline gravity constructor, the Antaeus takes its name from the Greek giant who was invincible so long as his feet touched the Earth — an apt symbol for a machine that derives all its capability from direct contact with the ground. Mechanically, the Antaeus is a direct descendant of NASA's RASSOR (Regolith Advanced Surface Systems Operations Robot) concept: counter-rotating bucket drums mounted at each end of a central chassis cancel their excavation reaction forces against one another, allowing effective regolith collection in lunar gravity (1.62 m/s²) without the anchor mass that hampers single-drum designs. The chassis is driven by six independently articulated wheel-legs derived from JPL ATHLETE heritage, giving the unit the ability to step over boulders up to 1 m in height and self-right after a tip-over. The construction arm is a 3-DOF cable-drive manipulator capable of placing pre-fabricated structural panels, driving expansion bolts into regolith-sintered foundations, and dispensing a basic thermal-spray binder to join loose rubble walls. At 50 kg/hr mining throughput and 18 kg/hr construction rate, the Antaeus is slow by later standards but has no single-point failure modes and can be maintained with tools carried aboard any landing craft.",
+  "ui_tags": ["mechanical_excavation", "bucket_drum", "tier_1", "early"]
+}

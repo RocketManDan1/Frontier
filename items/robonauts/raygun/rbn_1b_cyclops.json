@@ -1,0 +1,19 @@
+{
+  "id": "rbn_1b_cyclops",
+  "name": "RBN-1B \"Cyclops\"",
+  "research_node": "early_radar_laser_prospecting",
+  "research_unlock_level": 2,
+  "branch": "mmwave_radar",
+  "mass_t": 3.2,
+  "power_requirements": {
+    "electric_mw": 1.8
+  },
+  "performance": {
+    "emission_type": "pulsed_nir_laser_mmwave",
+    "prospect_range_km": 25000,
+    "scan_rate_km2_per_hr": 1.6,
+    "melt_rate_t_per_hr": 0.25
+  },
+  "description": "An augmented tier-1 raygun robonaut that boresights a pulsed 2 μm neodymium fiber laser onto the same aperture as its millimeter-wave radar. The laser delivers short (10 ns) high-peak-power bursts for laser-induced breakdown spectroscopy (LIBS), enabling elemental composition readback at 25,000 km standoff — well outside the lunar sphere of influence, allowing a transfer-trajectory vessel to characterise landing sites before committing to orbital insertion. The extended range makes rapid successive scanning of multiple candidate sites along a single approach arc practical for the first time. When surface-deployed, the continuous-wave mode raises melt throughput to a quarter-tonne of water ice per hour, enough to bootstrap early propellant storage at a polar cache site. The additional mass relative to the Argus reflects enlarged optics, a secondary beam-shaping mirror assembly, and a more capable power-conditioning unit. Named for the single-eyed Cyclops of Greek legend, a nod to its high-power mono-aperture optical design.",
+  "ui_tags": ["pulsed_nir_laser", "mmwave_radar", "tier_1", "early"]
+}

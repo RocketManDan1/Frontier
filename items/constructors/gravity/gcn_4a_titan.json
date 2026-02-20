@@ -1,0 +1,20 @@
+{
+  "id": "gcn_4a_titan",
+  "name": "GCN-4A \"Titan\"",
+  "research_node": "industrial_plasma_gravity_construction",
+  "research_unlock_level": 1,
+  "branch": "plasma_arc_disaggregation",
+  "mass_t": 180.0,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 120.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 900,
+    "construction_rate_kg_per_hr": 960,
+    "excavation_type": "plasma_arc_full_disaggregation"
+  },
+  "description": "The Titan is the first tier-4 gravity constructor and the first surface robot built around full plasma arc disaggregation — a fundamentally different relationship between machine and rock. Rather than attacking the face with a directed point source, the Titan deploys a bank of six transferred-arc plasma electrodes arranged in a linear array across a 4 m working face. Each electrode operates at 12 kW, and the inter-electrode plasma curtain covers the full face at once, raising the near-surface layer to disaggregation temperature in seconds. The rock does not simply melt: the arc temperature (12,000–15,000 K) exceeds the Leidenfrost point for most silicate and oxide compounds, causing gas-phase dissociation with minimal energy lost to bulk heating of excavated material. Products are swept into a high-velocity pneumatic riser at 900 kg/hr sustained throughput — more than twice the Archon's best rate. Separated feed enters a cascade magnetic-electrostatic process train that routes ilmenite, olivine, pyroxene, and feldspar fractions to separate holding bins for downstream use. Construction is handled by a separate 12-axis cable-suspended gantry robot spanning a 20 m work envelope, carrying a high-deposition-rate electron beam wire deposition head and a multi-material regolith casting shuttle. The Titan can erect a pressurised habitat module shell in approximately 72 hours of continuous operation.",
+  "ui_tags": ["plasma_arc", "full_disaggregation", "gantry_robot", "tier_4"]
+}

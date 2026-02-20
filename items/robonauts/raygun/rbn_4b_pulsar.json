@@ -1,0 +1,19 @@
+{
+  "id": "rbn_4b_pulsar",
+  "name": "RBN-4B \"Pulsar\"",
+  "research_node": "coherent_gamma_prospecting",
+  "research_unlock_level": 2,
+  "branch": "fusion_pumped_xray_gamma",
+  "mass_t": 420.0,
+  "power_requirements": {
+    "electric_mw": 350.0
+  },
+  "performance": {
+    "emission_type": "fusion_pumped_xray_laser_phased_gamma",
+    "prospect_range_km": 20000000,
+    "scan_rate_km2_per_hr": 280.0,
+    "melt_rate_t_per_hr": 120.0
+  },
+  "description": "The pinnacle of raygun robonaut technology, the Pulsar combines two previously separate instrument lineages into the most powerful single prospecting and ISRU unit ever deployed in the Earth-Moon system. The primary aperture is a fusion-pumped X-ray laser (FXPL): a compact inertial confinement micro-fusion driver (D-T pellet, 100 kJ/shot at 200 Hz) whose resulting X-ray pulse is upconverted and amplified through a gain medium of laser-excited neon-like selenium ions, producing coherent 200 eV soft X-ray pulses with millijoule-per-pulse energy at megahertz repetition when averaged over the ICF cycle. The secondary aperture is a 256-element phased gamma-ray array that coherently phases gamma bursts from individual Compton backscatter sources, enabling constructive interference at 20,000,000 km range — deep into the inner asteroid belt. A single Pulsar-equipped vessel holding station anywhere in the Earth-Moon system can sweep entire asteroid cluster populations across the inner belt, pre-qualifying ore bodies for future extraction missions without expending any transfer propellant. The combined instrument package characterises the complete elemental and mineralog­ic stratigraphy of any body in its field of view, from surface monolayer to 10 m depth. In surface deployment, 350 MW output drives simultaneous ice sublimation and electrolysis at 120 t/hr — enough to fill a large propellant depot tank in under a day. The Pulsar is named for the rotating neutron star that defines clockwork regularity in high-energy emission: a machine of immense power operating with absolute precision.",
+  "ui_tags": ["fusion_pumped_xray", "phased_gamma", "tier_4"]
+}

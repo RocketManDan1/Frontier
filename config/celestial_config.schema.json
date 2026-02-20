@@ -102,6 +102,28 @@
         }
       }
     },
-    "transfer_edges": { "type": "array" }
+    "transfer_edges": { "type": "array" },
+    "surface_sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "body_id", "orbit_node_id", "parent_group_id"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "body_id": { "type": "string" },
+          "orbit_node_id": { "type": "string" },
+          "parent_group_id": { "type": "string" },
+          "sort_order": { "type": "integer" },
+          "angle_deg": { "type": "number" },
+          "landing_dv_m_s": { "type": "number" },
+          "landing_tof_s": { "type": "number" },
+          "resource_distribution": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          }
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,19 @@
+{
+  "id": "rbn_3b_helion",
+  "name": "RBN-3B \"Helion\"",
+  "research_node": "free_electron_laser_prospecting",
+  "research_unlock_level": 2,
+  "branch": "coherent_xray_neutron",
+  "mass_t": 95.0,
+  "power_requirements": {
+    "electric_mw": 80.0
+  },
+  "performance": {
+    "emission_type": "coherent_xray_neutron_activation",
+    "prospect_range_km": 1500000,
+    "scan_rate_km2_per_hr": 55.0,
+    "melt_rate_t_per_hr": 22.0
+  },
+  "description": "The Helion fields the most capable remote sensing suite available at tier 3: a pair of instruments working in concert. The primary arm is a coherent X-ray laser (XFEL) fed by a superconducting linear accelerator, producing angstrom-wavelength photons that can penetrate several metres of regolith and diffract off crystal lattices — delivering high-resolution mineral phase maps without surface contact. The secondary arm is a pulsed neutron source (14 MeV deuterium-tritium generator) whose activation gamma-ray signatures identify bulk major-element chemistry including Fe, Si, Mg, O, H, Ca, Al, and Ti to depths of up to 3 m. Together, these instruments generate a 3D subsurface compositional model at up to 1,500,000 km standoff — enabling a ship transiting the inner Earth-Moon extended neighbourhood to catalogue entire clusters of near-Earth asteroids and Lunar Trojan candidates without deviation from its transfer trajectory. Surface-deployment mode routes 80 MW into sustained beam heating that melts and electrolyses ice at 22 t/hr, enough to fuel a continuous propellant production pipeline. Named for the ancient Greek personification of the Sun — an entity defined by relentless, penetrating radiance.",
+  "ui_tags": ["coherent_xray", "neutron_activation", "tier_3"]
+}

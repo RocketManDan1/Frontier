@@ -1,0 +1,20 @@
+{
+  "id": "gcn_3b_archon",
+  "name": "GCN-3B \"Archon\"",
+  "research_node": "laser_plasma_gravity_construction",
+  "research_unlock_level": 2,
+  "branch": "plasma_torch_multiaxis",
+  "mass_t": 85.0,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 55.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 600,
+    "construction_rate_kg_per_hr": 630,
+    "excavation_type": "plasma_torch_laser_combined"
+  },
+  "description": "The Archon — from the Greek for ruler or chief magistrate, reflecting a machine that coordinates and commands the surface — pairs the Golem's laser ablation system with a secondary 25 kW plasma torch excavation head for rapid bulk material removal. The plasma torch operates at approximately 8,000 K arc temperature in a transferred-arc configuration, directing the plasma jet along the working face to disaggregate metre-thick regolith columns in a single pass; the resulting molten-particulate slurry is drawn by a centrifugal pneumatic conveyor into the primary separation train. Running both heads simultaneously the Archon achieves 600 kg/hr mining throughput — the highest rate achievable before tier-4 plasma arc technology. The construction system is a 7-axis gantry-arm hybrid carrying three end-effectors that can be exchanged autonomously from a tool carousel: a high-speed wire-arc additive manufacturing (WAAM) torch for rapid structural deposition, a precision laser cladding head for thin-walled pressure-vessel fabrication, and a multi-nozzle regolith sintering array for bulk foundations and roads. The three-arm approach allows the Archon to simultaneously mine, process, and build during a single operational period — a first for a surface constructor. Superconducting bus coils pre-cool the power distribution rail to minimise resistive losses at 55 MW draw.",
+  "ui_tags": ["plasma_torch", "waam", "laser_cladding", "tier_3"]
+}

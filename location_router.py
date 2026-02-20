@@ -85,3 +85,98 @@ def api_locations_tree(request: Request, conn: sqlite3.Connection = Depends(get_
         "SELECT id,name,parent_id,is_group,sort_order FROM locations"
     ).fetchall()
     return {"tree": build_tree(rows)}
+
+
+# ── Surface Sites ──────────────────────────────────────────
+
+@router.get("/api/surface_sites")
+def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """List all surface sites with their resource distributions."""
+    require_login(conn, request)
+
+    sites = conn.execute(
+        """
+        SELECT ss.location_id, ss.body_id, ss.orbit_node_id, ss.gravity_m_s2,
+               l.name AS site_name
+        FROM surface_sites ss
+        JOIN locations l ON l.id = ss.location_id
+        ORDER BY l.sort_order, l.name
+        """
+    ).fetchall()
+
+    # Load all resource distributions in one query
+    all_resources = conn.execute(
+        """
+        SELECT site_location_id, resource_id, mass_fraction
+        FROM surface_site_resources
+        ORDER BY site_location_id, mass_fraction DESC
+        """
+    ).fetchall()
+
+    # Group resources by site
+    resources_by_site: Dict[str, List[Dict[str, Any]]] = {}
+    for r in all_resources:
+        site_id = r["site_location_id"]
+        resources_by_site.setdefault(site_id, []).append({
+            "resource_id": r["resource_id"],
+            "mass_fraction": float(r["mass_fraction"]),
+        })
+
+    result = []
+    for s in sites:
+        site_id = s["location_id"]
+        result.append({
+            "location_id": site_id,
+            "name": s["site_name"],
+            "body_id": s["body_id"],
+            "orbit_node_id": s["orbit_node_id"],
+            "gravity_m_s2": float(s["gravity_m_s2"]),
+            "resource_distribution": resources_by_site.get(site_id, []),
+        })
+
+    return {"surface_sites": result}
+
+
+@router.get("/api/surface_sites/{site_id}")
+def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Get detailed info for a single surface site."""
+    require_login(conn, request)
+
+    site = conn.execute(
+        """
+        SELECT ss.location_id, ss.body_id, ss.orbit_node_id, ss.gravity_m_s2,
+               l.name AS site_name
+        FROM surface_sites ss
+        JOIN locations l ON l.id = ss.location_id
+        WHERE ss.location_id = ?
+        """,
+        (site_id,),
+    ).fetchone()
+
+    if not site:
+        raise HTTPException(status_code=404, detail="Surface site not found")
+
+    resources = conn.execute(
+        """
+        SELECT resource_id, mass_fraction
+        FROM surface_site_resources
+        WHERE site_location_id = ?
+        ORDER BY mass_fraction DESC
+        """,
+        (site_id,),
+    ).fetchall()
+
+    return {
+        "location_id": site["location_id"],
+        "name": site["site_name"],
+        "body_id": site["body_id"],
+        "orbit_node_id": site["orbit_node_id"],
+        "gravity_m_s2": float(site["gravity_m_s2"]),
+        "resource_distribution": [
+            {
+                "resource_id": r["resource_id"],
+                "mass_fraction": float(r["mass_fraction"]),
+            }
+            for r in resources
+        ],
+    }

@@ -306,6 +306,7 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
         if bid:
             body_by_id[bid] = body
 
+    surface_edge_rows: List[EdgeRow] = []
     for site in surface_sites:
         if not isinstance(site, dict):
             raise CelestialConfigError("surface_sites[] entries must be objects")
@@ -334,8 +335,8 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
         # Generate bidirectional transfer edges for landing/ascent
         landing_dv = _as_float(site.get("landing_dv_m_s", 1870), f"surface_sites[{sid}].landing_dv_m_s")
         landing_tof = _as_float(site.get("landing_tof_s", 3600), f"surface_sites[{sid}].landing_tof_s")
-        edge_rows.append((orbit_node_id, sid, float(landing_dv), float(landing_tof)))
-        edge_rows.append((sid, orbit_node_id, float(landing_dv), float(landing_tof)))
+        surface_edge_rows.append((orbit_node_id, sid, float(landing_dv), float(landing_tof)))
+        surface_edge_rows.append((sid, orbit_node_id, float(landing_dv), float(landing_tof)))
 
     for loc_id, _, parent_id, _, _, _, _ in location_rows:
         if parent_id and parent_id not in location_ids:
@@ -363,6 +364,9 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
         dv_m_s = _as_float(edge.get("dv_m_s"), f"transfer_edges[{src}->{dst}].dv_m_s")
         tof_s = _as_float(edge.get("tof_s"), f"transfer_edges[{src}->{dst}].tof_s")
         edge_rows.append((src, dst, float(dv_m_s), float(tof_s)))
+
+    # Append surface site landing/ascent edges
+    edge_rows.extend(surface_edge_rows)
 
     return location_rows, edge_rows
 

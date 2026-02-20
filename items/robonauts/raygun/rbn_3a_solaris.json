@@ -1,0 +1,19 @@
+{
+  "id": "rbn_3a_solaris",
+  "name": "RBN-3A \"Solaris\"",
+  "research_node": "free_electron_laser_prospecting",
+  "research_unlock_level": 1,
+  "branch": "free_electron_laser",
+  "mass_t": 48.0,
+  "power_requirements": {
+    "electric_mw": 35.0
+  },
+  "performance": {
+    "emission_type": "free_electron_laser_gamma_backscatter",
+    "prospect_range_km": 500000,
+    "scan_rate_km2_per_hr": 26.0,
+    "melt_rate_t_per_hr": 10.0
+  },
+  "description": "A landmark advance in remote prospecting, the Solaris houses a compact free-electron laser (FEL) whose undulator assembly is tunable from deep UV (200 nm) to mid-IR (15 μm) without optic changes. This unprecedented spectral agility lets surveying algorithms select the exact wavelength best suited to each target mineral signature in real time. A secondary gamma-ray backscatter subsystem — driven by the same electron accelerator — detects hydrogen and carbon down to 2 m depth, enabling unambiguous identification of buried ice and carbonaceous material. At 500,000 km standoff the Solaris can scan any body within 1.3 times the Earth-Moon distance in a single pointing, allowing a ship at the Earth-Moon L4 or L5 Lagrange points to prospect the entire lunar surface and nearby near-Earth asteroid clusters during a single station-keeping hold. When deployed on the surface, 35 MW drives the FEL beam to industrial ice-melt rates sufficient to feed a medium-scale propellant depot. Named for the living ocean of sunlight described in Stanisław Lem's 1961 novel — a system that reasons about worlds by bathing them in directed energy.",
+  "ui_tags": ["free_electron_laser", "gamma_backscatter", "tier_3"]
+}

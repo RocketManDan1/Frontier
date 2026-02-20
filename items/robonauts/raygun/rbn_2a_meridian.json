@@ -1,0 +1,19 @@
+{
+  "id": "rbn_2a_meridian",
+  "name": "RBN-2A \"Meridian\"",
+  "research_node": "uv_laser_xrf_prospecting",
+  "research_unlock_level": 1,
+  "branch": "hyperspectral_cw_laser",
+  "mass_t": 7.5,
+  "power_requirements": {
+    "electric_mw": 5.0
+  },
+  "performance": {
+    "emission_type": "uv_vis_nir_hyperspectral_cw_laser",
+    "prospect_range_km": 80000,
+    "scan_rate_km2_per_hr": 4.2,
+    "melt_rate_t_per_hr": 0.9
+  },
+  "description": "The Meridian is the first second-generation raygun robonaut to enter service, fielding a UV/Vis/NIR hyperspectral scanner across a 350–2500 nm bandpass alongside a 2 kW continuous-wave ytterbium fiber laser. Hyperspectral radiance cubes are processed on-board by a dedicated FPGA pipeline to identify mineralogic absorption features characteristic of hydrated silicates, carbonates, sulfates, and iron oxides — providing significantly more actionable prospecting data than the first-generation radar units. Standoff range reaches 80,000 km, placing the entire lunar sphere of influence within a single dwell from a cislunar waypoint; a ship holding position near the Earth-Moon L1 can scan any point on the near-side lunar surface without repositioning. The CW laser output enables useful ice melting when deployed: nearly a tonne per hour under sustained operation. The name Meridian refers to the sun crossing the sky's peak — an apt metaphor for a machine that reads sunlit surface spectra with precision.",
+  "ui_tags": ["hyperspectral", "cw_laser", "tier_2"]
+}

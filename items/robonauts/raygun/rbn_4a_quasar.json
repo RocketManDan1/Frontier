@@ -1,0 +1,19 @@
+{
+  "id": "rbn_4a_quasar",
+  "name": "RBN-4A \"Quasar\"",
+  "research_node": "coherent_gamma_prospecting",
+  "research_unlock_level": 1,
+  "branch": "coherent_gamma_emitter",
+  "mass_t": 220.0,
+  "power_requirements": {
+    "electric_mw": 180.0
+  },
+  "performance": {
+    "emission_type": "coherent_gamma_ray_emitter_array",
+    "prospect_range_km": 5000000,
+    "scan_rate_km2_per_hr": 140.0,
+    "melt_rate_t_per_hr": 60.0
+  },
+  "description": "The Quasar represents the first operational tier-4 raygun robonaut, bridging extraordinary gamma-ray source brightness with practical ISRU capability. Its primary instrument is a coherent gamma-ray emitter array — an ensemble of Compton-backscatter upconverters that produce near-monochromatic γ-beams in the 0.5–10 MeV band. Each beam is separately steerable and collectively phase-matched by an adaptive optics wavefront processor, yielding effective spot coherence lengths exceeding 100 m at 5,000,000 km standoff — sufficient to resolve and characterise asteroid-scale ore bodies anywhere within the near-Earth object population without approaching them. From a single cislunar holding position the Quasar can survey dozens of Aten and Apollo asteroids across successive observation windows, building a pre-qualified mining target catalog without expending transfer propellant. Nuclear resonance fluorescence (NRF) signatures from the returned gamma flux identify every ISRU-critical isotope including ²³⁸U, ²³²Th, ⁵⁶Fe, ²⁸Si, ²⁴Mg, and ²H with sub-percent uncertainty. In surface mode, 180 MW drives focused-beam ablation that sublimes and melts ice at 60 t/hr — a rate sufficient to sustain full-scale cis-lunar fuel depot resupply. Named for the quasi-stellar objects that outshine entire galaxies through relativistic jet emission: the archetype of remote, tremendously powerful directed energy.",
+  "ui_tags": ["coherent_gamma", "nrf", "tier_4"]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "gcn_3a_golem",
+  "name": "GCN-3A \"Golem\"",
+  "research_node": "laser_plasma_gravity_construction",
+  "research_unlock_level": 1,
+  "branch": "laser_ablation_ebf",
+  "mass_t": 45.0,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 28.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 400,
+    "construction_rate_kg_per_hr": 420,
+    "excavation_type": "high_power_laser_ablation"
+  },
+  "description": "The Golem — the constructed being of Jewish legend, animated clay shaped into a tireless servant — is the first third-generation gravity constructor and the first unit to cross the threshold from assisted-mechanical to primarily energetic excavation. Its primary mining mechanism is a 15 kW high-power laser ablation head: a focused CO₂ beam heats the rock face to ablation temperatures (>5,000 K at the spot), converting surface material directly into a plasma plume. The ablation products — mostly SiO₂, FeO, MgO vapour and fine particulate — are collected by a hood-and-vacuum system and routed to the separation silo. This approach eliminates mechanical wear entirely from the cutting interface; the only consumable is electrical power, and the excavation rate scales linearly with beam power rather than being limited by tooth geometry or vibration frequency cutoffs. A secondary bucket system handles coarser material dislodged by thermal spalling. The construction module is derived from NASA Langley's Electron Beam Freeform Fabrication (EBF³) programme: a 10 kW electron beam gun, directed by magnetic deflection coils, melts a regulated wire feedstock of sorted processed regolith alloy and deposits it layer-by-layer according to CAD toolpaths at up to 1,500 cm³/hr. Structural members produced by EBF³ compete with wrought aluminium alloys in specific strength. At 400 kg/hr mining and 140 kg/hr construction the Golem is the first constructor capable of sustaining a viable surface base expansion programme.",
+  "ui_tags": ["laser_ablation", "electron_beam_fabrication", "tier_3"]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "rbn_2b_zenith",
+  "name": "RBN-2B \"Zenith\"",
+  "research_node": "uv_laser_xrf_prospecting",
+  "research_unlock_level": 2,
+  "branch": "xrf_pulsed_laser",
+  "mass_t": 15.0,
+  "power_requirements": {
+    "electric_mw": 12.0
+  },
+  "performance": {
+    "emission_type": "xray_fluorescence_pulsed_laser",
+    "prospect_range_km": 200000,
+    "scan_rate_km2_per_hr": 9.0,
+    "melt_rate_t_per_hr": 3.2
+  },
+  "description": "The most capable tier-2 raygun robonaut, the Zenith combines an X-ray fluorescence (XRF) analyzer with a high-power pulsed diode-pumped solid-state laser (DPSSL) operating at 1.06 μm. The XRF emitter illuminates surface patches at 200,000 km standoff — roughly half the Earth-Moon distance — with polychromatic X-ray pulses; the fluorescent return spectrum is decoded by a cooled silicon-drift detector array to yield element mass fractions for Si, Fe, Mg, Ca, Ti, Al, and key volatiles. At this range an Earth-orbiting ship can fully characterise the entire near-side and limb of the Moon in a single observation window. This makes the Zenith the first robonaut capable of quantitative mineral abundance estimates rather than mere spectral classification. Its 12 MW electric consumption drives both the X-ray tube bank and the 8 kW pulsed laser, which provides genuine industrial-scale ice melting when surface-deployed at over 3 tonnes per hour. Named for the highest point of the celestial sphere — pointing straight up and straight down simultaneously.",
+  "ui_tags": ["xrf", "pulsed_laser", "tier_2"]
+}

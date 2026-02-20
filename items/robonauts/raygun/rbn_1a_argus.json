@@ -1,0 +1,19 @@
+{
+  "id": "rbn_1a_argus",
+  "name": "RBN-1A \"Argus\"",
+  "research_node": "early_radar_laser_prospecting",
+  "research_unlock_level": 1,
+  "branch": "mmwave_radar",
+  "mass_t": 1.5,
+  "power_requirements": {
+    "electric_mw": 0.5
+  },
+  "performance": {
+    "emission_type": "millimeter_wave_radar",
+    "prospect_range_km": 8000,
+    "scan_rate_km2_per_hr": 0.8,
+    "melt_rate_t_per_hr": 0.05
+  },
+  "description": "The earliest raygun robonaut in the Earthmoon inventory, the Argus takes its name from the all-seeing hundred-eyed giant of Greek myth. A phased-array millimeter-wave radar operating in the 77–110 GHz band probes surface and shallow sub-surface structure at standoff distances up to 8,000 km — sufficient for characterising crater floor and polar pit composition from high lunar orbit. At that altitude the beam footprint covers multi-kilometre patches per dwell, enabling a single pass to map a candidate mining site without requiring low-orbit insertion. A co-boresighted 500 W continuous-wave CO₂ laser provides rudimentary thermal ablation for surface-prep before sample capture, and can melt a modest stream of exposed water ice when the unit is surface-deployed. Power draw reflects the radar's peak-pulse energy budget and the laser's continuous duty cycle. Simple to fabricate and maintain, the Argus is the standard survey tool for first-generation cis-lunar operations.",
+  "ui_tags": ["mmwave_radar", "tier_1", "early"]
+}

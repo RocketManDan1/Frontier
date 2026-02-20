@@ -37,6 +37,12 @@ ITEM_CATEGORIES: List[Dict[str, Any]] = [
         "description": "Robotic apparatus for mining, scouting, and construction in space.",
     },
     {
+        "id": "constructor",
+        "name": "Constructor",
+        "kind": "ship_component",
+        "description": "Surface-deployed robotic constructor for bulk excavation and infrastructure fabrication on gravity bodies.",
+    },
+    {
         "id": "refinery",
         "name": "Refinery",
         "kind": "ship_component",
@@ -98,6 +104,10 @@ ITEM_CATEGORY_ALIASES: Dict[str, str] = {
     "drones": "robonaut",
     "robonauts": "robonaut",
     "refineries": "refinery",
+    "constructors": "constructor",
+    "builder": "constructor",
+    "builders": "constructor",
+    "surface_constructor": "constructor",
     "radiators": "radiator",
     "cooler": "radiator",
     "cooling": "radiator",
@@ -131,6 +141,7 @@ RESEARCH_CATEGORIES: List[Dict[str, str]] = [
     {"id": "reactors", "label": "Reactors"},
     {"id": "generators", "label": "Generators"},
     {"id": "robonauts", "label": "Robonauts"},
+    {"id": "constructors", "label": "Constructors"},
     {"id": "refineries", "label": "Refineries"},
     {"id": "radiators", "label": "Radiators"},
 ]

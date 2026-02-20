@@ -506,6 +506,16 @@ def load_radiator_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
+def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_robonaut_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_constructor_catalog()
+
+
+@lru_cache(maxsize=1)
 def load_recipe_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_recipe_catalog()
 
@@ -1079,6 +1089,8 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
         reactor_catalog=load_reactor_catalog(),
         generator_catalog=load_generator_catalog(),
         radiator_catalog=load_radiator_catalog(),
+        robonaut_catalog=load_robonaut_catalog(),
+        constructor_catalog=load_constructor_catalog(),
     )
 
 
@@ -2139,6 +2151,8 @@ def build_shipyard_catalog_payload() -> Dict[str, Any]:
         reactor_catalog=load_reactor_catalog(),
         generator_catalog=load_generator_catalog(),
         radiator_catalog=load_radiator_catalog(),
+        robonaut_catalog=load_robonaut_catalog(),
+        constructor_catalog=load_constructor_catalog(),
     )
 
 

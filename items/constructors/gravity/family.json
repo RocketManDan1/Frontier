@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "constructors_gravity",
+  "display_name": "Gravity Constructor",
+  "notes": [
+    "Surface-deployed construction and mining robots for bodies with significant gravity (Luna, Mercury, Ceres-class and above; minimum ~1.6 m/s²).",
+    "Pull double duty: mining_rate_kg_per_hr describes bulk regolith excavation and ore extraction throughput.",
+    "construction_rate_kg_per_hr describes structural mass assembled, sintered, cast, or otherwise fabricated per hour.",
+    "Multiple units on the same vessel or surface cache may be operated concurrently; rates sum.",
+    "Draws electric_mw from the ship or surface power bus during active operations.",
+    "All units are self-propelled across the surface via wheel, leg, or track drive; no separate mobility system required."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "gcn_1a_antaeus.json",
+    "gcn_1b_talpa.json",
+    "gcn_2a_hephaestus.json",
+    "gcn_2b_kyklops.json",
+    "gcn_3a_golem.json",
+    "gcn_3b_archon.json",
+    "gcn_4a_titan.json",
+    "gcn_4b_demiurge.json"
+  ]
+}

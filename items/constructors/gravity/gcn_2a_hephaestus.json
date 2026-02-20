@@ -1,0 +1,20 @@
+{
+  "id": "gcn_2a_hephaestus",
+  "name": "GCN-2A \"Hephaestus\"",
+  "research_node": "vibrothermal_gravity_construction",
+  "research_unlock_level": 1,
+  "branch": "vibro_thermal_excavation",
+  "mass_t": 10.0,
+  "operational_environment": "surface_gravity",
+  "min_surface_gravity_ms2": 1.6,
+  "power_requirements": {
+    "electric_mw": 6.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 150,
+    "construction_rate_kg_per_hr": 165,
+    "excavation_type": "vibro_ultrasonic_bucket"
+  },
+  "description": "Named for the Greek god of the forge and master craftsman of Olympus, the Hephaestus is the first second-generation gravity constructor and a definitive step beyond mechanical excavation. Its mining system pairs a bank of three counter-rotating vibro-drums — each individually driven and torque-limited to prevent stall — with a resonant-frequency agitation circuit tuned to the shear modulus of compacted silicate regolith. By exciting the entire cutting face at the material's natural fracture frequency before the drum teeth engage, cutting energy drops by approximately 60 percent compared to equivalent rotary-only systems, allowing the Hephaestus to work through cemented regolith layers and fractured basalt that would stall a first-generation unit. Excavated material flows into a separation hopper that removes cobbles above 50 mm, which are conveyor-fed to a separate rock-breaker jaw. The construction module is a high-temperature microwave sintering array drawing on ESA's MOONRISE project heritage: a 4-axis gantry-mounted emitter head scans user-defined print layers across a prepared regolith bed at 40 mm/s, fusing material to 0.8 MPa compression strength — sufficient for non-load-bearing habitat wall sections. At 6 MW electric and 150 kg/hr mining, the Hephaestus can sustain continuous operations through a full lunar day without thermal cycling constraints.",
+  "ui_tags": ["vibro_ultrasonic", "microwave_sintering", "tier_2"]
+}
