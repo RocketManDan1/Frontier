@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,15 @@ from sim_service import (
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
+
+
+def _html_no_cache(path: str) -> FileResponse:
+    """Return an HTML FileResponse with no-cache headers."""
+    resp = FileResponse(path)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 app.include_router(admin_game_router)
 app.include_router(auth_router)
 app.include_router(catalog_router)
@@ -2428,7 +2437,7 @@ def root(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "index.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "index.html"))
 
 
 @app.get("/fleet")
@@ -2439,7 +2448,7 @@ def fleet(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "fleet.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "fleet.html"))
 
 
 @app.get("/research")
@@ -2450,7 +2459,7 @@ def research(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "research.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "research.html"))
 
 
 @app.get("/shipyard")
@@ -2461,7 +2470,7 @@ def shipyard(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "shipyard.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "shipyard.html"))
 
 
 @app.get("/sites")
@@ -2472,7 +2481,7 @@ def sites(request: Request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "sites.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "sites.html"))
 
 
 @app.get("/profile")
@@ -2485,7 +2494,7 @@ def profile(request: Request):
         conn.close()
     if request.query_params.get("embed") != "1":
         return RedirectResponse(url="/", status_code=302)
-    return FileResponse(str(APP_DIR / "static" / "profile.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "profile.html"))
 
 
 @app.get("/login")
@@ -2496,7 +2505,7 @@ def login_page(request: Request):
             return RedirectResponse(url="/", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "login.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "login.html"))
 
 
 @app.get("/admin")
@@ -2510,5 +2519,5 @@ def admin(request: Request):
             return RedirectResponse(url="/", status_code=302)
     finally:
         conn.close()
-    return FileResponse(str(APP_DIR / "static" / "admin.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "admin.html"))
 
