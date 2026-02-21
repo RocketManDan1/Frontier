@@ -4,18 +4,18 @@
   "research_node": "advanced_rigid_panel_radiator",
   "research_unlock_level": 1,
   "branch": "titanium",
-  "mass_t": 8.0,
+  "mass_t": 29.0,
   "substrate": "titanium_alloy",
   "coating": "high_emissivity_ceramic",
   "emissivity": 0.90,
   "operating_temp_k": 950,
-  "radiating_area_m2": 2000,
+  "radiating_area_m2": 7200,
   "input": {
-    "waste_heat_mw": 80
+    "waste_heat_mw": 300
   },
   "output": {
-    "heat_rejection_mw": 80
+    "heat_rejection_mw": 300
   },
-  "description": "Titanium-alloy substrate panels coated with a plasma-sprayed high-emissivity ceramic. The higher operating temperature compared to aluminum OSR panels dramatically improves specific rejection per unit area (Stefan-Boltzmann scales as T^4), allowing meaningful heat loads from early thermoelectric generators to be managed without crippling panel mass. The ceramic coating is stable to 1050 K with adequate design margin.",
+  "description": "A 7,200 m² array of titanium-alloy substrate panels coated with plasma-sprayed high-emissivity ceramic. The 950 K operating temperature dramatically improves specific rejection per unit area over aluminum OSR panels (Stefan-Boltzmann scales as T^4). The titanium substrate is heavier per square metre than composites, but robust and field-proven. One array handles the waste-heat budget of a mid-range reactor or a reactor paired with an early thermoelectric generator.",
   "ui_tags": ["rigid_panel", "titanium", "advanced"]
 }

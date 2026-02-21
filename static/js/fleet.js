@@ -102,7 +102,7 @@
       if (Number(p.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
       if (Number(p.isp_s) > 0) tooltipLines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
       if (Number(p.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(p.capacity_m3).toFixed(2)} m³`]);
-      if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MW`]);
+      if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
       if (Number(p.water_kg) > 0) tooltipLines.push(["Water", fmtKg(Number(p.water_kg))]);
 
       const cell = itemDisplay.createGridCell({
@@ -190,6 +190,9 @@
     return `${Math.max(0, Number(v) || 0).toFixed(1)} MW`;
   }
 
+  function fmtMwTh(v) { return `${Math.max(0, Number(v) || 0).toFixed(1)}<span class="pbUnit">MWth</span>`; }
+  function fmtMwE(v) { return `${Math.max(0, Number(v) || 0).toFixed(1)}<span class="pbUnit">MWe</span>`; }
+
   function powerBalanceHtml(ship) {
     const pb = ship.power_balance;
     if (!pb) return "";
@@ -198,7 +201,11 @@
     const genInputMw = Number(pb.generator_thermal_mw_input || 0);
     const thermalSurplus = Number(pb.thermal_surplus_mw || 0);
     const electricMw = Number(pb.generator_electric_mw || 0);
-    const genWaste = Number(pb.generator_waste_heat_mw || 0);
+    const electricRated = Number(pb.generator_electric_mw_rated || 0);
+    const genThrottle = Number(pb.gen_throttle ?? 1);
+    const thrustExhaust = Number(pb.thrust_exhaust_mw || 0);
+    const electricConv = Number(pb.electric_conversion_mw || 0);
+    const totalWaste = Number(pb.total_waste_heat_mw || 0);
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
     const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
     const maxThrottle = Number(pb.max_throttle || 0);
@@ -208,28 +215,36 @@
     const thermalCls = thermalSurplus >= 0 ? "pbPositive" : "pbNegative";
     const wasteCls = wasteSurplus > 0 ? "pbNegative" : "pbPositive";
     const throttleCls = maxThrottle < 1 ? "pbNegative" : "pbPositive";
+    const isOverheating = wasteSurplus > 0;
+    const overheatBanner = isOverheating
+      ? `<div class="pbOverheatBanner"><span class="pbOverheatIcon">⚠</span><span class="pbOverheatText">OVERHEATING — ${wasteSurplus.toFixed(1)} MWth unradiated waste heat. Ship cannot transfer and risks thermal failure.</span></div>`
+      : "";
+    const genThrottled = genThrottle < 1 && electricRated > 0;
 
     return `
-      <div class="powerBalancePanel powerBalanceFleet">
+      <div class="powerBalancePanel powerBalanceFleet${isOverheating ? ' pbOverheating' : ''}">
         <div class="pbTitle">Power &amp; Thermal Balance</div>
         <div class="pbSection">
-          <div class="pbSectionHead">Thermal Budget</div>
-          <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMw(reactorMw)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMw(thrusterMw)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMw(genInputMw)}</span></div>
-          <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)} MW</b></span></div>
+          <div class="pbSectionHead">Thermal Budget (MWth)</div>
+          <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMwTh(thrusterMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMwTh(genInputMw)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
           ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
         </div>
         <div class="pbSection">
-          <div class="pbSectionHead">Electric</div>
-          <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMw(electricMw)}</span></div>
+          <div class="pbSectionHead">Electric (MWe)</div>
+          <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
         </div>
         <div class="pbSection">
-          <div class="pbSectionHead">Waste Heat</div>
-          <div class="pbRow"><span class="pbLabel">Generator waste</span><span class="pbVal">${fmtMw(genWaste)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMw(radRejection)}</span></div>
-          <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)} MW</b></span></div>
+          <div class="pbSectionHead">Waste Heat (MWth)</div>
+          <div class="pbRow"><span class="pbLabel">Reactor heat produced</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
+          ${thrustExhaust > 0 ? `<div class="pbRow"><span class="pbLabel">Thrust exhaust</span><span class="pbVal">−${fmtMwTh(thrustExhaust)}</span></div>` : ""}
+          ${electricConv > 0 ? `<div class="pbRow"><span class="pbLabel">Converted to electric</span><span class="pbVal">−${fmtMwE(electricConv)}</span></div>` : ""}
+          <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMwTh(radRejection)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
         </div>
+        ${overheatBanner}
       </div>
     `;
   }

@@ -853,7 +853,18 @@ def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Compute the thermal/electric/waste-heat balance from a list of normalized parts."""
+    """Compute the thermal/electric/waste-heat balance from a list of normalized parts.
+
+    Energy model:
+    - Reactors are the sole heat source (MWth).
+    - Thrusters consume MWth and carry it away as exhaust (first priority).
+    - Generators consume remaining MWth and convert a fraction to MWe;
+      the unconverted portion is waste heat that stays on the ship.
+    - Any reactor thermal not consumed by thrusters or generators is also
+      waste heat (reactor excess).
+    - Radiators reject waste heat.
+    - Generators do NOT create thermal energy — they only transform it.
+    """
     reactor_thermal_mw = 0.0
     thruster_thermal_mw = 0.0
     generator_thermal_mw_input = 0.0
@@ -883,17 +894,11 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
         elif cat == "refinery":
             refinery_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
 
-    # Total thermal demand = thruster + generator input
+    # ── Thermal budget (rated values) ─────────────────────────
     total_thermal_demand_mw = thruster_thermal_mw + generator_thermal_mw_input
     thermal_surplus_mw = reactor_thermal_mw - total_thermal_demand_mw
 
-    # Total waste heat = generator waste heat (reactor waste heat goes into thrust for NTR)
-    waste_heat_surplus_mw = generator_waste_heat_mw - radiator_heat_rejection_mw
-
-    # Electric balance: generator output minus all electric consumers
-    electric_surplus_mw = generator_electric_mw - robonaut_electric_mw - constructor_electric_mw - refinery_electric_mw
-
-    # Throttle cap: if reactor can't supply thruster, throttle is limited
+    # ── Throttle cap: thrusters get first priority ────────────
     if thruster_thermal_mw > 0.0 and reactor_thermal_mw > 0.0:
         max_throttle = min(1.0, reactor_thermal_mw / thruster_thermal_mw)
     elif thruster_thermal_mw > 0.0:
@@ -901,14 +906,46 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     else:
         max_throttle = 1.0
 
+    # ── Actual energy flow (thrusters first, generators second) ──
+    actual_thruster_thermal_mw = min(thruster_thermal_mw, reactor_thermal_mw)
+    thermal_after_thrust_mw = max(0.0, reactor_thermal_mw - actual_thruster_thermal_mw)
+
+    # Generator throttle: can only consume what reactor has left
+    if generator_thermal_mw_input > 0.0 and thermal_after_thrust_mw > 0.0:
+        gen_throttle = min(1.0, thermal_after_thrust_mw / generator_thermal_mw_input)
+    elif generator_thermal_mw_input > 0.0:
+        gen_throttle = 0.0
+    else:
+        gen_throttle = 1.0
+
+    actual_gen_input_mw = generator_thermal_mw_input * gen_throttle
+    actual_gen_electric_mw = generator_electric_mw * gen_throttle
+    actual_gen_waste_mw = actual_gen_input_mw - actual_gen_electric_mw
+
+    # Reactor excess: thermal not consumed by anything
+    reactor_excess_heat_mw = max(0.0, thermal_after_thrust_mw - actual_gen_input_mw)
+
+    # ── Waste heat: all thermal that stays on the ship ────────
+    # = reactor excess + generator unconverted heat
+    # = reactor_thermal - thrust_exhaust - electricity_produced
+    total_waste_heat_mw = reactor_excess_heat_mw + actual_gen_waste_mw
+    waste_heat_surplus_mw = total_waste_heat_mw - radiator_heat_rejection_mw
+
+    # ── Electric balance ──────────────────────────────────────
+    electric_surplus_mw = actual_gen_electric_mw - robonaut_electric_mw - constructor_electric_mw - refinery_electric_mw
+
     return {
         "reactor_thermal_mw": round(reactor_thermal_mw, 1),
         "thruster_thermal_mw": round(thruster_thermal_mw, 1),
         "generator_thermal_mw_input": round(generator_thermal_mw_input, 1),
         "total_thermal_demand_mw": round(total_thermal_demand_mw, 1),
         "thermal_surplus_mw": round(thermal_surplus_mw, 1),
-        "generator_electric_mw": round(generator_electric_mw, 1),
-        "generator_waste_heat_mw": round(generator_waste_heat_mw, 1),
+        "generator_electric_mw_rated": round(generator_electric_mw, 1),
+        "generator_electric_mw": round(actual_gen_electric_mw, 1),
+        "gen_throttle": round(gen_throttle, 4),
+        "thrust_exhaust_mw": round(actual_thruster_thermal_mw, 1),
+        "electric_conversion_mw": round(actual_gen_electric_mw, 1),
+        "total_waste_heat_mw": round(total_waste_heat_mw, 1),
         "radiator_heat_rejection_mw": round(radiator_heat_rejection_mw, 1),
         "waste_heat_surplus_mw": round(waste_heat_surplus_mw, 1),
         "robonaut_electric_mw": round(robonaut_electric_mw, 1),

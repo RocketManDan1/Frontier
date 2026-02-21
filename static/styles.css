@@ -3014,6 +3014,47 @@ body.fleetPage {
   color: rgba(163, 184, 203, 0.82);
 }
 
+/* ── Overheating warning banner ── */
+.pbOverheatBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 60, 60, 0.15);
+  border: 1px solid rgba(255, 80, 80, 0.55);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  color: #ff6b7a;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  animation: pbOverheatPulse 2s ease-in-out infinite;
+}
+
+.pbOverheatBanner .pbOverheatIcon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pbOverheatBanner .pbOverheatText {
+  line-height: 1.35;
+}
+
+@keyframes pbOverheatPulse {
+  0%, 100% { background: rgba(255, 60, 60, 0.15); }
+  50% { background: rgba(255, 60, 60, 0.28); }
+}
+
+.powerBalancePanel.pbOverheating {
+  border-color: rgba(255, 80, 80, 0.55);
+}
+
+.pbUnit {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 1px;
+}
+
 .pbBarWrap {
   display: inline-block;
   width: 60px;

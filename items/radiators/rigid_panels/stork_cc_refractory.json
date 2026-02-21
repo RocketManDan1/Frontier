@@ -4,18 +4,18 @@
   "research_node": "high_temp_rigid_panel_radiator",
   "research_unlock_level": 1,
   "branch": "carbon_composite",
-  "mass_t": 9.0,
+  "mass_t": 27.5,
   "substrate": "carbon_carbon_composite",
   "coating": "refractory_oxide",
   "emissivity": 0.91,
   "operating_temp_k": 1100,
-  "radiating_area_m2": 3500,
+  "radiating_area_m2": 10600,
   "input": {
-    "waste_heat_mw": 250
+    "waste_heat_mw": 800
   },
   "output": {
-    "heat_rejection_mw": 250
+    "heat_rejection_mw": 800
   },
-  "description": "Carbon-carbon composite structural panels with a refractory oxide surface treatment — a materials combination developed for high-enthalpy atmospheric re-entry structures and adapted here for sustained high-temperature space radiation service. At 1100 K the specific rejection rate is ~73 kW/m², enabling the same mass of hardware to shed ten times more waste heat than first-generation aluminum panels. Required for vessels running segmented cascade or SP-100 class thermoelectric generators.",
+  "description": "A 10,600 m² array of carbon-carbon composite structural panels with refractory oxide surface treatment — a materials combination developed for high-enthalpy atmospheric re-entry structures and adapted for sustained 1100 K space radiation service. The composite's low areal density (2.6 kg/m²) keeps the array lighter than the titanium Heron despite spanning three times the area. Required for vessels running segmented cascade or SP-100 class thermoelectric generators.",
   "ui_tags": ["rigid_panel", "carbon_composite", "high_temp"]
 }

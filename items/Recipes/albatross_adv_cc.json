@@ -6,37 +6,37 @@
   "inputs": [
     {
       "item_id": "carbon_composites",
-      "qty": 4.99
+      "qty": 14.02
     },
     {
       "item_id": "superconductors",
-      "qty": 2.36
+      "qty": 6.63
     },
     {
       "item_id": "advanced_aerospace_alloys",
-      "qty": 2.1
+      "qty": 5.9
     },
     {
       "item_id": "advanced_ceramics",
-      "qty": 1.57
+      "qty": 4.41
     },
     {
       "item_id": "radiation_composite_armor",
-      "qty": 1.05
+      "qty": 2.95
     },
     {
       "item_id": "structural_alloys",
-      "qty": 0.66
+      "qty": 1.85
     },
     {
       "item_id": "strategic_elements",
-      "qty": 0.39
+      "qty": 1.1
     }
   ],
-  "build_time_s": 1800,
+  "build_time_s": 5400,
   "facility_type": "shipyard",
   "refinery_category": "metallurgy",
   "min_tech_tier": 4,
-  "power_kw": 360,
+  "power_kw": 1000,
   "byproducts": []
 }

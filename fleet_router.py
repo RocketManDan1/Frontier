@@ -483,6 +483,16 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         current_fuel_kg=float(ship["fuel_kg"] or 0.0),
     )
 
+    # ── Overheating gate: block transfer if waste heat surplus > 0 ──
+    power_balance = catalog_service.compute_power_balance(parts)
+    waste_heat_surplus = float(power_balance.get("waste_heat_surplus_mw") or 0.0)
+    if waste_heat_surplus > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ship is overheating — {waste_heat_surplus:.1f} MWth of unradiated waste heat. "
+                   f"Add radiators or remove generators before transferring.",
+        )
+
     delta_v_remaining = m.compute_delta_v_remaining_m_s(
         stats["dry_mass_kg"],
         stats["fuel_kg"],

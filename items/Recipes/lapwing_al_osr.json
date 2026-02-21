@@ -6,21 +6,21 @@
   "inputs": [
     {
       "item_id": "structural_alloys",
-      "qty": 3.85
+      "qty": 15.94
     },
     {
       "item_id": "advanced_ceramics",
-      "qty": 2.1
+      "qty": 8.69
     },
     {
       "item_id": "megastructure_mass",
-      "qty": 1.05
+      "qty": 4.35
     }
   ],
-  "build_time_s": 600,
+  "build_time_s": 2400,
   "facility_type": "shipyard",
   "refinery_category": "metallurgy",
   "min_tech_tier": 1,
-  "power_kw": 100,
+  "power_kw": 400,
   "byproducts": []
 }
