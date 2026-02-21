@@ -49,7 +49,9 @@
   }
 
   function fmtMassKg(v) {
-    return `${Math.max(0, Number(v) || 0).toFixed(0)} kg`;
+    const val = Math.max(0, Number(v) || 0);
+    if (val >= 5000) return `${(val / 1000).toFixed(1)} t`;
+    return `${val.toFixed(0)} kg`;
   }
 
   function fmtMs(v) {
@@ -66,7 +68,7 @@
     const partQty = Math.max(0, Number(loc?.inventory_part_qty || 0));
     const resourceMass = Math.max(0, Number(loc?.inventory_resource_mass_kg || 0));
     if (id === "LEO") return `${name} (${id}) · catalog`;
-    return `${name} (${id}) · ${partQty.toFixed(0)} parts · ${resourceMass.toFixed(0)} kg resources`;
+    return `${name} (${id}) · ${partQty.toFixed(0)} parts · ${fmtMassKg(resourceMass)} resources`;
   }
 
   function renderSourceLocations() {
@@ -206,8 +208,8 @@
     if (Number(part.electric_mw) > 0) bits.push(`${Number(part.electric_mw).toFixed(0)} MWe`);
     if (Number(part.heat_rejection_mw) > 0) bits.push(`${Number(part.heat_rejection_mw).toFixed(0)} MW rejected`);
     if (Number(part.capacity_m3) > 0) bits.push(`${Number(part.capacity_m3).toFixed(0)} m3`);
-    if (Number(part.fuel_capacity_kg) > 0) bits.push(`${Number(part.fuel_capacity_kg).toFixed(0)} kg fuel`);
-    if (Number(part.mass_kg) > 0) bits.push(`${Number(part.mass_kg).toFixed(0)} kg dry`);
+    if (Number(part.fuel_capacity_kg) > 0) bits.push(`${fmtMassKg(Number(part.fuel_capacity_kg))} fuel`);
+    if (Number(part.mass_kg) > 0) bits.push(`${fmtMassKg(Number(part.mass_kg))} dry`);
     return bits.join(" • ") || "—";
   }
 
@@ -222,7 +224,7 @@
   function partStatsText(part, remaining = null) {
     const fmtKg = itemDisplay && typeof itemDisplay.fmtKg === "function"
       ? itemDisplay.fmtKg
-      : (v) => `${Math.max(0, Number(v) || 0).toFixed(0)} kg`;
+      : (v) => { const val = Math.max(0, Number(v) || 0); return val >= 5000 ? `${(val / 1000).toFixed(1)} t` : `${val.toFixed(0)} kg`; };
     const fmtM3 = itemDisplay && typeof itemDisplay.fmtM3 === "function"
       ? itemDisplay.fmtM3
       : (v) => `${Math.max(0, Number(v) || 0).toFixed(2)} m³`;
@@ -323,7 +325,7 @@
     if (Number(part?.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(part.electric_mw).toFixed(1)} MWe`]);
     if (Number(part?.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(part.heat_rejection_mw).toFixed(1)} MW`]);
     if (Number(part?.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(part.capacity_m3).toFixed(0)} m³`]);
-    if (Number(part?.fuel_capacity_kg) > 0) tooltipLines.push(["Fuel Cap", `${Number(part.fuel_capacity_kg).toFixed(0)} kg`]);
+    if (Number(part?.fuel_capacity_kg) > 0) tooltipLines.push(["Fuel Cap", fmtMassKg(Number(part.fuel_capacity_kg))]);
 
     const cell = itemDisplay && typeof itemDisplay.createGridCell === "function"
       ? itemDisplay.createGridCell({

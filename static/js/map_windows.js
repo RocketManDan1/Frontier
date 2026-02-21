@@ -48,7 +48,9 @@
   }
 
   function fmtKg(value) {
-    return `${Math.max(0, Number(value) || 0).toFixed(0)} kg`;
+    const v = Math.max(0, Number(value) || 0);
+    if (v >= 5000) return `${(v / 1000).toFixed(1)} t`;
+    return `${v.toFixed(0)} kg`;
   }
 
   function fmtM3(value) {

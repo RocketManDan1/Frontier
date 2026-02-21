@@ -47,7 +47,7 @@
   /* ── Utilities ───────────────────────────────────────────── */
 
   function esc(v) { return itemDisplay ? itemDisplay.escapeHtml(v) : String(v || ""); }
-  function fmtKg(v) { return itemDisplay ? itemDisplay.fmtKg(v) : `${Number(v||0).toFixed(0)} kg`; }
+  function fmtKg(v) { return itemDisplay ? itemDisplay.fmtKg(v) : (function(){ var val = Math.max(0, Number(v||0)); return val >= 5000 ? (val/1000).toFixed(1)+' t' : val.toFixed(0)+' kg'; })(); }
   function fmtPct(v) { return `${(Number(v||0) * 100).toFixed(1)}%`; }
   function fmtDuration(s) {
     s = Math.max(0, Math.round(Number(s) || 0));

@@ -39,7 +39,7 @@ window.ItemDisplay = (function () {
 
   function fmtKg(value) {
     const v = Math.max(0, Number(value) || 0);
-    if (v >= 1e6) return `${(v / 1000).toFixed(0)} t`;
+    if (v >= 5000) return `${(v / 1000).toFixed(1)} t`;
     return `${v.toFixed(0)} kg`;
   }
 

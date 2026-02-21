@@ -158,7 +158,9 @@
           refuelBtn.disabled = false;
           return;
         }
-        setMessage(`Refueled ${data.ship.name} (${data.ship.id}) to ${Number(data.ship.fuel_kg || 0).toFixed(0)} kg.`, false);
+        const fuelVal = Number(data.ship.fuel_kg || 0);
+        const fuelStr = fuelVal >= 5000 ? `${(fuelVal / 1000).toFixed(1)} t` : `${fuelVal.toFixed(0)} kg`;
+        setMessage(`Refueled ${data.ship.name} (${data.ship.id}) to ${fuelStr}.`, false);
         await loadRecentShips();
       } catch (err) {
         setMessage(`Refuel failed: ${err.message || err}`, true);

@@ -2085,7 +2085,7 @@
       if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MW`]);
       if (Number(p.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
       if (Number(p.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MW`]);
-      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", `${Number(p.water_kg).toFixed(0)} kg`]);
+      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", fmtKg(Number(p.water_kg))]);
       const cell = ID.createGridCell({
         label: name,
         iconSeed: p.item_id || name,
@@ -2118,10 +2118,10 @@
           <div class="pbTitle">Delta-v &amp; Propulsion</div>
           <div class="pbSection">
             <div class="pbSectionHead">Mass Budget</div>
-            <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${dryMass.toFixed(0)} kg</span></div>
-            <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fuel.toFixed(0)} / ${fuelCap.toFixed(0)} kg</span></div>
+            <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
+            <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
             <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
-            <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${wetMass.toFixed(0)} kg</b></span></div>
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
           </div>
           <div class="pbSection">
             <div class="pbSectionHead">Propulsion</div>
@@ -2191,7 +2191,9 @@
   }
 
   function fmtKg(v) {
-    return `${(Math.max(0, Number(v) || 0)).toFixed(0)} kg`;
+    const val = Math.max(0, Number(v) || 0);
+    if (val >= 5000) return `${(val / 1000).toFixed(1)} t`;
+    return `${val.toFixed(0)} kg`;
   }
 
   function buildShipInfoTabsHtml(activeTab) {
@@ -4476,11 +4478,11 @@
           <div class="tpSectionTitle">Ship Cost</div>
           <div class="tpRow">
             <span class="tpLabel">Fuel required</span>
-            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}">${fuelNeedKg.toFixed(0)} kg</span>
+            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}">${fmtKg(fuelNeedKg)}</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Fuel remaining after</span>
-            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}">${fuelAfterKg.toFixed(0)} kg (${fuelAfterPct}%)</span>
+            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}">${fmtKg(fuelAfterKg)} (${fuelAfterPct}%)</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Ship Δv remaining</span>

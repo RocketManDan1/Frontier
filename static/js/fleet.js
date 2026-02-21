@@ -103,7 +103,7 @@
       if (Number(p.isp_s) > 0) tooltipLines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
       if (Number(p.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(p.capacity_m3).toFixed(2)} m³`]);
       if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MW`]);
-      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", `${Number(p.water_kg).toFixed(0)} kg`]);
+      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", fmtKg(Number(p.water_kg))]);
 
       const cell = itemDisplay.createGridCell({
         label: name,
@@ -120,11 +120,17 @@
     });
   }
 
+  function fmtKg(v) {
+    const val = Math.max(0, Number(v) || 0);
+    if (val >= 5000) return `${(val / 1000).toFixed(1)} t`;
+    return `${val.toFixed(0)} kg`;
+  }
+
   function fuelText(ship) {
     const fuel = Number(ship.fuel_kg || 0);
     const cap = Number(ship.fuel_capacity_kg || 0);
-    if (cap <= 0) return `${fuel.toFixed(0)} kg`;
-    return `${fuel.toFixed(0)} / ${cap.toFixed(0)} kg`;
+    if (cap <= 0) return fmtKg(fuel);
+    return `${fmtKg(fuel)} / ${fmtKg(cap)}`;
   }
 
   function deltaVText(ship) {
@@ -154,10 +160,10 @@
         <div class="pbTitle">Delta-v &amp; Propulsion</div>
         <div class="pbSection">
           <div class="pbSectionHead">Mass Budget</div>
-          <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${dryMass.toFixed(0)} kg</span></div>
-          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fuel.toFixed(0)} / ${fuelCap.toFixed(0)} kg</span></div>
+          <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
           <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
-          <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${wetMass.toFixed(0)} kg</b></span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
         </div>
         <div class="pbSection">
           <div class="pbSectionHead">Propulsion</div>
