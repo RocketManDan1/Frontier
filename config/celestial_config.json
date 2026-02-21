@@ -164,6 +164,95 @@
         "radius_km": 23463.2,
         "angle_deg": -12.0
       }
+    },
+    {
+      "id": "asteroid_belt",
+      "name": "Asteroid Belt",
+      "group_id": "grp_asteroid_belt",
+      "symbol": "◌",
+      "parent_group_id": "grp_sun",
+      "sort_order": 35,
+      "mass_kg": 3.0e21,
+      "gravity_m_s2": 0.0,
+      "radius_km": 0.0,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 414000000.0,
+        "angle_deg": -3.0
+      }
+    },
+    {
+      "id": "ceres",
+      "name": "Ceres",
+      "group_id": "grp_ceres",
+      "wikipedia_title": "Ceres (dwarf planet)",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/Ceres_(dwarf_planet)",
+      "parent_group_id": "grp_asteroid_belt",
+      "sort_order": 10,
+      "mass_kg": 9.3835e20,
+      "gravity_m_s2": 0.28,
+      "radius_km": 473.0,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "asteroid_belt",
+        "radius_km": 0.0,
+        "angle_deg": 0.0
+      }
+    },
+    {
+      "id": "vesta",
+      "name": "Vesta",
+      "group_id": "grp_vesta",
+      "wikipedia_title": "4 Vesta",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/4_Vesta",
+      "parent_group_id": "grp_asteroid_belt",
+      "sort_order": 20,
+      "mass_kg": 2.59076e20,
+      "gravity_m_s2": 0.25,
+      "radius_km": 262.7,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 353400000.0,
+        "angle_deg": 12.0
+      }
+    },
+    {
+      "id": "pallas",
+      "name": "Pallas",
+      "group_id": "grp_pallas",
+      "wikipedia_title": "2 Pallas",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/2_Pallas",
+      "parent_group_id": "grp_asteroid_belt",
+      "sort_order": 30,
+      "mass_kg": 2.04e20,
+      "gravity_m_s2": 0.21,
+      "radius_km": 256.0,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 414700000.0,
+        "angle_deg": -18.0
+      }
+    },
+    {
+      "id": "hygiea",
+      "name": "Hygiea",
+      "group_id": "grp_hygiea",
+      "wikipedia_title": "10 Hygiea",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/10_Hygiea",
+      "parent_group_id": "grp_asteroid_belt",
+      "sort_order": 40,
+      "mass_kg": 8.32e19,
+      "gravity_m_s2": 0.032,
+      "radius_km": 217.0,
+      "position": {
+        "type": "polar_from_body",
+        "center_body_id": "sun",
+        "radius_km": 470300000.0,
+        "angle_deg": 8.0
+      }
     }
   ],
   "groups": [
@@ -229,6 +318,62 @@
       "parent_id": "grp_mars",
       "sort_order": 20,
       "anchor_body_id": "mars"
+    },
+    {
+      "id": "grp_ceres_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_ceres",
+      "sort_order": 10,
+      "anchor_body_id": "ceres"
+    },
+    {
+      "id": "grp_ceres_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_ceres",
+      "sort_order": 30,
+      "anchor_body_id": "ceres"
+    },
+    {
+      "id": "grp_vesta_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_vesta",
+      "sort_order": 10,
+      "anchor_body_id": "vesta"
+    },
+    {
+      "id": "grp_vesta_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_vesta",
+      "sort_order": 30,
+      "anchor_body_id": "vesta"
+    },
+    {
+      "id": "grp_pallas_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_pallas",
+      "sort_order": 10,
+      "anchor_body_id": "pallas"
+    },
+    {
+      "id": "grp_pallas_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_pallas",
+      "sort_order": 30,
+      "anchor_body_id": "pallas"
+    },
+    {
+      "id": "grp_hygiea_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_hygiea",
+      "sort_order": 10,
+      "anchor_body_id": "hygiea"
+    },
+    {
+      "id": "grp_hygiea_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_hygiea",
+      "sort_order": 30,
+      "anchor_body_id": "hygiea"
     }
   ],
   "orbit_nodes": [
@@ -246,6 +391,14 @@
     { "id": "LMO", "name": "Low Mars Orbit", "parent_id": "grp_mars_orbits", "sort_order": 10, "body_id": "mars", "radius_km": 3639.5, "angle_deg": 0.0 }
     ,{ "id": "HMO", "name": "High Mars Orbit", "parent_id": "grp_mars_orbits", "sort_order": 20, "body_id": "mars", "radius_km": 26600.0, "angle_deg": 0.0 }
     ,{ "id": "MGO", "name": "Mars Geo-Sync Orbit", "parent_id": "grp_mars_orbits", "sort_order": 30, "body_id": "mars", "radius_km": 42164.137, "angle_deg": 0.0 }
+    ,{ "id": "CERES_LO", "name": "Low Ceres Orbit", "parent_id": "grp_ceres_orbits", "sort_order": 10, "body_id": "ceres", "radius_km": 573.0, "angle_deg": 0.0 }
+    ,{ "id": "CERES_HO", "name": "High Ceres Orbit", "parent_id": "grp_ceres_orbits", "sort_order": 20, "body_id": "ceres", "radius_km": 2000.0, "angle_deg": 0.0 }
+    ,{ "id": "VESTA_LO", "name": "Low Vesta Orbit", "parent_id": "grp_vesta_orbits", "sort_order": 10, "body_id": "vesta", "radius_km": 362.7, "angle_deg": 0.0 }
+    ,{ "id": "VESTA_HO", "name": "High Vesta Orbit", "parent_id": "grp_vesta_orbits", "sort_order": 20, "body_id": "vesta", "radius_km": 1200.0, "angle_deg": 0.0 }
+    ,{ "id": "PALLAS_LO", "name": "Low Pallas Orbit", "parent_id": "grp_pallas_orbits", "sort_order": 10, "body_id": "pallas", "radius_km": 356.0, "angle_deg": 0.0 }
+    ,{ "id": "PALLAS_HO", "name": "High Pallas Orbit", "parent_id": "grp_pallas_orbits", "sort_order": 20, "body_id": "pallas", "radius_km": 1100.0, "angle_deg": 0.0 }
+    ,{ "id": "HYGIEA_LO", "name": "Low Hygiea Orbit", "parent_id": "grp_hygiea_orbits", "sort_order": 10, "body_id": "hygiea", "radius_km": 317.0, "angle_deg": 0.0 }
+    ,{ "id": "HYGIEA_HO", "name": "High Hygiea Orbit", "parent_id": "grp_hygiea_orbits", "sort_order": 20, "body_id": "hygiea", "radius_km": 900.0, "angle_deg": 0.0 }
   ],
   "lagrange_systems": [
     {
@@ -339,7 +492,38 @@
     { "from_id": "VEN_ORB", "to_id": "ZOOZVE", "dv_m_s": 1450, "tof_s": 259200 },
     { "from_id": "ZOOZVE", "to_id": "VEN_ORB", "dv_m_s": 900, "tof_s": 259200 },
     { "from_id": "VEN_HEO", "to_id": "ZOOZVE", "dv_m_s": 900, "tof_s": 172800 },
-    { "from_id": "ZOOZVE", "to_id": "VEN_HEO", "dv_m_s": 700, "tof_s": 172800 }
+    { "from_id": "ZOOZVE", "to_id": "VEN_HEO", "dv_m_s": 700, "tof_s": 172800 },
+
+    { "from_id": "CERES_LO", "to_id": "CERES_HO", "dv_m_s": 150, "tof_s": 3600 },
+    { "from_id": "CERES_HO", "to_id": "CERES_LO", "dv_m_s": 150, "tof_s": 3600 },
+    { "from_id": "VESTA_LO", "to_id": "VESTA_HO", "dv_m_s": 180, "tof_s": 3600 },
+    { "from_id": "VESTA_HO", "to_id": "VESTA_LO", "dv_m_s": 180, "tof_s": 3600 },
+    { "from_id": "PALLAS_LO", "to_id": "PALLAS_HO", "dv_m_s": 160, "tof_s": 3600 },
+    { "from_id": "PALLAS_HO", "to_id": "PALLAS_LO", "dv_m_s": 160, "tof_s": 3600 },
+    { "from_id": "HYGIEA_LO", "to_id": "HYGIEA_HO", "dv_m_s": 50, "tof_s": 3600 },
+    { "from_id": "HYGIEA_HO", "to_id": "HYGIEA_LO", "dv_m_s": 50, "tof_s": 3600 },
+
+    { "from_id": "CERES_HO", "to_id": "VESTA_HO", "dv_m_s": 2200, "tof_s": 15552000 },
+    { "from_id": "VESTA_HO", "to_id": "CERES_HO", "dv_m_s": 2200, "tof_s": 15552000 },
+    { "from_id": "CERES_HO", "to_id": "PALLAS_HO", "dv_m_s": 1800, "tof_s": 12960000 },
+    { "from_id": "PALLAS_HO", "to_id": "CERES_HO", "dv_m_s": 1800, "tof_s": 12960000 },
+    { "from_id": "CERES_HO", "to_id": "HYGIEA_HO", "dv_m_s": 2000, "tof_s": 14688000 },
+    { "from_id": "HYGIEA_HO", "to_id": "CERES_HO", "dv_m_s": 2000, "tof_s": 14688000 },
+    { "from_id": "VESTA_HO", "to_id": "PALLAS_HO", "dv_m_s": 2500, "tof_s": 17280000 },
+    { "from_id": "PALLAS_HO", "to_id": "VESTA_HO", "dv_m_s": 2500, "tof_s": 17280000 },
+    { "from_id": "VESTA_HO", "to_id": "HYGIEA_HO", "dv_m_s": 2800, "tof_s": 19008000 },
+    { "from_id": "HYGIEA_HO", "to_id": "VESTA_HO", "dv_m_s": 2800, "tof_s": 19008000 },
+    { "from_id": "PALLAS_HO", "to_id": "HYGIEA_HO", "dv_m_s": 2100, "tof_s": 14688000 },
+    { "from_id": "HYGIEA_HO", "to_id": "PALLAS_HO", "dv_m_s": 2100, "tof_s": 14688000 },
+
+    { "from_id": "LEO", "to_id": "CERES_LO", "dv_m_s": 8400, "tof_s": 30240000 },
+    { "from_id": "CERES_LO", "to_id": "LEO", "dv_m_s": 7200, "tof_s": 30240000 },
+    { "from_id": "LEO", "to_id": "VESTA_LO", "dv_m_s": 7800, "tof_s": 25920000 },
+    { "from_id": "VESTA_LO", "to_id": "LEO", "dv_m_s": 6600, "tof_s": 25920000 },
+    { "from_id": "LMO", "to_id": "CERES_LO", "dv_m_s": 5500, "tof_s": 24192000 },
+    { "from_id": "CERES_LO", "to_id": "LMO", "dv_m_s": 4800, "tof_s": 24192000 },
+    { "from_id": "LMO", "to_id": "VESTA_LO", "dv_m_s": 5100, "tof_s": 20736000 },
+    { "from_id": "VESTA_LO", "to_id": "LMO", "dv_m_s": 4400, "tof_s": 20736000 }
   ],
   "surface_sites": [
     {
@@ -484,6 +668,394 @@
         "radioactives": 0.006,
         "helium_3": 0.0001,
         "strategic_elements": 0.008
+      }
+    },
+
+    {
+      "id": "CERES_OCCATOR",
+      "name": "Occator Bright Deposits",
+      "body_id": "ceres",
+      "orbit_node_id": "CERES_LO",
+      "parent_group_id": "grp_ceres_sites",
+      "sort_order": 10,
+      "angle_deg": 20,
+      "landing_dv_m_s": 210,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.25,
+        "iron_oxides": 0.03,
+        "aluminum_oxides": 0.06,
+        "magnesium_oxides": 0.04,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.37,
+        "carbon_volatiles": 0.14,
+        "nitrogen_volatiles": 0.03,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.03
+      }
+    },
+    {
+      "id": "CERES_AHUNA",
+      "name": "Ahuna Mons",
+      "body_id": "ceres",
+      "orbit_node_id": "CERES_LO",
+      "parent_group_id": "grp_ceres_sites",
+      "sort_order": 20,
+      "angle_deg": 100,
+      "landing_dv_m_s": 210,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.34,
+        "iron_oxides": 0.04,
+        "aluminum_oxides": 0.08,
+        "magnesium_oxides": 0.05,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.29,
+        "carbon_volatiles": 0.12,
+        "nitrogen_volatiles": 0.03,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.02
+      }
+    },
+    {
+      "id": "CERES_KERWAN",
+      "name": "Kerwan Basin",
+      "body_id": "ceres",
+      "orbit_node_id": "CERES_LO",
+      "parent_group_id": "grp_ceres_sites",
+      "sort_order": 30,
+      "angle_deg": -60,
+      "landing_dv_m_s": 210,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.42,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.10,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.02,
+        "water_ice": 0.18,
+        "carbon_volatiles": 0.09,
+        "nitrogen_volatiles": 0.02,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.03
+      }
+    },
+    {
+      "id": "CERES_POLAR",
+      "name": "Polar Shadowed Region",
+      "body_id": "ceres",
+      "orbit_node_id": "CERES_LO",
+      "parent_group_id": "grp_ceres_sites",
+      "sort_order": 40,
+      "angle_deg": 90,
+      "landing_dv_m_s": 210,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.17,
+        "iron_oxides": 0.03,
+        "aluminum_oxides": 0.04,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.45,
+        "carbon_volatiles": 0.18,
+        "nitrogen_volatiles": 0.04,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.03
+      }
+    },
+
+    {
+      "id": "VESTA_RHEASILVIA",
+      "name": "Rheasilvia Basin",
+      "body_id": "vesta",
+      "orbit_node_id": "VESTA_LO",
+      "parent_group_id": "grp_vesta_sites",
+      "sort_order": 10,
+      "angle_deg": -90,
+      "landing_dv_m_s": 190,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.40,
+        "iron_oxides": 0.18,
+        "aluminum_oxides": 0.07,
+        "magnesium_oxides": 0.09,
+        "titanium_oxides": 0.05,
+        "metallic_alloys_native_metal": 0.07,
+        "water_ice": 0.00,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.0000,
+        "radioactives": 0.0000,
+        "helium_3": 0.0000,
+        "strategic_elements": 0.12
+      }
+    },
+    {
+      "id": "VESTA_VENENEIA",
+      "name": "Veneneia Basin",
+      "body_id": "vesta",
+      "orbit_node_id": "VESTA_LO",
+      "parent_group_id": "grp_vesta_sites",
+      "sort_order": 20,
+      "angle_deg": -30,
+      "landing_dv_m_s": 190,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.44,
+        "iron_oxides": 0.14,
+        "aluminum_oxides": 0.08,
+        "magnesium_oxides": 0.10,
+        "titanium_oxides": 0.04,
+        "metallic_alloys_native_metal": 0.05,
+        "water_ice": 0.01,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.0000,
+        "radioactives": 0.0000,
+        "helium_3": 0.0000,
+        "strategic_elements": 0.12
+      }
+    },
+    {
+      "id": "VESTA_EQUATORIAL",
+      "name": "Equatorial Ridge",
+      "body_id": "vesta",
+      "orbit_node_id": "VESTA_LO",
+      "parent_group_id": "grp_vesta_sites",
+      "sort_order": 30,
+      "angle_deg": 0,
+      "landing_dv_m_s": 190,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.49,
+        "iron_oxides": 0.10,
+        "aluminum_oxides": 0.09,
+        "magnesium_oxides": 0.11,
+        "titanium_oxides": 0.03,
+        "metallic_alloys_native_metal": 0.04,
+        "water_ice": 0.01,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.0000,
+        "radioactives": 0.0000,
+        "helium_3": 0.0000,
+        "strategic_elements": 0.12
+      }
+    },
+    {
+      "id": "VESTA_NORTHERN",
+      "name": "Northern Highlands",
+      "body_id": "vesta",
+      "orbit_node_id": "VESTA_LO",
+      "parent_group_id": "grp_vesta_sites",
+      "sort_order": 40,
+      "angle_deg": 90,
+      "landing_dv_m_s": 190,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.43,
+        "iron_oxides": 0.13,
+        "aluminum_oxides": 0.08,
+        "magnesium_oxides": 0.10,
+        "titanium_oxides": 0.04,
+        "metallic_alloys_native_metal": 0.05,
+        "water_ice": 0.01,
+        "sulfur_compounds": 0.01,
+        "precious_rare_metals": 0.0000,
+        "radioactives": 0.0000,
+        "helium_3": 0.0000,
+        "strategic_elements": 0.15
+      }
+    },
+
+    {
+      "id": "PALLAS_EQUATORIAL",
+      "name": "Equatorial Carbon Basin",
+      "body_id": "pallas",
+      "orbit_node_id": "PALLAS_LO",
+      "parent_group_id": "grp_pallas_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 160,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.29,
+        "iron_oxides": 0.03,
+        "aluminum_oxides": 0.05,
+        "magnesium_oxides": 0.04,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.24,
+        "carbon_volatiles": 0.22,
+        "nitrogen_volatiles": 0.04,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.04
+      }
+    },
+    {
+      "id": "PALLAS_INCLINED",
+      "name": "High-Inclination Ridge",
+      "body_id": "pallas",
+      "orbit_node_id": "PALLAS_LO",
+      "parent_group_id": "grp_pallas_sites",
+      "sort_order": 20,
+      "angle_deg": 70,
+      "landing_dv_m_s": 160,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.34,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.06,
+        "magnesium_oxides": 0.05,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.22,
+        "carbon_volatiles": 0.16,
+        "nitrogen_volatiles": 0.04,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.05
+      }
+    },
+    {
+      "id": "PALLAS_SOUTHERN",
+      "name": "Southern Fracture Zone",
+      "body_id": "pallas",
+      "orbit_node_id": "PALLAS_LO",
+      "parent_group_id": "grp_pallas_sites",
+      "sort_order": 30,
+      "angle_deg": -45,
+      "landing_dv_m_s": 160,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.41,
+        "iron_oxides": 0.04,
+        "aluminum_oxides": 0.07,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.15,
+        "carbon_volatiles": 0.16,
+        "nitrogen_volatiles": 0.03,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.04
+      }
+    },
+    {
+      "id": "PALLAS_NORTHERN",
+      "name": "Northern Basin Cluster",
+      "body_id": "pallas",
+      "orbit_node_id": "PALLAS_LO",
+      "parent_group_id": "grp_pallas_sites",
+      "sort_order": 40,
+      "angle_deg": 120,
+      "landing_dv_m_s": 160,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.26,
+        "iron_oxides": 0.03,
+        "aluminum_oxides": 0.05,
+        "magnesium_oxides": 0.04,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.29,
+        "carbon_volatiles": 0.20,
+        "nitrogen_volatiles": 0.04,
+        "sulfur_compounds": 0.02,
+        "strategic_elements": 0.04
+      }
+    },
+
+    {
+      "id": "HYGIEA_CENTRAL",
+      "name": "Central Plateau",
+      "body_id": "hygiea",
+      "orbit_node_id": "HYGIEA_LO",
+      "parent_group_id": "grp_hygiea_sites",
+      "sort_order": 10,
+      "angle_deg": 10,
+      "landing_dv_m_s": 30,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.41,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.10,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.21,
+        "carbon_volatiles": 0.10,
+        "nitrogen_volatiles": 0.02,
+        "sulfur_compounds": 0.02
+      }
+    },
+    {
+      "id": "HYGIEA_WESTERN",
+      "name": "Western Dark Terrain",
+      "body_id": "hygiea",
+      "orbit_node_id": "HYGIEA_LO",
+      "parent_group_id": "grp_hygiea_sites",
+      "sort_order": 20,
+      "angle_deg": -80,
+      "landing_dv_m_s": 30,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.23,
+        "iron_oxides": 0.04,
+        "aluminum_oxides": 0.06,
+        "magnesium_oxides": 0.04,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.37,
+        "carbon_volatiles": 0.20,
+        "nitrogen_volatiles": 0.03,
+        "sulfur_compounds": 0.02
+      }
+    },
+    {
+      "id": "HYGIEA_POLAR",
+      "name": "Polar Basin",
+      "body_id": "hygiea",
+      "orbit_node_id": "HYGIEA_LO",
+      "parent_group_id": "grp_hygiea_sites",
+      "sort_order": 30,
+      "angle_deg": 90,
+      "landing_dv_m_s": 30,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.18,
+        "iron_oxides": 0.03,
+        "aluminum_oxides": 0.04,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.01,
+        "water_ice": 0.46,
+        "carbon_volatiles": 0.19,
+        "nitrogen_volatiles": 0.04,
+        "sulfur_compounds": 0.02
+      }
+    },
+    {
+      "id": "HYGIEA_IMPACT",
+      "name": "Impact Rim Complex",
+      "body_id": "hygiea",
+      "orbit_node_id": "HYGIEA_LO",
+      "parent_group_id": "grp_hygiea_sites",
+      "sort_order": 40,
+      "angle_deg": -140,
+      "landing_dv_m_s": 30,
+      "landing_tof_s": 1800,
+      "resource_distribution": {
+        "silicate_rock": 0.37,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.09,
+        "magnesium_oxides": 0.06,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.02,
+        "water_ice": 0.24,
+        "carbon_volatiles": 0.11,
+        "nitrogen_volatiles": 0.03,
+        "sulfur_compounds": 0.02
       }
     }
   ]

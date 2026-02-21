@@ -49,6 +49,8 @@
               <button class="siteFilterBtn" data-filter="surface">Surface</button>
               <button class="siteFilterBtn" data-filter="orbital">Orbital</button>
               <button class="siteFilterBtn" data-filter="active">Has Industry</button>
+              <span class="filterSpacer"></span>
+              <button class="siteGroupBtn" id="overviewGroupByBody" title="Group by body">🪐 Group</button>
             </div>
             <div class="tableWrap">
               <table class="sitesTable" id="sitesTable">
@@ -242,6 +244,9 @@
             <div class="panelHeader">
               <span class="panelTitle">Locations</span>
               <input type="text" class="sitesSearch" id="cargoSearchInput" placeholder="Filter…" />
+            </div>
+            <div class="sitesFilterBar cargoFilterBar">
+              <button class="siteGroupBtn" id="cargoGroupByBody" title="Group by body">🪐 Group</button>
             </div>
             <div class="tableWrap">
               <table class="sitesTable cargoSitesTable" id="cargoSitesTable">

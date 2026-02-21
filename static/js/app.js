@@ -2337,6 +2337,10 @@
   const MERCURY_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const VENUS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const MARS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const CERES_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const VESTA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const PALLAS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const HYGIEA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const FIT_VIEW_SCALE = 0.86;
   const MAP_SCREEN_SPREAD_MULT = 10;
   const MAX_INITIAL_SCALE = CAMERA_MAX_SCALE;
@@ -2396,7 +2400,7 @@
   const PLANET_ICON_SCREEN_MULT = 1.5;
   const MOON_ICON_SCREEN_PX = 16;
   const ASTEROID_ICON_SCREEN_PX = 16;
-  const ASTEROID_HINTS = ["asteroid", "zoozve"];
+  const ASTEROID_HINTS = ["asteroid", "zoozve", "ceres", "vesta", "pallas", "hygiea"];
   const PLANET_ICON_ZOOM_COMP_MAX = 320;
   const PLANET_LABEL_ZOOM_COMP_MAX = 42;
 
@@ -2407,6 +2411,10 @@
     "MERC_ORB", "MERC_HEO", "MERC_GEO",
     "VEN_ORB", "VEN_HEO", "VEN_GEO",
     "LMO", "HMO", "MGO",
+    "CERES_LO", "CERES_HO",
+    "VESTA_LO", "VESTA_HO",
+    "PALLAS_LO", "PALLAS_HO",
+    "HYGIEA_LO", "HYGIEA_HO",
   ]);
   const LPOINT_IDS = new Set(["L1", "L2", "L3", "L4", "L5"]);
 
@@ -3073,6 +3081,10 @@
   let earthGfx = null;
   let moonGfx = null;
   let marsGfx = null;
+  let ceresGfx = null;
+  let vestaGfx = null;
+  let pallasGfx = null;
+  let hygieaGfx = null;
   const mainPlanetGfx = [];
   let hoveredBodyId = null;
   let moonDetailAlpha = 1;
@@ -3160,6 +3172,10 @@
     earthGfx = makePlanet("Earth", 4.6, 0x2b7cff, 0x2b7cff);
     moonGfx = makePlanet("Luna", 4.2, 0xbdbdbd, 0xffffff);
     marsGfx = makePlanet("Mars", 4.4, 0xcd6b4f, 0xe58b6c);
+    ceresGfx = makePlanet("Ceres", 3.8, 0x8b7d6b, 0xa09080);
+    vestaGfx = makePlanet("Vesta", 3.6, 0x9a8a7a, 0xb0a090);
+    pallasGfx = makePlanet("Pallas", 3.5, 0x7a6e62, 0x908478);
+    hygieaGfx = makePlanet("Hygiea", 3.4, 0x5c5550, 0x706860);
 
     bindBodyHover(sunGfx, "grp_sun");
     bindBodyHover(mercuryGfx, "grp_mercury");
@@ -3167,9 +3183,13 @@
     bindBodyHover(earthGfx, "grp_earth");
     bindBodyHover(moonGfx, "grp_moon");
     bindBodyHover(marsGfx, "grp_mars");
+    bindBodyHover(ceresGfx, "grp_ceres");
+    bindBodyHover(vestaGfx, "grp_vesta");
+    bindBodyHover(pallasGfx, "grp_pallas");
+    bindBodyHover(hygieaGfx, "grp_hygiea");
 
-    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx);
-    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx);
+    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx);
+    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx);
   }
 
   function updatePlanetVisualScale() {
@@ -3214,6 +3234,10 @@
     const earth = locationsById.get("grp_earth");
     const moon = locationsById.get("grp_moon");
     const mars = locationsById.get("grp_mars");
+    const ceres = locationsById.get("grp_ceres");
+    const vesta = locationsById.get("grp_vesta");
+    const pallas = locationsById.get("grp_pallas");
+    const hygiea = locationsById.get("grp_hygiea");
     if (!sun || !mercury || !venus || !earth || !moon || !mars) return;
     if (!sunGfx || !mercuryGfx || !venusGfx || !earthGfx || !moonGfx || !marsGfx) return;
 
@@ -3223,6 +3247,10 @@
     earthGfx.position.set(earth.rx, earth.ry);
     moonGfx.position.set(moon.rx, moon.ry);
     marsGfx.position.set(mars.rx, mars.ry);
+    if (ceres && ceresGfx) ceresGfx.position.set(ceres.rx, ceres.ry);
+    if (vesta && vestaGfx) vestaGfx.position.set(vesta.rx, vesta.ry);
+    if (pallas && pallasGfx) pallasGfx.position.set(pallas.rx, pallas.ry);
+    if (hygiea && hygieaGfx) hygieaGfx.position.set(hygiea.rx, hygiea.ry);
   }
 
   // ---------- Orbit hover labels ----------
@@ -3268,6 +3296,14 @@
       { id: "LMO", center: "grp_mars", period_s: 360 },
       { id: "HMO", center: "grp_mars", period_s: 420 },
       { id: "MGO", center: "grp_mars", period_s: 480 },
+      { id: "CERES_LO", center: "grp_ceres", period_s: 400 },
+      { id: "CERES_HO", center: "grp_ceres", period_s: 460 },
+      { id: "VESTA_LO", center: "grp_vesta", period_s: 380 },
+      { id: "VESTA_HO", center: "grp_vesta", period_s: 440 },
+      { id: "PALLAS_LO", center: "grp_pallas", period_s: 390 },
+      { id: "PALLAS_HO", center: "grp_pallas", period_s: 450 },
+      { id: "HYGIEA_LO", center: "grp_hygiea", period_s: 410 },
+      { id: "HYGIEA_HO", center: "grp_hygiea", period_s: 470 },
     ];
 
     for (const od of orbitDefs) {
@@ -3311,6 +3347,40 @@
         const rr = Math.hypot(body.rx - sun.rx, body.ry - sun.ry);
         if (rr > 1e-6) orbitLayer.drawCircle(sun.rx, sun.ry, rr);
       }
+
+      // Asteroid belt dust cloud — rusty red-brown annular band
+      const beltBodies = ["grp_vesta", "grp_ceres", "grp_pallas", "grp_hygiea"];
+      const beltRadii = beltBodies.map(id => {
+        const b = locationsById.get(id);
+        return b ? Math.hypot(b.rx - sun.rx, b.ry - sun.ry) : 0;
+      }).filter(r => r > 1e-6);
+      if (beltRadii.length > 0) {
+        const innerR = Math.min(...beltRadii) * 0.88;
+        const outerR = Math.max(...beltRadii) * 1.12;
+        const beltAlpha = 0.06 * mainOrbitDetailAlpha;
+        const bandCount = 5;
+        for (let i = 0; i < bandCount; i++) {
+          const t = i / (bandCount - 1);
+          const r = innerR + t * (outerR - innerR);
+          const edgeFade = 1 - Math.pow(2 * t - 1, 2);
+          const a = beltAlpha * (0.3 + 0.7 * edgeFade);
+          orbitLayer.lineStyle((ringScreenPx * 2.4) / zoom, 0x8b4513, a);
+          orbitLayer.drawCircle(sun.rx, sun.ry, r);
+        }
+        // dashed scatter particles (lightweight procedural texture)
+        const scatterCount = 12;
+        for (let i = 0; i < scatterCount; i++) {
+          const angle = (i / scatterCount) * Math.PI * 2 + 0.37;
+          const rScatter = innerR + Math.random() * (outerR - innerR);
+          const px = sun.rx + Math.cos(angle) * rScatter;
+          const py = sun.ry + Math.sin(angle) * rScatter;
+          const dotR = (1.2 + Math.random() * 1.8) / zoom;
+          orbitLayer.lineStyle(0);
+          orbitLayer.beginFill(0xa0522d, 0.08 * mainOrbitDetailAlpha);
+          orbitLayer.drawCircle(px, py, dotR);
+          orbitLayer.endFill();
+        }
+      }
     }
 
     function drawRing(id) {
@@ -3331,6 +3401,10 @@
       "MERC_ORB", "MERC_HEO", "MERC_GEO",
       "VEN_ORB", "VEN_HEO", "VEN_GEO",
       "LMO", "HMO", "MGO",
+      "CERES_LO", "CERES_HO",
+      "VESTA_LO", "VESTA_HO",
+      "PALLAS_LO", "PALLAS_HO",
+      "HYGIEA_LO", "HYGIEA_HO",
     ].forEach(drawRing);
   }
 
@@ -3401,6 +3475,8 @@
       // ✅ Orbits are rings only; don't draw dots/labels for them
       if (ORBIT_IDS.has(loc.id)) continue;
       if (loc.id === "SUN") continue;
+      // Surface sites live in the Sites page, not on the orbital map
+      if (loc.is_surface_site) continue;
 
       if (locGfx.has(loc.id)) continue;
 
@@ -4740,6 +4816,10 @@
     const earth = locations.find((l) => l.id === "grp_earth");
     const moon = locations.find((l) => l.id === "grp_moon");
     const mars = locations.find((l) => l.id === "grp_mars");
+    const ceres = locations.find((l) => l.id === "grp_ceres");
+    const vesta = locations.find((l) => l.id === "grp_vesta");
+    const pallas = locations.find((l) => l.id === "grp_pallas");
+    const hygiea = locations.find((l) => l.id === "grp_hygiea");
 
     const sunX = sun ? Number(sun.x) : 0;
     const sunY = sun ? Number(sun.y) : 0;
@@ -4770,6 +4850,10 @@
     const earthProjected = earth ? projectDeepPosition(earth.x, earth.y) : { rx: 0, ry: 0 };
     const moonProjected = moon ? projectDeepPosition(moon.x, moon.y) : projectDeepPosition(384400, 0);
     const marsProjected = mars ? projectDeepPosition(mars.x, mars.y) : { rx: 0, ry: 0 };
+    const ceresProjected = ceres ? projectDeepPosition(ceres.x, ceres.y) : { rx: 0, ry: 0 };
+    const vestaProjected = vesta ? projectDeepPosition(vesta.x, vesta.y) : { rx: 0, ry: 0 };
+    const pallasProjected = pallas ? projectDeepPosition(pallas.x, pallas.y) : { rx: 0, ry: 0 };
+    const hygieaProjected = hygiea ? projectDeepPosition(hygiea.x, hygiea.y) : { rx: 0, ry: 0 };
     const mercuryRx = mercuryProjected.rx;
     const mercuryRy = mercuryProjected.ry;
     const venusRx = venusProjected.rx;
@@ -4780,6 +4864,14 @@
     const moonRy = moonProjected.ry;
     const marsRx = marsProjected.rx;
     const marsRy = marsProjected.ry;
+    const ceresRx = ceresProjected.rx;
+    const ceresRy = ceresProjected.ry;
+    const vestaRx = vestaProjected.rx;
+    const vestaRy = vestaProjected.ry;
+    const pallasRx = pallasProjected.rx;
+    const pallasRy = pallasProjected.ry;
+    const hygieaRx = hygieaProjected.rx;
+    const hygieaRy = hygieaProjected.ry;
 
     for (const l of locations) {
       l.is_group = !!Number(l.is_group);
@@ -4805,6 +4897,18 @@
       } else if (!l.is_group && hasAncestor(l.id, "grp_mars_orbits", parentById) && mars) {
         rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
         ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_ceres_orbits", parentById) && ceres) {
+        rx = ceresRx + (Number(l.x) - Number(ceres.x)) * CERES_ORBIT_SCALE;
+        ry = ceresRy + (Number(l.y) - Number(ceres.y)) * CERES_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_vesta_orbits", parentById) && vesta) {
+        rx = vestaRx + (Number(l.x) - Number(vesta.x)) * VESTA_ORBIT_SCALE;
+        ry = vestaRy + (Number(l.y) - Number(vesta.y)) * VESTA_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_pallas_orbits", parentById) && pallas) {
+        rx = pallasRx + (Number(l.x) - Number(pallas.x)) * PALLAS_ORBIT_SCALE;
+        ry = pallasRy + (Number(l.y) - Number(pallas.y)) * PALLAS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_hygiea_orbits", parentById) && hygiea) {
+        rx = hygieaRx + (Number(l.x) - Number(hygiea.x)) * HYGIEA_ORBIT_SCALE;
+        ry = hygieaRy + (Number(l.y) - Number(hygiea.y)) * HYGIEA_ORBIT_SCALE;
       } else if (l.id === "grp_mercury") {
         rx = mercuryRx; ry = mercuryRy;
       } else if (l.id === "grp_venus") {
@@ -4815,6 +4919,14 @@
         rx = moonRx; ry = moonRy;
       } else if (l.id === "grp_mars") {
         rx = marsRx; ry = marsRy;
+      } else if (l.id === "grp_ceres") {
+        rx = ceresRx; ry = ceresRy;
+      } else if (l.id === "grp_vesta") {
+        rx = vestaRx; ry = vestaRy;
+      } else if (l.id === "grp_pallas") {
+        rx = pallasRx; ry = pallasRy;
+      } else if (l.id === "grp_hygiea") {
+        rx = hygieaRx; ry = hygieaRy;
       }
 
       l.rx = rx;

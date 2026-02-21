@@ -3156,6 +3156,35 @@ body.fleetPage {
 .siteFilterBtn:hover { color: var(--text); border-color: var(--border); }
 .siteFilterBtn.active { color: var(--accent); border-color: var(--accent); background: rgba(89,185,230,0.08); }
 
+.filterSpacer { flex: 1; }
+
+.siteGroupBtn {
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.siteGroupBtn:hover { color: var(--text); border-color: var(--border); }
+.siteGroupBtn.active { color: var(--accent); border-color: var(--accent); background: rgba(89,185,230,0.08); }
+
+/* ── Body group header rows ─────────────────────────────── */
+
+tr.bodyGroupHeader td {
+  background: var(--bg-deeper, #0d1117);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  border-top: 1px solid var(--border-soft);
+}
+
 /* ── Overview layout ────────────────────────────────────── */
 
 .sitesOverviewLayout {

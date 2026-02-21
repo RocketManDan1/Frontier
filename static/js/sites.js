@@ -16,6 +16,8 @@
   let selectedSiteId = null;
   let currentTab = "overview";       // "overview" | "industrial"
   let currentFilter = "all";
+  let overviewGroupByBody = false;
+  let cargoGroupByBody = false;
   let industryLocationId = null;
   let industryData = null;
   let pollTimer = null;
@@ -97,6 +99,15 @@
     });
   }
 
+  /* ── Body group ordering (inner → outer) ──────────────── */
+
+  const BODY_ORDER = ["Sun", "Mercury", "Venus", "Earth", "Luna", "Mars", "Ceres", "Vesta", "Pallas", "Hygiea"];
+  function bodySort(a, b) {
+    const ai = BODY_ORDER.indexOf(a);
+    const bi = BODY_ORDER.indexOf(b);
+    return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi) || a.localeCompare(b);
+  }
+
   /* ══════════════════════════════════════════════════════════
      OVERVIEW TAB
      ══════════════════════════════════════════════════════════ */
@@ -131,7 +142,7 @@
       return;
     }
 
-    tbody.innerHTML = filtered.map(s => {
+    function siteRow(s) {
       const eq = s.equipment || {};
       const refCount = (eq.refinery || {}).total || 0;
       const conCount = (eq.constructor || {}).total || 0;
@@ -161,7 +172,23 @@
         <td>${equipStr}</td>
         <td>${jobStr}</td>
       </tr>`;
-    }).join("");
+    }
+
+    if (overviewGroupByBody) {
+      const groups = {};
+      filtered.forEach(s => {
+        const body = s.body_name || "Other";
+        if (!groups[body]) groups[body] = [];
+        groups[body].push(s);
+      });
+      const order = Object.keys(groups).sort(bodySort);
+      tbody.innerHTML = order.map(body =>
+        `<tr class="bodyGroupHeader"><td colspan="6">${esc(body)}</td></tr>` +
+        groups[body].map(siteRow).join("")
+      ).join("");
+    } else {
+      tbody.innerHTML = filtered.map(siteRow).join("");
+    }
 
     // Click handler
     tbody.querySelectorAll("tr[data-site-id]").forEach(tr => {
@@ -1218,12 +1245,29 @@
       if (search && !(s.name || "").toLowerCase().includes(search) && !(s.id || "").toLowerCase().includes(search)) return false;
       return true;
     });
-    tbody.innerHTML = filtered.map(s => {
-      const shipCount = Number(s.ship_count || 0);
+
+    function siteRow(s) {
+      const shipCount = Number(s.ship_count || s.ships_docked || 0);
       const invCount = Number(s.inventory?.stack_count || 0) + Number(s.inventory?.resource_count || 0);
       const sel = cargoLocationId === s.id ? ' class="selected"' : '';
       return `<tr${sel} data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td>${shipCount}</td><td>${invCount}</td></tr>`;
-    }).join("");
+    }
+
+    if (cargoGroupByBody) {
+      const groups = {};
+      filtered.forEach(s => {
+        const body = s.body_name || "Other";
+        if (!groups[body]) groups[body] = [];
+        groups[body].push(s);
+      });
+      const order = Object.keys(groups).sort(bodySort);
+      tbody.innerHTML = order.map(body =>
+        `<tr class="bodyGroupHeader"><td colspan="3">${esc(body)}</td></tr>` +
+        groups[body].map(siteRow).join("")
+      ).join("");
+    } else {
+      tbody.innerHTML = filtered.map(siteRow).join("");
+    }
 
     tbody.querySelectorAll("tr[data-id]").forEach(row => {
       row.style.cursor = "pointer";
@@ -1675,6 +1719,16 @@
     // Refresh button
     const refreshBtn = document.getElementById("cargoRefreshBtn");
     if (refreshBtn) refreshBtn.addEventListener("click", () => loadCargoContext());
+
+    // Group by body toggle (Cargo)
+    const cargoGroupBtn = document.getElementById("cargoGroupByBody");
+    if (cargoGroupBtn) {
+      cargoGroupBtn.addEventListener("click", () => {
+        cargoGroupByBody = !cargoGroupByBody;
+        cargoGroupBtn.classList.toggle("active", cargoGroupByBody);
+        renderCargoSitesTable();
+      });
+    }
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -1691,6 +1745,16 @@
       });
     });
     document.getElementById("sitesSearchInput").addEventListener("input", () => renderSitesTable());
+
+    // Group by body toggle (Overview)
+    const overviewBtn = document.getElementById("overviewGroupByBody");
+    if (overviewBtn) {
+      overviewBtn.addEventListener("click", () => {
+        overviewGroupByBody = !overviewGroupByBody;
+        overviewBtn.classList.toggle("active", overviewGroupByBody);
+        renderSitesTable();
+      });
+    }
   }
 
   /* ══════════════════════════════════════════════════════════

@@ -148,6 +148,39 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     # Metadata
     metadata = _main()._location_metadata_by_id()
 
+    # Build group hierarchy for body resolution
+    all_locs = conn.execute(
+        "SELECT id, name, parent_id, is_group FROM locations"
+    ).fetchall()
+    group_map: Dict[str, Dict[str, Any]] = {}
+    for r in all_locs:
+        if r["is_group"]:
+            group_map[r["id"]] = {"name": r["name"], "parent_id": r["parent_id"]}
+
+    # Resolve body name by walking up the parent chain
+    # grp_moon_sites → grp_moon (Luna) → grp_earth (Earth) → grp_sun (Sun)
+    # grp_earth_orbits → grp_earth (Earth) → grp_sun (Sun)
+    # We want the *immediate parent body group* — the one right above the leaf-type group.
+    def _resolve_body(parent_id: str) -> str:
+        """Find the body name from the direct parent of the leaf-type group (orbits/sites/moons/asteroids)."""
+        if not parent_id or parent_id not in group_map:
+            return ""
+        g = group_map[parent_id]
+        gname = g.get("name") or ""
+        gparent = g.get("parent_id") or ""
+        # If this group is a leaf-type (Orbits, Surface Sites, Moons, Asteroids, Earth–Luna Lagrange),
+        # go up one level to the body group.
+        leaf_names = {"orbits", "surface sites", "moons", "asteroids"}
+        if gname.lower() in leaf_names or "lagrange" in gname.lower():
+            if gparent and gparent in group_map:
+                body_g = group_map[gparent]
+                return body_g.get("name") or gparent
+            return gname
+        # Direct body group (e.g. parent_id = grp_sun for Sun location itself)
+        if parent_id not in ("grp_sun", "grp_asteroid_belt"):
+            return gname
+        return gname
+
     result = []
     for loc in locations:
         loc_id = loc["id"]
@@ -159,6 +192,7 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "id": loc_id,
             "name": loc["name"],
             "parent_id": loc["parent_id"],
+            "body_name": _resolve_body(loc["parent_id"]) or "",
             "is_surface_site": is_surface,
             "body_id": site_info.get("body_id") or meta.get("body_id", ""),
             "gravity_m_s2": site_info.get("gravity_m_s2", 0),
