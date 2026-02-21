@@ -1066,12 +1066,13 @@
 
     let bestShip = null;
     let bestShipD2 = Number.POSITIVE_INFINITY;
+    const minShipWorld = MIN_SHIP_HIT_SCREEN_PX / zoom;
     for (const [shipId, gfx] of shipGfx.entries()) {
       const c = gfx?.container;
       if (!c || c.visible === false) continue;
       const shipHitRadius = c.hitArea instanceof PIXI.Circle
-        ? Math.max(0, Number(c.hitArea.radius) || 0)
-        : (12 / zoom);
+        ? Math.max(minShipWorld, Number(c.hitArea.radius) || 0)
+        : minShipWorld;
       const dx = worldPoint.x - Number(c.x || 0);
       const dy = worldPoint.y - Number(c.y || 0);
       const d2 = dx * dx + dy * dy;
@@ -1082,7 +1083,7 @@
     }
     if (bestShip) return { kind: "ship", id: bestShip };
 
-    const orbitTolWorld = 12 / zoom;
+    const orbitTolWorld = 16 / zoom;
     let bestOrbit = null;
     let bestOrbitErr = Number.POSITIVE_INFINITY;
     for (const orbitId of ORBIT_IDS) {
@@ -1097,7 +1098,7 @@
     }
     if (bestOrbit) return { kind: "location", id: bestOrbit };
 
-    const locTolWorld = 14 / zoom;
+    const locTolWorld = MIN_LOC_HIT_SCREEN_PX / zoom;
     let bestLoc = null;
     let bestLocD2 = Number.POSITIVE_INFINITY;
     for (const loc of locations) {
@@ -1113,7 +1114,7 @@
     }
     if (bestLoc) return { kind: "location", id: bestLoc };
 
-    const bodyTolWorld = 18 / zoom;
+    const bodyTolWorld = 24 / zoom;
     let bestBody = null;
     let bestBodyD2 = Number.POSITIVE_INFINITY;
     for (const loc of locations) {
@@ -2361,6 +2362,8 @@
   const SHIP_VISUAL_SCALE = 0.5;
   const SHIP_CLICK_RADIUS_MULT = 3.2;
   const SHIP_WORLD_SCALE_COMPENSATION = 1;
+  const MIN_SHIP_HIT_SCREEN_PX = 22;
+  const MIN_LOC_HIT_SCREEN_PX = 20;
   const PARKED_ORBIT_ROTATION_PERIOD_S = 3600;
   const PARKED_ABOVE_NODE_Y = -14;
   const SHIP_TRAIL_DISTANCE_MULT = 1.55;
@@ -2370,8 +2373,13 @@
   const SHIP_PATH_TRAVELED_ALPHA = 0.06;
   const SHIP_PATH_CHEVRON_ALPHA = 0.45;
   const SHIP_PATH_DEST_MARKER_ALPHA = 0.55;
-  const SHIP_DOCK_BASE_RADIUS_PX = 22;
-  const SHIP_DOCK_RING_STEP_PX = 26;
+  const SHIP_DOCK_BASE_RADIUS_PX = 18;
+  const SHIP_DOCK_RING_STEP_PX = 22;
+  const DOCK_SLOTS_PER_RING = 6;
+  const FAN_OUT_RADIUS_SCREEN_PX = 60;
+  const FAN_OUT_RING_STEP_SCREEN_PX = 50;
+  const FAN_OUT_DETECT_RADIUS_SCREEN_PX = 80;
+  const FAN_OUT_LERP_SPEED = 0.12;
   const SHIP_IDTAG_FADE_IN_ZOOM = 0.85;
   const SHIP_IDTAG_FULL_ZOOM = 1.65;
   const SHIP_CLUSTER_ZOOM_THRESHOLD = 0.24;
@@ -2940,23 +2948,97 @@
 
   // ---------- Parking offsets ----------
   function slotOffsetWorld(slotIndex, zoom, baseRadiusPx) {
-    if ((slotIndex || 0) === 0) {
-      return { dxWorld: 0, dyWorld: 0 };
-    }
-
-    const slotsPerRing = 12;
-
-    const idx = Math.max(1, slotIndex) - 1;
-    const ring = Math.floor(idx / slotsPerRing);
-    const j = idx % slotsPerRing;
-
-    const rPx = baseRadiusPx + ring * SHIP_DOCK_RING_STEP_PX;
-    const angle = (-Math.PI / 2) + (2 * Math.PI * (j / slotsPerRing));
     const zoomSafe = Math.max(0.0001, Number(zoom) || 1);
+    if ((slotIndex || 0) === 0) {
+      return { dxWorld: 0, dyWorld: (PARKED_ABOVE_NODE_Y * 0.5) / zoomSafe };
+    }
+    const idx = Math.max(1, slotIndex) - 1;
+    const ring = Math.floor(idx / DOCK_SLOTS_PER_RING);
+    const j = idx % DOCK_SLOTS_PER_RING;
+    const rPx = baseRadiusPx + ring * SHIP_DOCK_RING_STEP_PX;
+    const angle = (-Math.PI / 2) + (2 * Math.PI * (j / DOCK_SLOTS_PER_RING));
     return {
       dxWorld: (Math.cos(angle) * rPx) / zoomSafe,
       dyWorld: (Math.sin(angle) * rPx) / zoomSafe,
     };
+  }
+
+  /**
+   * Compute fan-out offset for a ship at a given slot when the location is hovered.
+   * Spreads ships vertically in a column to the right of the location,
+   * centred so the group is balanced above/below the anchor point.
+   */
+  function fanOutOffsetWorld(slotIndex, zoom, dockedCount) {
+    const zoomSafe = Math.max(0.0001, Number(zoom) || 1);
+    const count = Math.max(1, dockedCount || 1);
+    const idx = Math.max(0, slotIndex || 0);
+    const spacingScreenPx = FAN_OUT_RADIUS_SCREEN_PX;
+    const spacing = spacingScreenPx / zoomSafe;
+    // Centre the column vertically
+    const totalHeight = (count - 1) * spacing;
+    const startY = -totalHeight / 2;
+    // Offset to the right so ship column doesn't cover the location dot
+    const xOffset = (FAN_OUT_RADIUS_SCREEN_PX * 0.6) / zoomSafe;
+    return {
+      dxWorld: xOffset,
+      dyWorld: startY + idx * spacing,
+    };
+  }
+
+  // Fan-out state: locationId -> current animation t (0 = compact, 1 = fanned)
+  const fanOutState = new Map();
+  let lastMouseWorldX = 0;
+  let lastMouseWorldY = 0;
+  let mouseOverCanvas = false;
+
+  function updateFanOutState(dockedCountByLocation) {
+    const zoom = Math.max(0.0001, world.scale.x);
+    const detectRadius = FAN_OUT_DETECT_RADIUS_SCREEN_PX / zoom;
+
+    // Determine which location (if any) the mouse is near
+    let hoveredLocId = null;
+    if (mouseOverCanvas) {
+      let bestD2 = detectRadius * detectRadius;
+      for (const [locId, count] of dockedCountByLocation.entries()) {
+        if (count < 2) continue;
+        const loc = locationsById.get(locId);
+        if (!loc || !Number.isFinite(Number(loc.rx)) || !Number.isFinite(Number(loc.ry))) continue;
+        // For orbit locations, use orbit center
+        let cx = loc.rx, cy = loc.ry;
+        if (ORBIT_IDS.has(locId) && orbitInfo.has(locId)) {
+          const oi = orbitInfo.get(locId);
+          cx = oi.cx;
+          cy = oi.cy;
+        }
+        const dx = lastMouseWorldX - cx;
+        const dy = lastMouseWorldY - cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          hoveredLocId = locId;
+        }
+      }
+    }
+
+    // Animate fan-out for hovered location, collapse others
+    for (const [locId, count] of dockedCountByLocation.entries()) {
+      if (count < 2) { fanOutState.delete(locId); continue; }
+      const current = fanOutState.get(locId) || 0;
+      const target = (locId === hoveredLocId) ? 1 : 0;
+      const next = current + (target - current) * FAN_OUT_LERP_SPEED;
+      // Snap to 0/1 when close enough
+      if (Math.abs(next - target) < 0.005) {
+        if (target === 0) fanOutState.delete(locId);
+        else fanOutState.set(locId, 1);
+      } else {
+        fanOutState.set(locId, next);
+      }
+    }
+
+    // Clean up entries for locations that no longer have ships
+    for (const locId of fanOutState.keys()) {
+      if (!dockedCountByLocation.has(locId)) fanOutState.delete(locId);
+    }
   }
 
   function assignDockSlots(shipsArr) {
@@ -2977,7 +3059,7 @@
       const explicit = [];
       const auto = [];
       for (const s of arr) {
-        if (Number.isFinite(Number(s.dock_slot))) explicit.push(s);
+        if (s.dock_slot != null && Number.isFinite(Number(s.dock_slot))) explicit.push(s);
         else auto.push(s);
       }
       const taken = new Set(explicit.map((s) => Number(s.dock_slot)));
@@ -3280,6 +3362,9 @@
     const my = e.clientY - rect.top;
 
     const p = world.toLocal(new PIXI.Point(mx, my));
+    lastMouseWorldX = p.x;
+    lastMouseWorldY = p.y;
+    mouseOverCanvas = true;
     const tol = 10 / world.scale.x; // hover tolerance band
 
     let best = null;
@@ -3310,6 +3395,7 @@
   app.view.addEventListener("pointerleave", () => {
     hoveredOrbitId = null;
     hoveredBodyId = null;
+    mouseOverCanvas = false;
     for (const t of orbitLabelMap.values()) t.alpha = 0;
   });
 
@@ -3472,6 +3558,14 @@
         entry.dot.scale.set(iconGrowOnZoomOut * deepIconShrink);
       }
       entry.label.scale.set(labelGrowOnZoomOut * deepLabelShrink);
+      // Ensure location dots have a minimum screen-pixel hit area regardless of zoom
+      const dotScale = Math.max(0.0001, entry.dot.scale.x);
+      const locHitLocal = Math.max(9, (MIN_LOC_HIT_SCREEN_PX / Math.max(0.0001, z)) / dotScale);
+      if (entry.dot.hitArea instanceof PIXI.Circle) {
+        entry.dot.hitArea.radius = locHitLocal;
+      } else {
+        entry.dot.hitArea = new PIXI.Circle(0, 0, locHitLocal);
+      }
       entry.dot.alpha = detailAlpha * (entry.hovered ? 1 : 0.9);
       entry.dot.visible = detailAlpha > 0.001;
       entry.label.alpha = entry.hovered ? detailAlpha : 0;
@@ -3860,9 +3954,19 @@
 
         container.visible = true;
         const slotIndex = Number(slot?.index) || 0;
-        const slotOffset = slotOffsetWorld(slotIndex, zoom, SHIP_DOCK_BASE_RADIUS_PX);
-        const ox = slotOffset.dxWorld;
-        const oy = slotOffset.dyWorld + (PARKED_ABOVE_NODE_Y / zoom);
+        const compactOffset = slotOffsetWorld(slotIndex, zoom, SHIP_DOCK_BASE_RADIUS_PX);
+
+        // Fan-out: lerp between compact and fanned positions
+        const fanT = fanOutState.get(ship.location_id) || 0;
+        let ox, oy;
+        if (fanT > 0.001 && dockedCount >= 2) {
+          const fanOffset = fanOutOffsetWorld(slotIndex, zoom, dockedCount);
+          ox = compactOffset.dxWorld + (fanOffset.dxWorld - compactOffset.dxWorld) * fanT;
+          oy = compactOffset.dyWorld + (fanOffset.dyWorld - compactOffset.dyWorld) * fanT;
+        } else {
+          ox = compactOffset.dxWorld;
+          oy = compactOffset.dyWorld;
+        }
 
         // ✅ drift around orbit rings (visual only)
         if (ORBIT_IDS.has(ship.location_id) && orbitInfo.has(ship.location_id)) {
@@ -3923,7 +4027,8 @@
       if (shipIcon) shipIcon.scale.set(iconDisplayScale);
       if (container?.hitArea) {
         const glowBase = Math.max(2.4, Number(shipIcon?.__glowRadiusPx) || Number(shipIcon?.__hitRadiusPx) || (Number(hitRadius) || 8) * 0.3);
-        const scaledHitRadius = Math.max(2.4, glowBase * iconDisplayScale);
+        const minWorldRadius = MIN_SHIP_HIT_SCREEN_PX / zoom;
+        const scaledHitRadius = Math.max(minWorldRadius, glowBase * iconDisplayScale);
         if (container.hitArea instanceof PIXI.Circle) {
           container.hitArea.radius = scaledHitRadius;
         } else {
@@ -3950,7 +4055,9 @@
         label.position.set(Math.sin(theta) * dy, Math.cos(theta) * dy);
         label.rotation = -theta;
         label.scale.set(shipTextLockedToScreen);
-        label.alpha = (ship.id === selectedShipId || ship.id === hoveredShipId) ? 1 : 0;
+        const shipFanT = (ship.status === "docked" && ship.location_id) ? (fanOutState.get(ship.location_id) || 0) : 0;
+        const labelShowFan = shipFanT > 0.3 ? shipFanT : 0;
+        label.alpha = Math.max((ship.id === selectedShipId || ship.id === hoveredShipId) ? 1 : 0, labelShowFan);
         label.visible = label.alpha > 0.001;
       }
 
@@ -3967,6 +4074,8 @@
     }
 
     updateShipClusterLabels(hiddenClusterCountByLocation, clusterMode);
+    updateFanOutState(dockedCountByLocation);
+
     applyUniversalTextScaleCap();
   }
 
