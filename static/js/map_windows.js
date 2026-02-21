@@ -8,8 +8,7 @@
   const MIN_WIDTH = 380;
   const MIN_HEIGHT = 300;
   const TOP_OFFSET = 12;
-  const INVENTORY_WINDOW_EVENT = "earthmoon:open-inventory-window";
-  const STACK_WINDOW_EVENT = "earthmoon:open-stack-window";
+  const HANGAR_WINDOW_EVENT = "earthmoon:open-hangar-window";
 
   const APP_CONFIG = {
     fleet: { title: "Fleet", url: "/fleet", icon: "/static/img/dock/fleet.png" },
@@ -27,10 +26,8 @@
   }, 0);
   const windows = new Map();
   let zIndex = 80;
-  let inventoryLoadSeq = 0;
-  const inventoryWindowState = new Map();
-  let stackLoadSeq = 0;
-  const stackWindowState = new Map();
+  let hangarLoadSeq = 0;
+  const hangarWindowState = new Map();
   const DRAG_TRANSFER_MIME = "application/x-earthmoon-inventory-transfer";
   const itemDisplay = window.ItemDisplay || null;
   let inventoryContextMenuEl = null;
@@ -103,19 +100,11 @@
     return fallback;
   }
 
-  function inventoryWindowId(kind, id) {
-    return `inventory:${String(kind || "").toLowerCase()}:${String(id || "")}`;
+  function hangarWindowId(shipId) {
+    return `hangar:ship:${String(shipId || "")}`;
   }
 
-  function stackWindowId(kind, id) {
-    return `stack:${String(kind || "").toLowerCase()}:${String(id || "")}`;
-  }
-
-  function inventoryKey(kind, id) {
-    return `${String(kind || "").toLowerCase()}:${String(id || "")}`;
-  }
-
-  function stackKey(kind, id) {
+  function entityKey(kind, id) {
     return `${String(kind || "").toLowerCase()}:${String(id || "")}`;
   }
 
@@ -319,14 +308,17 @@
         })();
 
     if (transfer) {
+      const payload = {
+        source_kind: String(transfer.source_kind || ""),
+        source_id: String(transfer.source_id || ""),
+        source_key: String(transfer.source_key || ""),
+        amount: Math.max(0, Number(transfer.amount) || 0),
+      };
+      cell.__transferPayload = payload;
+      cell.dataset.transferPayload = JSON.stringify(payload);
+
       cell.addEventListener("dragstart", (event) => {
         if (!event.dataTransfer) return;
-        const payload = {
-          source_kind: String(transfer.source_kind || ""),
-          source_id: String(transfer.source_id || ""),
-          source_key: String(transfer.source_key || ""),
-          amount: Math.max(0, Number(transfer.amount) || 0),
-        };
         const json = JSON.stringify(payload);
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(DRAG_TRANSFER_MIME, json);
@@ -357,8 +349,7 @@
               const ok = window.confirm("Deploy this container with its cargo?");
               if (!ok) return;
               await runShipInventoryAction(shipId, containerIndex, "deploy");
-              await refreshAllInventoryWindows();
-              await refreshAllStackWindows();
+              await refreshAllHangarWindows();
             },
           },
           {
@@ -366,8 +357,7 @@
             disabled: !canAct || cargoMass <= 0,
             onClick: async () => {
               await runShipInventoryAction(shipId, containerIndex, "jettison");
-              await refreshAllInventoryWindows();
-              await refreshAllStackWindows();
+              await refreshAllHangarWindows();
             },
           },
         ], event.clientX, event.clientY);
@@ -480,13 +470,13 @@
     return wrap;
   }
 
-  async function requestInventoryContext(kind, id) {
-    const resp = await fetch(`/api/inventory/context/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, {
+  async function requestHangarContext(shipId) {
+    const resp = await fetch(`/api/hangar/context/${encodeURIComponent(String(shipId || ""))}`, {
       cache: "no-store",
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      throw new Error(data?.detail || "Failed to load inventory context");
+      throw new Error(data?.detail || "Failed to load hangar context");
     }
     return data;
   }
@@ -679,20 +669,549 @@
     });
   }
 
-  function currentAnchorTarget(record) {
-    const kind = String(record?.anchorKind || "").toLowerCase();
-    const id = String(record?.anchorId || "");
-    return { kind, id };
+  // ─── Hangar: unified workspace ───────────────────────────────
+
+  function selectedEntityFromRecord(record) {
+    const context = record?.context;
+    const entities = Array.isArray(context?.entities) ? context.entities : [];
+    if (!entities.length) return null;
+
+    const selectedKey = String(record?.selectedEntityKey || "");
+    const selected = entities.find((e) => entityKey(e?.entity_kind, e?.id) === selectedKey);
+    return selected || entities[0] || null;
   }
 
-  function selectedInventoryFromRecord(record) {
-    const context = record?.context;
-    const inventories = Array.isArray(context?.inventories) ? context.inventories : [];
-    if (!inventories.length) return null;
+  function fmtMw(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(1)} MW`;
+  }
 
-    const selectedKey = String(record?.selectedInventoryKey || "");
-    const selected = inventories.find((entry) => inventoryKey(entry?.inventory_kind, entry?.id) === selectedKey);
-    return selected || inventories[0] || null;
+  function fmtMs(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(0)} m/s`;
+  }
+
+  function fmtGs(v) {
+    return `${Math.max(0, Number(v) || 0).toFixed(3)} g`;
+  }
+
+  function fuelPctVal(fuel, cap) {
+    if (cap <= 0) return 0;
+    return Math.max(0, Math.min(100, (fuel / cap) * 100));
+  }
+
+  function renderModulesSection(entity) {
+    const section = document.createElement("div");
+    section.className = "hangarSection";
+
+    const head = document.createElement("div");
+    head.className = "hangarSectionHead";
+    head.textContent = "Installed Modules";
+    section.appendChild(head);
+
+    const stackItems = Array.isArray(entity?.stack_items) ? entity.stack_items : [];
+    if (!stackItems.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = entity?.entity_kind === "location" ? "No parts in site inventory." : "No modules installed.";
+      section.appendChild(empty);
+      return section;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "hangarModulesGrid";
+
+    stackItems.forEach((item) => {
+      const cell = renderInventoryItemCard(item);
+      cell.classList.add("hangarModuleCard");
+      grid.appendChild(cell);
+    });
+
+    section.appendChild(grid);
+    return section;
+  }
+
+  function renderDeltaVSection(stats) {
+    if (!stats) return null;
+    const section = document.createElement("div");
+    section.className = "hangarSection";
+
+    const dryMass = Number(stats.dry_mass_kg || 0);
+    const fuel = Number(stats.fuel_kg || 0);
+    const fuelCap = Number(stats.fuel_capacity_kg || 0);
+    const wetMass = Number(stats.wet_mass_kg || 0);
+    const isp = Number(stats.isp_s || 0);
+    const thrust = Number(stats.thrust_kn || 0);
+    const dv = Number(stats.delta_v_remaining_m_s || 0);
+    const accelG = Number(stats.accel_g || 0);
+    const fPct = fuelPctVal(fuel, fuelCap);
+    const dvCls = dv > 0 ? "pbPositive" : "pbNeutral";
+
+    section.innerHTML = `
+      <div class="powerBalancePanel">
+        <div class="pbTitle">Delta-v &amp; Propulsion</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Mass Budget</div>
+          <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Propulsion</div>
+          <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN</span></div>
+          <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s</span></div>
+          <div class="pbRow"><span class="pbLabel">Acceleration</span><span class="pbVal">${fmtGs(accelG)}</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Delta-v</div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Δv remaining</b></span><span class="pbVal ${dvCls}"><b>${fmtMs(dv)}</b></span></div>
+        </div>
+      </div>
+    `;
+    return section;
+  }
+
+  function renderPowerBalanceSection(pb) {
+    if (!pb) return null;
+    const reactorMw = Number(pb.reactor_thermal_mw || 0);
+    const thrusterMw = Number(pb.thruster_thermal_mw || 0);
+    const genInputMw = Number(pb.generator_thermal_mw_input || 0);
+    const thermalSurplus = Number(pb.thermal_surplus_mw || 0);
+    const electricMw = Number(pb.generator_electric_mw || 0);
+    const genWaste = Number(pb.generator_waste_heat_mw || 0);
+    const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
+    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const maxThrottle = Number(pb.max_throttle || 0);
+    const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
+    if (!hasAny) return null;
+
+    const thermalCls = thermalSurplus >= 0 ? "pbPositive" : "pbNegative";
+    const wasteCls = wasteSurplus > 0 ? "pbNegative" : "pbPositive";
+    const throttleCls = maxThrottle < 1 ? "pbNegative" : "pbPositive";
+
+    const section = document.createElement("div");
+    section.className = "hangarSection";
+    section.innerHTML = `
+      <div class="powerBalancePanel">
+        <div class="pbTitle">Power &amp; Thermal Balance</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Thermal Budget</div>
+          <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMw(reactorMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Thruster demand</span><span class="pbVal">−${fmtMw(thrusterMw)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMw(genInputMw)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)} MW</b></span></div>
+          ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Electric</div>
+          <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMw(electricMw)}</span></div>
+        </div>
+        <div class="pbSection">
+          <div class="pbSectionHead">Waste Heat</div>
+          <div class="pbRow"><span class="pbLabel">Generator waste</span><span class="pbVal">${fmtMw(genWaste)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Radiator rejection</span><span class="pbVal">−${fmtMw(radRejection)}</span></div>
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)} MW</b></span></div>
+        </div>
+      </div>
+    `;
+    return section;
+  }
+
+  function renderCargoSection(entity, onDropToContainer, onTransferClick) {
+    const isShip = entity?.entity_kind === "ship";
+    const containerGroups = Array.isArray(entity?.container_groups) ? entity.container_groups : [];
+    const invItems = Array.isArray(entity?.inventory_items) ? entity.inventory_items : [];
+    const hasContainers = isShip && containerGroups.length > 0;
+    const hasItems = invItems.length > 0;
+
+    if (!hasContainers && !hasItems) return null;
+
+    const section = document.createElement("div");
+    section.className = "hangarSection";
+
+    const head = document.createElement("div");
+    head.className = "hangarSectionHead";
+    head.textContent = isShip ? "Cargo Hold" : "Site Resources";
+    section.appendChild(head);
+
+    // Capacity summary for ships
+    if (isShip) {
+      const capEl = renderInventoryCapacitySummary(entity?.capacity_summary);
+      if (capEl) section.appendChild(capEl);
+    }
+
+    if (hasContainers) {
+      const containerList = renderInventoryContainerGroups(
+        { ...entity, id: entity?.id },
+        onDropToContainer,
+      );
+      section.appendChild(containerList);
+
+      // Add transfer buttons to cargo items
+      if (typeof onTransferClick === "function") {
+        containerList.querySelectorAll(".invCell").forEach((cell) => {
+          const transferBtn = document.createElement("button");
+          transferBtn.type = "button";
+          transferBtn.className = "hangarTransferBtn";
+          transferBtn.textContent = "Transfer";
+          transferBtn.title = "Transfer this cargo to another ship or location";
+          transferBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            onTransferClick(cell);
+          });
+          cell.appendChild(transferBtn);
+        });
+      }
+    } else if (hasItems) {
+      const grid = document.createElement("div");
+      grid.className = "inventoryItemGrid";
+      invItems.forEach((item) => {
+        const card = renderInventoryItemCard(item);
+        if (typeof onTransferClick === "function" && item?.transfer) {
+          const transferBtn = document.createElement("button");
+          transferBtn.type = "button";
+          transferBtn.className = "hangarTransferBtn";
+          transferBtn.textContent = "Transfer";
+          transferBtn.title = "Transfer this resource";
+          transferBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            onTransferClick(card);
+          });
+          card.appendChild(transferBtn);
+        }
+        grid.appendChild(card);
+      });
+      section.appendChild(grid);
+    }
+
+    return section;
+  }
+
+  function buildHangarWorkspace(panel, windowId) {
+    const record = hangarWindowState.get(windowId);
+    if (!record) return;
+    const body = panel.querySelector("[data-window-body='true']");
+    if (!body) return;
+    const context = record.context;
+
+    const selectedEntity = selectedEntityFromRecord(record);
+    if (!selectedEntity) {
+      body.innerHTML = '<div class="muted">No data found in this context.</div>';
+      return;
+    }
+
+    const layout = document.createElement("div");
+    layout.className = "hangarWorkspace";
+
+    // ── Left sidebar: entity index ──
+    const indexPane = document.createElement("aside");
+    indexPane.className = "hangarIndexPane";
+
+    const indexTitle = document.createElement("div");
+    indexTitle.className = "inventoryIndexTitle";
+    indexTitle.textContent = "Docked";
+    indexPane.appendChild(indexTitle);
+
+    const indexList = document.createElement("div");
+    indexList.className = "inventoryIndexList";
+
+    const entities = Array.isArray(context?.entities) ? context.entities : [];
+    entities.forEach((entity) => {
+      const eKind = String(entity?.entity_kind || "").toLowerCase();
+      const eId = String(entity?.id || "");
+      const key = entityKey(eKind, eId);
+
+      const row = document.createElement("div");
+      row.className = "inventoryIndexRow inventoryDropZone";
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      row.dataset.targetKind = eKind;
+      row.dataset.targetId = eId;
+      if (key === record.selectedEntityKey) row.classList.add("isActive");
+
+      const rowTitle = document.createElement("div");
+      rowTitle.className = "inventoryIndexRowTitle";
+      rowTitle.textContent = String(entity?.name || eId || "Entity");
+
+      const rowSub = document.createElement("div");
+      rowSub.className = "inventoryIndexRowSub";
+
+      if (eKind === "ship") {
+        const dv = Number(entity?.stats?.delta_v_remaining_m_s || 0);
+        const partCount = Array.isArray(entity?.stack_items) ? entity.stack_items.length : 0;
+        rowSub.textContent = `Ship · ${partCount} modules · Δv ${Math.max(0, dv).toFixed(0)} m/s`;
+      } else {
+        rowSub.textContent = "Location storage";
+      }
+
+      row.append(rowTitle, rowSub);
+
+      let rowClickTimer = null;
+      row.addEventListener("click", (event) => {
+        if (event.detail > 1) return;
+        if (rowClickTimer) window.clearTimeout(rowClickTimer);
+        rowClickTimer = window.setTimeout(() => {
+          rowClickTimer = null;
+          record.selectedEntityKey = key;
+          buildHangarWorkspace(panel, windowId);
+        }, 220);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        record.selectedEntityKey = key;
+        buildHangarWorkspace(panel, windowId);
+      });
+      row.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        if (rowClickTimer) {
+          window.clearTimeout(rowClickTimer);
+          rowClickTimer = null;
+        }
+        if (eKind === "ship") {
+          openHangarWorkspace(eId, String(entity?.name || eId));
+        }
+      });
+
+      // Drop zone for cargo transfers
+      setDropZoneBehavior(row, async (payload) => {
+        const sk = String(payload?.source_kind || "");
+        if (sk === "ship_part" || sk === "location_part") {
+          await runStackTransfer(payload, eKind, eId);
+        } else {
+          const chosenAmount = await requestInventoryTransferAmount(payload, eKind, eId);
+          if (chosenAmount == null) return;
+          const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, eKind, eId);
+          maybeWarnDestroyedTransfer(result);
+        }
+        await refreshAllHangarWindows();
+      });
+
+      indexList.appendChild(row);
+    });
+
+    indexPane.appendChild(indexList);
+
+    // ── Main pane: scrollable sections ──
+    const mainPane = document.createElement("section");
+    mainPane.className = "hangarMainPane inventoryDropZone";
+
+    // Header
+    const mainHead = document.createElement("div");
+    mainHead.className = "hangarMainHead";
+
+    const hTitle = document.createElement("div");
+    hTitle.className = "inventoryMainTitle";
+    hTitle.textContent = String(selectedEntity?.name || "Ship");
+
+    const hSub = document.createElement("div");
+    hSub.className = "inventoryMainSub";
+    const locName = String(context?.location?.name || context?.location?.id || "Unknown");
+    const isShip = String(selectedEntity?.entity_kind || "").toLowerCase() === "ship";
+    const moduleCount = Array.isArray(selectedEntity?.stack_items) ? selectedEntity.stack_items.length : 0;
+    if (isShip) {
+      const dv = Number(selectedEntity?.stats?.delta_v_remaining_m_s || 0);
+      hSub.textContent = `${locName} · ${moduleCount} modules · Δv ${Math.max(0, dv).toFixed(0)} m/s`;
+    } else {
+      hSub.textContent = `${locName} · ${moduleCount} parts`;
+    }
+
+    mainHead.append(hTitle, hSub);
+    mainPane.appendChild(mainHead);
+
+    // Sections container (scrollable)
+    const sections = document.createElement("div");
+    sections.className = "hangarSections";
+
+    // 1. Modules section
+    sections.appendChild(renderModulesSection(selectedEntity));
+
+    // 2. Delta-v section (ships only)
+    if (isShip) {
+      const dvSection = renderDeltaVSection(selectedEntity?.stats);
+      if (dvSection) sections.appendChild(dvSection);
+    }
+
+    // 3. Power balance section (ships only)
+    if (isShip) {
+      const pbSection = renderPowerBalanceSection(selectedEntity?.power_balance);
+      if (pbSection) sections.appendChild(pbSection);
+    }
+
+    // 4. Cargo section
+    const cargoDropHandler = isShip ? async (payload, containerIndex) => {
+      const chosenAmount = await requestInventoryTransferAmount(payload, "ship_container", selectedEntity?.id);
+      if (chosenAmount == null) return;
+      const result = await runInventoryTransfer(
+        { ...payload, amount: chosenAmount },
+        "ship_container",
+        selectedEntity?.id,
+        String(containerIndex),
+      );
+      maybeWarnDestroyedTransfer(result);
+      await refreshAllHangarWindows();
+    } : null;
+
+    const transferClickHandler = (cellEl) => {
+      // Build transfer target menu from sibling entities
+      const targets = entities.filter((e) => {
+        const eKey = entityKey(e?.entity_kind, e?.id);
+        const selKey = entityKey(selectedEntity?.entity_kind, selectedEntity?.id);
+        return eKey !== selKey;
+      });
+      if (!targets.length) {
+        window.alert("No other ships or locations to transfer to.");
+        return;
+      }
+
+      // Extract drag payload from cell
+      const dragPayloadStr = cellEl?.dataset?.transferPayload;
+      let dragPayload = null;
+      if (dragPayloadStr) {
+        try { dragPayload = JSON.parse(dragPayloadStr); } catch {}
+      }
+      // Fallback: try to reconstruct from cell's drag event setup
+      if (!dragPayload) {
+        // Try finding transfer data from cell's item data
+        const cellData = cellEl?.__transferPayload;
+        if (cellData) dragPayload = cellData;
+      }
+
+      if (!dragPayload) {
+        window.alert("Unable to determine transfer source. Try dragging instead.");
+        return;
+      }
+
+      const menuItems = targets.map((t) => ({
+        label: `${String(t.name || t.id)} (${t.entity_kind})`,
+        onClick: async () => {
+          const tKind = String(t.entity_kind || "").toLowerCase();
+          const tId = String(t.id || "");
+          const sk = String(dragPayload.source_kind || "");
+          if (sk === "ship_part" || sk === "location_part") {
+            await runStackTransfer(dragPayload, tKind, tId);
+          } else {
+            const chosenAmount = await requestInventoryTransferAmount(dragPayload, tKind, tId);
+            if (chosenAmount == null) return;
+            const result = await runInventoryTransfer({ ...dragPayload, amount: chosenAmount }, tKind, tId);
+            maybeWarnDestroyedTransfer(result);
+          }
+          await refreshAllHangarWindows();
+        },
+      }));
+
+      const rect = cellEl.getBoundingClientRect();
+      showInventoryContextMenu("Transfer to…", menuItems, rect.right, rect.top);
+    };
+
+    const cargoSection = renderCargoSection(selectedEntity, cargoDropHandler, transferClickHandler);
+    if (cargoSection) sections.appendChild(cargoSection);
+
+    mainPane.appendChild(sections);
+
+    // Main pane drop zone (for general drops)
+    const selKind = String(selectedEntity?.entity_kind || "").toLowerCase();
+    const selId = String(selectedEntity?.id || "");
+    mainPane.dataset.targetKind = selKind;
+    mainPane.dataset.targetId = selId;
+    setDropZoneBehavior(mainPane, async (payload) => {
+      const sk = String(payload?.source_kind || "");
+      if (sk === "ship_part" || sk === "location_part") {
+        await runStackTransfer(payload, selKind, selId);
+      } else {
+        const chosenAmount = await requestInventoryTransferAmount(payload, selKind, selId);
+        if (chosenAmount == null) return;
+        const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, selKind, selId);
+        maybeWarnDestroyedTransfer(result);
+      }
+      await refreshAllHangarWindows();
+    });
+
+    layout.append(indexPane, mainPane);
+    body.innerHTML = "";
+    body.appendChild(layout);
+  }
+
+  async function refreshHangarWindow(windowId) {
+    const panel = windows.get(windowId);
+    const record = hangarWindowState.get(windowId);
+    if (!panel || !record) return;
+
+    const body = panel.querySelector("[data-window-body='true']");
+    if (!body) return;
+    const requestId = ++hangarLoadSeq;
+    panel.dataset.hangarRequestId = String(requestId);
+    const hasRenderedContext = !!record.context;
+    if (!hasRenderedContext) {
+      body.innerHTML = '<div class="muted">Loading hangar…</div>';
+    }
+
+    try {
+      const context = await requestHangarContext(record.anchorId);
+      if (panel.dataset.hangarRequestId !== String(requestId)) return;
+      record.context = context;
+      if (!record.selectedEntityKey) {
+        record.selectedEntityKey = entityKey("ship", record.anchorId);
+      }
+      buildHangarWorkspace(panel, windowId);
+    } catch (error) {
+      if (panel.dataset.hangarRequestId !== String(requestId)) return;
+      body.innerHTML = `<div class="muted">${escapeHtml(String(error?.message || "Failed to load hangar."))}</div>`;
+    }
+  }
+
+  let hangarRefreshInFlight = null;
+  let hangarRefreshQueued = false;
+
+  async function refreshAllHangarWindows() {
+    if (hangarRefreshInFlight) {
+      hangarRefreshQueued = true;
+      return hangarRefreshInFlight;
+    }
+
+    hangarRefreshInFlight = (async () => {
+      do {
+        hangarRefreshQueued = false;
+        const ids = Array.from(hangarWindowState.keys());
+        await Promise.all(ids.map((windowId) => refreshHangarWindow(windowId)));
+      } while (hangarRefreshQueued);
+    })().finally(() => {
+      hangarRefreshInFlight = null;
+    });
+
+    return hangarRefreshInFlight;
+  }
+
+  async function runStackTransfer(payload, targetKind, targetId) {
+    const sourceKind = String(payload?.source_kind || "").trim();
+    const sourceId = String(payload?.source_id || "").trim();
+    const sourceKey = String(payload?.source_key || "").trim();
+    const destKind = String(targetKind || "").trim();
+    const destId = String(targetId || "").trim();
+
+    const missing = [];
+    if (!sourceKind) missing.push("source_kind");
+    if (!sourceId) missing.push("source_id");
+    if (!sourceKey) missing.push("source_key");
+    if (!destKind) missing.push("target_kind");
+    if (!destId) missing.push("target_id");
+    if (missing.length) {
+      throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
+    }
+
+    const resp = await fetch("/api/stack/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_kind: sourceKind,
+        source_id: sourceId,
+        source_key: sourceKey,
+        target_kind: destKind,
+        target_id: destId,
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Stack transfer failed"));
+    return data;
   }
 
   function setDropZoneBehavior(zoneEl, onDrop) {
@@ -738,453 +1257,6 @@
     });
   }
 
-  function buildInventoryWorkspace(panel, windowId) {
-    const record = inventoryWindowState.get(windowId);
-    if (!record) return;
-    const body = panel.querySelector("[data-window-body='true']");
-    if (!body) return;
-    const context = record.context;
-
-    const selectedInventory = selectedInventoryFromRecord(record);
-    if (!selectedInventory) {
-      body.innerHTML = '<div class="muted">No inventory found in this context.</div>';
-      return;
-    }
-
-    const layout = document.createElement("div");
-    layout.className = "inventoryWorkspace";
-
-    const indexPane = document.createElement("aside");
-    indexPane.className = "inventoryIndexPane";
-
-    const indexTitle = document.createElement("div");
-    indexTitle.className = "inventoryIndexTitle";
-    indexTitle.textContent = "Index";
-    indexPane.appendChild(indexTitle);
-
-    const indexList = document.createElement("div");
-    indexList.className = "inventoryIndexList";
-
-    const inventories = Array.isArray(context?.inventories) ? context.inventories : [];
-    inventories.forEach((entry) => {
-      const entryKind = String(entry?.inventory_kind || "").toLowerCase();
-      const entryId = String(entry?.id || "");
-      const key = inventoryKey(entryKind, entryId);
-      const row = document.createElement("div");
-      row.className = "inventoryIndexRow inventoryDropZone";
-      row.setAttribute("role", "button");
-      row.setAttribute("tabindex", "0");
-      row.dataset.targetKind = entryKind;
-      row.dataset.targetId = entryId;
-      if (key === record.selectedInventoryKey) row.classList.add("isActive");
-
-      const rowTitle = document.createElement("div");
-      rowTitle.className = "inventoryIndexRowTitle";
-      rowTitle.textContent = String(entry?.name || entryId || "Inventory");
-
-      const rowSub = document.createElement("div");
-      rowSub.className = "inventoryIndexRowSub";
-      rowSub.textContent = entryKind === "ship" ? "Ship inventory" : "Location storage";
-
-      row.append(rowTitle, rowSub);
-      let inventoryRowClickTimer = null;
-      row.addEventListener("click", (event) => {
-        if (event.detail > 1) return;
-        if (inventoryRowClickTimer) {
-          window.clearTimeout(inventoryRowClickTimer);
-        }
-        inventoryRowClickTimer = window.setTimeout(() => {
-          inventoryRowClickTimer = null;
-          record.selectedInventoryKey = key;
-          buildInventoryWorkspace(panel, windowId);
-        }, 220);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        record.selectedInventoryKey = key;
-        buildInventoryWorkspace(panel, windowId);
-      });
-      row.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        if (inventoryRowClickTimer) {
-          window.clearTimeout(inventoryRowClickTimer);
-          inventoryRowClickTimer = null;
-        }
-        openInventoryWorkspace(entryKind, entryId, String(entry?.name || entryId || "Inventory"));
-      });
-
-      setDropZoneBehavior(row, async (payload) => {
-        const chosenAmount = await requestInventoryTransferAmount(payload, entryKind, entryId);
-        if (chosenAmount == null) return;
-        const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, entryKind, entryId);
-        maybeWarnDestroyedTransfer(result);
-        await refreshAllInventoryWindows();
-        await refreshAllStackWindows();
-      });
-
-      indexList.appendChild(row);
-    });
-
-    indexPane.appendChild(indexList);
-
-    const mainPane = document.createElement("section");
-    mainPane.className = "inventoryMainPane inventoryDropZone";
-
-    const mainHead = document.createElement("div");
-    mainHead.className = "inventoryMainHead";
-
-    const hTitle = document.createElement("div");
-    hTitle.className = "inventoryMainTitle";
-    hTitle.textContent = String(selectedInventory?.name || "Inventory");
-
-    const hSub = document.createElement("div");
-    hSub.className = "inventoryMainSub";
-    const locName = String(context?.location?.name || context?.location?.id || "Unknown location");
-    const containerGroups = Array.isArray(selectedInventory?.container_groups) ? selectedInventory.container_groups : [];
-    const useContainerGroups = String(selectedInventory?.inventory_kind || "").toLowerCase() === "ship" && containerGroups.length > 0;
-    const itemCount = Array.isArray(selectedInventory?.items) ? selectedInventory.items.length : 0;
-    hSub.textContent = useContainerGroups
-      ? `${locName} · ${containerGroups.length} containers`
-      : `${locName} · ${itemCount} items`;
-
-    mainHead.append(hTitle, hSub);
-    const capSummaryEl = renderInventoryCapacitySummary(selectedInventory?.capacity_summary);
-    if (capSummaryEl) mainHead.appendChild(capSummaryEl);
-
-    const grid = useContainerGroups
-      ? renderInventoryContainerGroups(selectedInventory, async (payload, containerIndex) => {
-        const chosenAmount = await requestInventoryTransferAmount(payload, "ship_container", selectedInventory?.id);
-        if (chosenAmount == null) return;
-        const result = await runInventoryTransfer(
-          { ...payload, amount: chosenAmount },
-          "ship_container",
-          selectedInventory?.id,
-          String(containerIndex),
-        );
-        maybeWarnDestroyedTransfer(result);
-        await refreshAllInventoryWindows();
-        await refreshAllStackWindows();
-      })
-      : document.createElement("div");
-    if (!useContainerGroups) {
-      grid.className = "inventoryItemGrid";
-      const items = Array.isArray(selectedInventory?.items) ? selectedInventory.items : [];
-      if (!items.length) {
-        const empty = document.createElement("div");
-        empty.className = "muted";
-        empty.textContent = "No items in this inventory.";
-        grid.appendChild(empty);
-      } else {
-        items.forEach((item) => {
-          grid.appendChild(renderInventoryItemCard(item));
-        });
-      }
-    }
-
-    const anchor = currentAnchorTarget(record);
-    mainPane.dataset.targetKind = anchor.kind;
-    mainPane.dataset.targetId = anchor.id;
-    setDropZoneBehavior(mainPane, async (payload) => {
-      const chosenAmount = await requestInventoryTransferAmount(payload, anchor.kind, anchor.id);
-      if (chosenAmount == null) return;
-      const result = await runInventoryTransfer({ ...payload, amount: chosenAmount }, anchor.kind, anchor.id);
-      maybeWarnDestroyedTransfer(result);
-      await refreshAllInventoryWindows();
-      await refreshAllStackWindows();
-    });
-
-    mainPane.append(mainHead, grid);
-    layout.append(indexPane, mainPane);
-
-    body.innerHTML = "";
-    body.appendChild(layout);
-  }
-
-  async function refreshInventoryWindow(windowId) {
-    const panel = windows.get(windowId);
-    const record = inventoryWindowState.get(windowId);
-    if (!panel || !record) return;
-
-    const body = panel.querySelector("[data-window-body='true']");
-    if (!body) return;
-    const requestId = ++inventoryLoadSeq;
-    panel.dataset.inventoryRequestId = String(requestId);
-    const hasRenderedContext = !!record.context;
-    if (!hasRenderedContext) {
-      body.innerHTML = '<div class="muted">Loading inventory…</div>';
-    }
-
-    try {
-      const context = await requestInventoryContext(record.anchorKind, record.anchorId);
-      if (panel.dataset.inventoryRequestId !== String(requestId)) return;
-      record.context = context;
-      if (!record.selectedInventoryKey) {
-        record.selectedInventoryKey = inventoryKey(context?.anchor?.kind, context?.anchor?.id);
-      }
-      buildInventoryWorkspace(panel, windowId);
-    } catch (error) {
-      if (panel.dataset.inventoryRequestId !== String(requestId)) return;
-      body.innerHTML = `<div class="muted">${escapeHtml(String(error?.message || "Failed to load inventory."))}</div>`;
-    }
-  }
-
-  async function refreshAllInventoryWindows() {
-    if (inventoryRefreshInFlight) {
-      inventoryRefreshQueued = true;
-      return inventoryRefreshInFlight;
-    }
-
-    inventoryRefreshInFlight = (async () => {
-      do {
-        inventoryRefreshQueued = false;
-        const ids = Array.from(inventoryWindowState.keys());
-        await Promise.all(ids.map((windowId) => refreshInventoryWindow(windowId)));
-      } while (inventoryRefreshQueued);
-    })().finally(() => {
-      inventoryRefreshInFlight = null;
-    });
-
-    return inventoryRefreshInFlight;
-  }
-
-  async function requestStackContext(shipId) {
-    const resp = await fetch(`/api/stack/context/ship/${encodeURIComponent(String(shipId || ""))}`, {
-      cache: "no-store",
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      throw new Error(errorDetailText(data?.detail, "Failed to load stack context"));
-    }
-    return data;
-  }
-
-  async function runStackTransfer(payload, targetKind, targetId) {
-    const sourceKind = String(payload?.source_kind || "").trim();
-    const sourceId = String(payload?.source_id || "").trim();
-    const sourceKey = String(payload?.source_key || "").trim();
-    const destKind = String(targetKind || "").trim();
-    const destId = String(targetId || "").trim();
-
-    const missing = [];
-    if (!sourceKind) missing.push("source_kind");
-    if (!sourceId) missing.push("source_id");
-    if (!sourceKey) missing.push("source_key");
-    if (!destKind) missing.push("target_kind");
-    if (!destId) missing.push("target_id");
-    if (missing.length) {
-      throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
-    }
-
-    const resp = await fetch("/api/stack/transfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source_kind: sourceKind,
-        source_id: sourceId,
-        source_key: sourceKey,
-        target_kind: destKind,
-        target_id: destId,
-      }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Stack transfer failed"));
-    return data;
-  }
-
-  function selectedStackFromRecord(record) {
-    const context = record?.context;
-    const stacks = Array.isArray(context?.stacks) ? context.stacks : [];
-    if (!stacks.length) return null;
-
-    const selectedKey = String(record?.selectedStackKey || "");
-    const selected = stacks.find((entry) => stackKey(entry?.stack_kind, entry?.id) === selectedKey);
-    return selected || stacks[0] || null;
-  }
-
-  function renderStackItemCard(item) {
-    const cell = renderInventoryItemCard(item);
-    cell.classList.add("stackItemCard");
-    return cell;
-  }
-
-  function buildStackWorkspace(panel, windowId) {
-    const record = stackWindowState.get(windowId);
-    if (!record) return;
-    const body = panel.querySelector("[data-window-body='true']");
-    if (!body) return;
-    const context = record.context;
-
-    const selectedStack = selectedStackFromRecord(record);
-    if (!selectedStack) {
-      body.innerHTML = '<div class="muted">No stack found in this context.</div>';
-      return;
-    }
-
-    const layout = document.createElement("div");
-    layout.className = "inventoryWorkspace stackWorkspace";
-
-    const indexPane = document.createElement("aside");
-    indexPane.className = "inventoryIndexPane";
-
-    const indexTitle = document.createElement("div");
-    indexTitle.className = "inventoryIndexTitle";
-    indexTitle.textContent = "Stack Targets";
-    indexPane.appendChild(indexTitle);
-
-    const indexList = document.createElement("div");
-    indexList.className = "inventoryIndexList";
-
-    const stacks = Array.isArray(context?.stacks) ? context.stacks : [];
-    stacks.forEach((entry) => {
-      const entryKind = String(entry?.stack_kind || "").toLowerCase();
-      const entryId = String(entry?.id || "");
-      const key = stackKey(entryKind, entryId);
-
-      const row = document.createElement("div");
-      row.className = "inventoryIndexRow inventoryDropZone";
-      row.setAttribute("role", "button");
-      row.setAttribute("tabindex", "0");
-      row.dataset.targetKind = entryKind;
-      row.dataset.targetId = entryId;
-      if (key === record.selectedStackKey) row.classList.add("isActive");
-
-      const rowTitle = document.createElement("div");
-      rowTitle.className = "inventoryIndexRowTitle";
-      rowTitle.textContent = String(entry?.name || entryId || "Stack");
-
-      const rowSub = document.createElement("div");
-      rowSub.className = "inventoryIndexRowSub";
-      rowSub.textContent = entryKind === "ship" ? "Ship modules" : "Location parts";
-
-      row.append(rowTitle, rowSub);
-      let stackRowClickTimer = null;
-      row.addEventListener("click", (event) => {
-        if (event.detail > 1) return;
-        if (stackRowClickTimer) {
-          window.clearTimeout(stackRowClickTimer);
-        }
-        stackRowClickTimer = window.setTimeout(() => {
-          stackRowClickTimer = null;
-          record.selectedStackKey = key;
-          buildStackWorkspace(panel, windowId);
-        }, 220);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        record.selectedStackKey = key;
-        buildStackWorkspace(panel, windowId);
-      });
-      row.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        if (stackRowClickTimer) {
-          window.clearTimeout(stackRowClickTimer);
-          stackRowClickTimer = null;
-        }
-        const entryName = String(entry?.name || entryId || "Stack");
-        if (entryKind === "ship") {
-          openStackWorkspace("ship", entryId, entryName);
-        } else {
-          openInventoryWorkspace("location", entryId, entryName);
-        }
-      });
-
-      setDropZoneBehavior(row, async (payload) => {
-        await runStackTransfer(payload, entryKind, entryId);
-        await refreshAllStackWindows();
-        await refreshAllInventoryWindows();
-      });
-
-      indexList.appendChild(row);
-    });
-
-    indexPane.appendChild(indexList);
-
-    const mainPane = document.createElement("section");
-    mainPane.className = "inventoryMainPane inventoryDropZone";
-
-    const mainHead = document.createElement("div");
-    mainHead.className = "inventoryMainHead";
-
-    const modeBadge = document.createElement("div");
-    modeBadge.className = "stackModeBadge";
-    modeBadge.textContent = "Stack View";
-
-    const hTitle = document.createElement("div");
-    hTitle.className = "inventoryMainTitle";
-    hTitle.textContent = String(selectedStack?.name || "Stack");
-
-    const hSub = document.createElement("div");
-    hSub.className = "inventoryMainSub";
-    const locName = String(context?.location?.name || context?.location?.id || "Unknown location");
-    const itemCount = Array.isArray(selectedStack?.items) ? selectedStack.items.length : 0;
-    hSub.textContent = `${locName} · ${itemCount} modules`;
-
-    mainHead.append(modeBadge, hTitle, hSub);
-
-    const strip = document.createElement("div");
-    strip.className = "stackItemStrip";
-    const items = Array.isArray(selectedStack?.items) ? selectedStack.items : [];
-    if (!items.length) {
-      const empty = document.createElement("div");
-      empty.className = "muted";
-      empty.textContent = "No modules in this stack.";
-      strip.appendChild(empty);
-    } else {
-      items.forEach((item) => {
-        strip.appendChild(renderStackItemCard(item));
-      });
-    }
-
-    const selectedKind = String(selectedStack?.stack_kind || "").toLowerCase();
-    const selectedId = String(selectedStack?.id || "");
-    mainPane.dataset.targetKind = selectedKind;
-    mainPane.dataset.targetId = selectedId;
-    setDropZoneBehavior(mainPane, async (payload) => {
-      await runStackTransfer(payload, selectedKind, selectedId);
-      await refreshAllStackWindows();
-      await refreshAllInventoryWindows();
-    });
-
-    mainPane.append(mainHead, strip);
-    layout.append(indexPane, mainPane);
-
-    body.innerHTML = "";
-    body.appendChild(layout);
-  }
-
-  async function refreshStackWindow(windowId) {
-    const panel = windows.get(windowId);
-    const record = stackWindowState.get(windowId);
-    if (!panel || !record) return;
-
-    const body = panel.querySelector("[data-window-body='true']");
-    if (!body) return;
-    const requestId = ++stackLoadSeq;
-    panel.dataset.stackRequestId = String(requestId);
-    if (!record.context) {
-      body.innerHTML = '<div class="muted">Loading stack…</div>';
-    }
-
-    try {
-      const context = await requestStackContext(record.anchorId);
-      if (panel.dataset.stackRequestId !== String(requestId)) return;
-      record.context = context;
-      if (!record.selectedStackKey) {
-        record.selectedStackKey = stackKey(context?.anchor?.kind, context?.anchor?.id);
-      }
-      buildStackWorkspace(panel, windowId);
-    } catch (error) {
-      if (panel.dataset.stackRequestId !== String(requestId)) return;
-      body.innerHTML = `<div class="muted">${escapeHtml(String(error?.message || "Failed to load stack."))}</div>`;
-    }
-  }
-
-  async function refreshAllStackWindows() {
-    const ids = Array.from(stackWindowState.keys());
-    await Promise.all(ids.map((windowId) => refreshStackWindow(windowId)));
-  }
 
   document.addEventListener("pointerdown", (event) => {
     if (!inventoryContextMenuEl || inventoryContextMenuEl.style.display === "none") return;
@@ -1761,7 +1833,7 @@
     return panel;
   }
 
-  function ensureInventoryWindow(windowId, title) {
+  function ensureHangarWindow(windowId, title) {
     const existing = windows.get(windowId);
     if (existing) {
       const titleEl = existing.querySelector("[data-window-title='true']");
@@ -1775,83 +1847,33 @@
     return createInventoryWindow(windowId, title);
   }
 
-  function ensureStackWindow(windowId, title) {
-    const existing = windows.get(windowId);
-    if (existing) {
-      const titleEl = existing.querySelector("[data-window-title='true']");
-      if (titleEl) titleEl.textContent = title;
-      existing.style.display = "block";
-      bringToFront(existing);
-      persistWindow(windowId, { open: true });
-      return existing;
-    }
+  async function openHangarWorkspace(shipId, shipName) {
+    const id = String(shipId || "").trim();
+    if (!id) return;
 
-    return createInventoryWindow(windowId, title);
-  }
-
-  async function openInventoryWorkspace(anchorKind, anchorId, anchorName) {
-    const kind = String(anchorKind || "").trim().toLowerCase();
-    const id = String(anchorId || "").trim();
-    if (!id || (kind !== "ship" && kind !== "location")) return;
-
-    const title = `${String(anchorName || id)} Inventory`;
-    const windowId = inventoryWindowId(kind, id);
-    const panel = ensureInventoryWindow(windowId, title);
-    panel.classList.remove("stackWindow");
+    const title = `${String(shipName || id)} Hangar`;
+    const windowId = hangarWindowId(id);
+    const panel = ensureHangarWindow(windowId, title);
+    panel.classList.add("hangarWindow");
     const titleEl = panel.querySelector("[data-window-title='true']");
     if (titleEl) titleEl.textContent = title;
 
-    const existing = inventoryWindowState.get(windowId) || {};
-    inventoryWindowState.set(windowId, {
+    const existing = hangarWindowState.get(windowId) || {};
+    hangarWindowState.set(windowId, {
       ...existing,
-      anchorKind: kind,
+      anchorKind: "ship",
       anchorId: id,
-      anchorName: String(anchorName || id),
+      anchorName: String(shipName || id),
     });
 
-    await refreshInventoryWindow(windowId);
+    await refreshHangarWindow(windowId);
   }
 
-  async function openStackWorkspace(anchorKind, anchorId, anchorName) {
-    const kind = String(anchorKind || "").trim().toLowerCase();
-    const id = String(anchorId || "").trim();
-    if (!id || kind !== "ship") return;
-
-    const title = `${String(anchorName || id)} Stack`;
-    const windowId = stackWindowId(kind, id);
-    const panel = ensureStackWindow(windowId, title);
-    panel.classList.add("stackWindow");
-    const titleEl = panel.querySelector("[data-window-title='true']");
-    if (titleEl) titleEl.textContent = title;
-
-    const existing = stackWindowState.get(windowId) || {};
-    stackWindowState.set(windowId, {
-      ...existing,
-      anchorKind: kind,
-      anchorId: id,
-      anchorName: String(anchorName || id),
-    });
-
-    await refreshStackWindow(windowId);
-  }
-
-  window.addEventListener(INVENTORY_WINDOW_EVENT, (event) => {
+  window.addEventListener(HANGAR_WINDOW_EVENT, (event) => {
     const payload = event?.detail || {};
     const kind = String(payload?.kind || "").toLowerCase();
     if (kind === "ship") {
-      openInventoryWorkspace("ship", payload?.id, payload?.name);
-      return;
-    }
-    if (kind === "location") {
-      openInventoryWorkspace("location", payload?.id, payload?.name);
-    }
-  });
-
-  window.addEventListener(STACK_WINDOW_EVENT, (event) => {
-    const payload = event?.detail || {};
-    const kind = String(payload?.kind || "").toLowerCase();
-    if (kind === "ship") {
-      openStackWorkspace("ship", payload?.id, payload?.name);
+      openHangarWorkspace(payload?.id, payload?.name);
     }
   });
 

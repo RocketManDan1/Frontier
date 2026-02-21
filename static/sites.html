@@ -32,6 +32,7 @@
       <div class="sitesSubTabs">
         <button class="siteSubTab active" data-tab="overview">Overview</button>
         <button class="siteSubTab" data-tab="industrial">Industrial</button>
+        <button class="siteSubTab" data-tab="cargo">Cargo</button>
       </div>
 
       <!-- ═══════════════════ OVERVIEW TAB ═══════════════════ -->
@@ -230,6 +231,82 @@
             <div class="industryHistoryList" id="industryHistoryList"></div>
           </div>
 
+        </div>
+      </div>
+
+      <!-- ═══════════════════ CARGO TAB ═══════════════════ -->
+      <div class="sitesTabContent" id="tabCargo" style="display:none">
+        <div class="cargoTabLayout">
+          <!-- Left: Locations list -->
+          <div class="panel cargoLocationsPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Locations</span>
+              <input type="text" class="sitesSearch" id="cargoSearchInput" placeholder="Filter…" />
+            </div>
+            <div class="tableWrap">
+              <table class="sitesTable cargoSitesTable" id="cargoSitesTable">
+                <thead>
+                  <tr>
+                    <th>Location</th>
+                    <th>Ships</th>
+                    <th>Cargo</th>
+                  </tr>
+                </thead>
+                <tbody id="cargoSitesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right: Cargo workspace (three-column) -->
+          <div class="panel cargoWorkspacePanel" id="cargoWorkspacePanel">
+            <div class="cargoPlaceholder" id="cargoPlaceholder">
+              <div class="muted">Select a location to manage cargo</div>
+            </div>
+            <div class="cargoWorkspace" id="cargoWorkspace" style="display:none">
+              <!-- Header bar with location name -->
+              <div class="cargoHeader">
+                <span class="panelTitle" id="cargoLocationName">—</span>
+                <button class="btnSmall" id="cargoRefreshBtn">Refresh</button>
+              </div>
+
+              <!-- Three-column layout -->
+              <div class="cargoColumns">
+                <!-- Column 1: Source -->
+                <div class="cargoColumn cargoSourceCol">
+                  <div class="cargoColHeader">
+                    <span class="cargoColTitle">Source</span>
+                    <select class="cargoEntitySelect" id="cargoSourceSelect"></select>
+                  </div>
+                  <div class="cargoColBody" id="cargoSourceBody"></div>
+                </div>
+
+                <!-- Column 2: Staging -->
+                <div class="cargoColumn cargoStagingCol">
+                  <div class="cargoColHeader">
+                    <span class="cargoColTitle">Staging</span>
+                    <span class="muted cargoStagingCount" id="cargoStagingCount">0 items</span>
+                  </div>
+                  <div class="cargoColBody cargoStagingBody" id="cargoStagingBody">
+                    <div class="cargoStagingEmpty muted" id="cargoStagingEmpty">Click items on the left to stage them for transfer</div>
+                    <div class="cargoStagingList" id="cargoStagingList"></div>
+                  </div>
+                  <div class="cargoStagingActions">
+                    <button class="btnSmall btnPrimary" id="cargoTransferBtn" disabled>Transfer →</button>
+                    <button class="btnSmall" id="cargoClearBtn">Clear</button>
+                  </div>
+                </div>
+
+                <!-- Column 3: Destination -->
+                <div class="cargoColumn cargoDestCol">
+                  <div class="cargoColHeader">
+                    <span class="cargoColTitle">Destination</span>
+                    <select class="cargoEntitySelect" id="cargoDestSelect"></select>
+                  </div>
+                  <div class="cargoColBody" id="cargoDestBody"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

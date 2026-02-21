@@ -8,6 +8,7 @@ Extracted from main.py — handles:
   /api/stack/context/ship/{ship_id}
   /api/inventory/transfer
   /api/stack/transfer
+  /api/hangar/context/{ship_id}
 """
 
 import json
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from auth_service import require_login
+import catalog_service
 from db import get_db
 from sim_service import game_now_s
 
@@ -804,3 +806,211 @@ def api_stack_transfer(req: StackTransferReq, request: Request, conn: sqlite3.Co
     }
 
 
+# ──────────────────────────────────────────────────────────────
+# Unified Hangar endpoint — combines stack + inventory + stats
+# ──────────────────────────────────────────────────────────────
+
+@router.get("/api/hangar/context/{ship_id}")
+def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Unified endpoint returning ship modules, stats, power balance,
+    inventory (containers + cargo), and all sibling ships/location
+    inventory at the same dock — everything needed for the Hangar window.
+    """
+    sid = str(ship_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="ship_id is required")
+
+    require_login(conn, request)
+    m = _main()
+    m.settle_arrivals(conn, game_now_s())
+    conn.commit()
+
+    anchor_ship = m._load_ship_inventory_state(conn, sid)
+    if not anchor_ship["is_docked"]:
+        raise HTTPException(status_code=400, detail="Ship must be docked to open hangar")
+
+    location_id = str(anchor_ship["location_id"])
+    loc_row = m._get_location_row(conn, location_id)
+    location_name = str(loc_row["name"])
+
+    # ── Build entity list ──
+    entities: List[Dict[str, Any]] = []
+
+    # 1. Location entity
+    location_payload = m.get_location_inventory_payload(conn, location_id)
+    loc_inv_items = m._inventory_items_for_location(location_payload)
+    loc_stack_items = m._stack_items_for_location(location_payload)
+    entities.append({
+        "entity_kind": "location",
+        "id": location_id,
+        "name": f"{location_name} Site Inventory",
+        "location_id": location_id,
+        "parts": [],
+        "stats": None,
+        "power_balance": None,
+        "inventory_items": loc_inv_items,
+        "container_groups": [],
+        "capacity_summary": None,
+        "stack_items": loc_stack_items,
+    })
+
+    # 2. All docked ships at this location
+    ship_rows = conn.execute(
+        """
+        SELECT id, name
+        FROM ships
+        WHERE location_id=? AND arrives_at IS NULL
+        ORDER BY name, id
+        """,
+        (location_id,),
+    ).fetchall()
+
+    for sr in ship_rows:
+        ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))
+        parts = ship_state["parts"]
+        fuel_kg = ship_state["fuel_kg"]
+
+        # Compute stats
+        stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=fuel_kg)
+        dv = m.compute_delta_v_remaining_m_s(
+            stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"]
+        )
+        wet_mass = m.compute_wet_mass_kg(stats["dry_mass_kg"], stats["fuel_kg"])
+        accel_g = m.compute_acceleration_gs(
+            stats["dry_mass_kg"], stats["fuel_kg"], stats["thrust_kn"]
+        )
+        power_balance = catalog_service.compute_power_balance(parts)
+
+        entities.append({
+            "entity_kind": "ship",
+            "id": str(sr["id"]),
+            "name": str(sr["name"]),
+            "location_id": location_id,
+            "parts": parts,
+            "stats": {
+                "dry_mass_kg": stats["dry_mass_kg"],
+                "fuel_kg": stats["fuel_kg"],
+                "fuel_capacity_kg": stats["fuel_capacity_kg"],
+                "wet_mass_kg": wet_mass,
+                "isp_s": stats["isp_s"],
+                "thrust_kn": stats["thrust_kn"],
+                "delta_v_remaining_m_s": dv,
+                "accel_g": accel_g,
+            },
+            "power_balance": power_balance,
+            "inventory_items": m._inventory_items_for_ship(ship_state),
+            "container_groups": m._inventory_container_groups_for_ship(ship_state),
+            "capacity_summary": ship_state.get("capacity_summary"),
+            "stack_items": m._stack_items_for_ship(ship_state),
+        })
+
+    return {
+        "anchor": {
+            "kind": "ship",
+            "id": sid,
+            "name": str(anchor_ship["row"]["name"]),
+            "location_id": location_id,
+        },
+        "location": {
+            "id": location_id,
+            "name": location_name,
+        },
+        "entities": entities,
+    }
+
+
+# ──────────────────────────────────────────────────────────────
+# Location-based cargo context — for Sites cargo transfer tab
+# ──────────────────────────────────────────────────────────────
+
+@router.get("/api/cargo/context/{location_id}")
+def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Location-centric cargo context. Returns site inventory and every
+    docked ship's containers/cargo at this location — everything the
+    Sites cargo-transfer tab needs.
+    """
+    lid = str(location_id or "").strip()
+    if not lid:
+        raise HTTPException(status_code=400, detail="location_id is required")
+
+    require_login(conn, request)
+    m = _main()
+    m.settle_arrivals(conn, game_now_s())
+    conn.commit()
+
+    loc_row = m._get_location_row(conn, lid)
+    location_name = str(loc_row["name"])
+
+    # ── Build entity list ──
+    entities: List[Dict[str, Any]] = []
+
+    # 1. Location entity
+    location_payload = m.get_location_inventory_payload(conn, lid)
+    loc_inv_items = m._inventory_items_for_location(location_payload)
+    loc_stack_items = m._stack_items_for_location(location_payload)
+    entities.append({
+        "entity_kind": "location",
+        "id": lid,
+        "name": f"{location_name} Site Inventory",
+        "location_id": lid,
+        "parts": [],
+        "stats": None,
+        "power_balance": None,
+        "inventory_items": loc_inv_items,
+        "container_groups": [],
+        "capacity_summary": None,
+        "stack_items": loc_stack_items,
+    })
+
+    # 2. All docked ships at this location
+    ship_rows = conn.execute(
+        """
+        SELECT id, name
+        FROM ships
+        WHERE location_id=? AND arrives_at IS NULL
+        ORDER BY name, id
+        """,
+        (lid,),
+    ).fetchall()
+
+    for sr in ship_rows:
+        ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))
+        parts = ship_state["parts"]
+        fuel_kg = ship_state["fuel_kg"]
+
+        stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=fuel_kg)
+        dv = m.compute_delta_v_remaining_m_s(
+            stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"]
+        )
+        wet_mass = m.compute_wet_mass_kg(stats["dry_mass_kg"], stats["fuel_kg"])
+
+        entities.append({
+            "entity_kind": "ship",
+            "id": str(sr["id"]),
+            "name": str(sr["name"]),
+            "location_id": lid,
+            "parts": parts,
+            "stats": {
+                "dry_mass_kg": stats["dry_mass_kg"],
+                "fuel_kg": stats["fuel_kg"],
+                "fuel_capacity_kg": stats["fuel_capacity_kg"],
+                "wet_mass_kg": wet_mass,
+                "isp_s": stats["isp_s"],
+                "thrust_kn": stats["thrust_kn"],
+                "delta_v_remaining_m_s": dv,
+            },
+            "inventory_items": m._inventory_items_for_ship(ship_state),
+            "container_groups": m._inventory_container_groups_for_ship(ship_state),
+            "capacity_summary": ship_state.get("capacity_summary"),
+            "stack_items": m._stack_items_for_ship(ship_state),
+        })
+
+    return {
+        "location": {
+            "id": lid,
+            "name": location_name,
+        },
+        "entities": entities,
+    }

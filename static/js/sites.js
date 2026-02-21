@@ -89,7 +89,9 @@
         currentTab = btn.dataset.tab;
         document.getElementById("tabOverview").style.display = currentTab === "overview" ? "" : "none";
         document.getElementById("tabIndustrial").style.display = currentTab === "industrial" ? "" : "none";
+        document.getElementById("tabCargo").style.display = currentTab === "cargo" ? "" : "none";
         if (currentTab === "industrial") loadIndustryContent();
+        if (currentTab === "cargo") renderCargoSitesTable();
       });
     });
   }
@@ -1192,6 +1194,418 @@
   }
 
   /* ══════════════════════════════════════════════════════════
+     CARGO TRANSFER TAB
+     ══════════════════════════════════════════════════════════ */
+
+  let cargoLocationId = null;
+  let cargoContext = null;      // latest /api/cargo/context response
+  let cargoSourceKey = null;    // "location:<id>" or "ship:<id>"
+  let cargoDestKey = null;
+  let cargoStaged = [];         // [{item, sourceKey, amount}]
+
+  function entityKey(kind, id) { return `${kind}:${id}`; }
+  function parseEntityKey(k) {
+    const i = (k || "").indexOf(":");
+    return i < 0 ? { kind: "", id: "" } : { kind: k.slice(0, i), id: k.slice(i + 1) };
+  }
+
+  function renderCargoSitesTable() {
+    const tbody = document.getElementById("cargoSitesTableBody");
+    if (!tbody) return;
+    const search = (document.getElementById("cargoSearchInput")?.value || "").toLowerCase();
+    const filtered = allSites.filter(s => {
+      if (search && !(s.name || "").toLowerCase().includes(search) && !(s.id || "").toLowerCase().includes(search)) return false;
+      return true;
+    });
+    tbody.innerHTML = filtered.map(s => {
+      const shipCount = Number(s.ship_count || 0);
+      const invCount = Number(s.inventory?.stack_count || 0) + Number(s.inventory?.resource_count || 0);
+      const sel = cargoLocationId === s.id ? ' class="selected"' : '';
+      return `<tr${sel} data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td>${shipCount}</td><td>${invCount}</td></tr>`;
+    }).join("");
+
+    tbody.querySelectorAll("tr[data-id]").forEach(row => {
+      row.style.cursor = "pointer";
+      row.addEventListener("click", () => selectCargoLocation(row.dataset.id));
+    });
+  }
+
+  async function selectCargoLocation(locationId) {
+    cargoLocationId = locationId;
+    renderCargoSitesTable();
+    await loadCargoContext();
+  }
+
+  async function loadCargoContext() {
+    if (!cargoLocationId) return;
+    const placeholder = document.getElementById("cargoPlaceholder");
+    const workspace = document.getElementById("cargoWorkspace");
+    try {
+      cargoContext = await fetchJSON(`/api/cargo/context/${encodeURIComponent(cargoLocationId)}`);
+      if (placeholder) placeholder.style.display = "none";
+      if (workspace) workspace.style.display = "";
+      renderCargoWorkspace();
+    } catch (e) {
+      console.error("Failed to load cargo context:", e);
+      if (placeholder) { placeholder.style.display = ""; placeholder.innerHTML = `<div class="muted">Error loading cargo data</div>`; }
+      if (workspace) workspace.style.display = "none";
+    }
+  }
+
+  function renderCargoWorkspace() {
+    if (!cargoContext) return;
+
+    // Update header
+    const nameEl = document.getElementById("cargoLocationName");
+    if (nameEl) nameEl.textContent = cargoContext.location?.name || cargoLocationId;
+
+    // Build entity options
+    const entities = cargoContext.entities || [];
+    const sourceSelect = document.getElementById("cargoSourceSelect");
+    const destSelect = document.getElementById("cargoDestSelect");
+
+    // Auto-select defaults if nothing selected
+    if (!cargoSourceKey || !entities.some(e => entityKey(e.entity_kind, e.id) === cargoSourceKey)) {
+      const loc = entities.find(e => e.entity_kind === "location");
+      cargoSourceKey = loc ? entityKey(loc.entity_kind, loc.id) : (entities[0] ? entityKey(entities[0].entity_kind, entities[0].id) : null);
+    }
+    if (!cargoDestKey || !entities.some(e => entityKey(e.entity_kind, e.id) === cargoDestKey)) {
+      const firstShip = entities.find(e => e.entity_kind === "ship");
+      cargoDestKey = firstShip ? entityKey(firstShip.entity_kind, firstShip.id) : null;
+    }
+
+    populateEntitySelect(sourceSelect, entities, cargoSourceKey);
+    populateEntitySelect(destSelect, entities, cargoDestKey);
+
+    renderCargoSource();
+    renderCargoDest();
+    renderStagingList();
+  }
+
+  function populateEntitySelect(selectEl, entities, selectedKey) {
+    if (!selectEl) return;
+    selectEl.innerHTML = "";
+    entities.forEach(e => {
+      const key = entityKey(e.entity_kind, e.id);
+      const opt = document.createElement("option");
+      opt.value = key;
+      const prefix = e.entity_kind === "ship" ? "🚀 " : "📍 ";
+      opt.textContent = prefix + (e.name || e.id);
+      if (key === selectedKey) opt.selected = true;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  function findEntity(key) {
+    if (!key || !cargoContext) return null;
+    const { kind, id } = parseEntityKey(key);
+    return (cargoContext.entities || []).find(e => e.entity_kind === kind && e.id === id) || null;
+  }
+
+  function renderEntityInventory(containerEl, entity, side) {
+    if (!containerEl) return;
+    containerEl.innerHTML = "";
+    if (!entity) {
+      containerEl.innerHTML = '<div class="muted">No entity selected</div>';
+      return;
+    }
+
+    const isShip = entity.entity_kind === "ship";
+    const eKey = entityKey(entity.entity_kind, entity.id);
+
+    // Summary line
+    const summary = document.createElement("div");
+    summary.className = "cargoEntitySummary";
+    if (isShip) {
+      const stats = entity.stats || {};
+      const cap = entity.capacity_summary;
+      let text = `Modules: ${(entity.stack_items || []).length}`;
+      if (stats.delta_v_remaining_m_s != null) text += ` · Δv ${Math.max(0, stats.delta_v_remaining_m_s).toFixed(0)} m/s`;
+      if (cap && cap.total_capacity_kg > 0) text += ` · Cargo: ${fmtKg(cap.used_mass_kg)}/${fmtKg(cap.total_capacity_kg)}`;
+      summary.textContent = text;
+    } else {
+      const rCount = (entity.inventory_items || []).length;
+      const pCount = (entity.stack_items || []).length;
+      summary.textContent = `Resources: ${rCount} · Parts: ${pCount}`;
+    }
+    containerEl.appendChild(summary);
+
+    // Container groups (ships)
+    const groups = entity.container_groups || [];
+    if (groups.length) {
+      groups.forEach((cg, cgIdx) => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "cargoContainerGroup";
+
+        const groupHead = document.createElement("div");
+        groupHead.className = "cargoContainerGroupHead";
+        const cap = cg.capacity || {};
+        groupHead.innerHTML = `<span class="cargoContainerName">${esc(cg.container_name || `Container ${cgIdx}`)}</span>
+          <span class="cargoContainerCap muted">${fmtKg(cap.used_mass_kg || 0)} / ${fmtKg(cap.capacity_kg || 0)}</span>`;
+        groupEl.appendChild(groupHead);
+
+        const itemsGrid = document.createElement("div");
+        itemsGrid.className = "invGrid cargoItemGrid";
+        (cg.items || []).forEach(item => {
+          const cell = buildCargoCell(item, eKey, side);
+          itemsGrid.appendChild(cell);
+        });
+        if (!(cg.items || []).length) {
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.textContent = "Empty";
+          itemsGrid.appendChild(empty);
+        }
+        groupEl.appendChild(itemsGrid);
+        containerEl.appendChild(groupEl);
+      });
+    }
+
+    // Loose inventory items (resources not in containers)
+    const looseItems = (entity.inventory_items || []).filter(item => {
+      // Skip items that are inside container groups
+      return !item.container_index && item.container_index !== 0;
+    });
+    if (looseItems.length) {
+      const looseHead = document.createElement("div");
+      looseHead.className = "cargoGroupLabel";
+      looseHead.textContent = isShip ? "Loose Resources" : "Resources";
+      containerEl.appendChild(looseHead);
+
+      const looseGrid = document.createElement("div");
+      looseGrid.className = "invGrid cargoItemGrid";
+      looseItems.forEach(item => {
+        const cell = buildCargoCell(item, eKey, side);
+        looseGrid.appendChild(cell);
+      });
+      containerEl.appendChild(looseGrid);
+    }
+
+    // Stack items (parts/modules)
+    const stackItems = entity.stack_items || [];
+    if (stackItems.length) {
+      const stackHead = document.createElement("div");
+      stackHead.className = "cargoGroupLabel";
+      stackHead.textContent = isShip ? "Installed Modules" : "Parts";
+      containerEl.appendChild(stackHead);
+
+      const stackGrid = document.createElement("div");
+      stackGrid.className = "invGrid cargoItemGrid";
+      stackItems.forEach(item => {
+        const cell = buildCargoCell(item, eKey, side);
+        stackGrid.appendChild(cell);
+      });
+      containerEl.appendChild(stackGrid);
+    }
+
+    if (!groups.length && !looseItems.length && !stackItems.length) {
+      containerEl.innerHTML = '<div class="muted">No cargo or parts</div>';
+    }
+  }
+
+  function buildCargoCell(item, entityKey, side) {
+    const isStackItem = !!(item.item_kind === "ship_part" || item.item_kind === "location_part" || item.source_kind === "ship_part" || item.source_kind === "location_part");
+    const transfer = item.transfer || {};
+    const sourceKind = String(transfer.source_kind || item.source_kind || "");
+    const sourceId = String(transfer.source_id || item.source_id || "");
+    const sourceKeyStr = String(transfer.source_key || item.source_key || "");
+
+    const cell = itemDisplay.createGridCell({
+      label: item.label || item.name || "Item",
+      iconSeed: item.icon_seed || item.item_uid || item.item_id,
+      category: item.category_id || item.category || item.type,
+      quantity: item.quantity || item.amount,
+      mass_kg: item.mass_kg,
+      volume_m3: item.volume_m3,
+      subtitle: item.subtitle || item.category_id,
+      tooltipLines: item.tooltip_lines,
+    });
+
+    // Make clickable to stage
+    if (side === "source") {
+      cell.style.cursor = "pointer";
+      cell.addEventListener("click", () => {
+        stageItem(item, entityKey);
+      });
+    }
+
+    return cell;
+  }
+
+  function stageItem(item, sourceEntityKey) {
+    const transfer = item.transfer || {};
+    const sourceKind = String(transfer.source_kind || item.source_kind || "");
+    const sourceId = String(transfer.source_id || item.source_id || "");
+    const sourceKeyStr = String(transfer.source_key || item.source_key || "");
+    const maxAmount = Number(transfer.amount || item.amount || item.quantity || 1);
+    const isStack = sourceKind === "ship_part" || sourceKind === "location_part";
+
+    // Check if already staged
+    const existingIdx = cargoStaged.findIndex(s =>
+      s.sourceKind === sourceKind && s.sourceId === sourceId && s.sourceKeyStr === sourceKeyStr
+    );
+    if (existingIdx >= 0) return; // already staged
+
+    let amount = maxAmount;
+    if (!isStack && maxAmount > 1) {
+      const input = window.prompt(`Transfer how much? (max ${maxAmount})`, String(maxAmount));
+      if (input == null) return;
+      amount = Math.max(1, Math.min(maxAmount, Math.round(Number(input) || 0)));
+      if (amount <= 0) return;
+    }
+
+    cargoStaged.push({
+      item,
+      sourceEntityKey,
+      sourceKind,
+      sourceId,
+      sourceKeyStr,
+      amount,
+      maxAmount,
+      isStack,
+      label: item.label || item.name || "Item",
+    });
+
+    renderStagingList();
+  }
+
+  function removeStagedItem(idx) {
+    cargoStaged.splice(idx, 1);
+    renderStagingList();
+  }
+
+  function renderStagingList() {
+    const list = document.getElementById("cargoStagingList");
+    const empty = document.getElementById("cargoStagingEmpty");
+    const count = document.getElementById("cargoStagingCount");
+    const transferBtn = document.getElementById("cargoTransferBtn");
+
+    if (count) count.textContent = `${cargoStaged.length} item${cargoStaged.length !== 1 ? "s" : ""}`;
+    if (empty) empty.style.display = cargoStaged.length ? "none" : "";
+    if (transferBtn) transferBtn.disabled = !cargoStaged.length || !cargoDestKey;
+
+    if (!list) return;
+    list.innerHTML = "";
+
+    cargoStaged.forEach((staged, idx) => {
+      const row = document.createElement("div");
+      row.className = "cargoStagedRow";
+
+      const info = document.createElement("div");
+      info.className = "cargoStagedInfo";
+
+      const name = document.createElement("span");
+      name.className = "cargoStagedName";
+      name.textContent = staged.label;
+      info.appendChild(name);
+
+      if (!staged.isStack && staged.amount > 0) {
+        const qty = document.createElement("span");
+        qty.className = "cargoStagedQty muted";
+        qty.textContent = ` ×${staged.amount}`;
+        info.appendChild(qty);
+      }
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btnSmall cargoStagedRemove";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => removeStagedItem(idx));
+
+      row.append(info, removeBtn);
+      list.appendChild(row);
+    });
+  }
+
+  function renderCargoSource() {
+    const body = document.getElementById("cargoSourceBody");
+    const entity = findEntity(cargoSourceKey);
+    renderEntityInventory(body, entity, "source");
+  }
+
+  function renderCargoDest() {
+    const body = document.getElementById("cargoDestBody");
+    const entity = findEntity(cargoDestKey);
+    renderEntityInventory(body, entity, "dest");
+  }
+
+  async function executeCargoTransfers() {
+    if (!cargoStaged.length || !cargoDestKey) return;
+
+    const { kind: destKind, id: destId } = parseEntityKey(cargoDestKey);
+    const transferBtn = document.getElementById("cargoTransferBtn");
+    if (transferBtn) transferBtn.disabled = true;
+
+    let errors = [];
+    for (const staged of cargoStaged) {
+      try {
+        if (staged.isStack) {
+          await postJSON("/api/stack/transfer", {
+            source_kind: staged.sourceKind,
+            source_id: staged.sourceId,
+            source_key: staged.sourceKeyStr,
+            target_kind: destKind,
+            target_id: destId,
+          });
+        } else {
+          await postJSON("/api/inventory/transfer", {
+            source_kind: staged.sourceKind,
+            source_id: staged.sourceId,
+            source_key: staged.sourceKeyStr,
+            target_kind: destKind,
+            target_id: destId,
+            amount: staged.amount,
+          });
+        }
+      } catch (e) {
+        errors.push(`${staged.label}: ${e.message}`);
+      }
+    }
+
+    cargoStaged = [];
+    renderStagingList();
+    await loadCargoContext();
+    await loadSites();
+
+    if (errors.length) {
+      alert("Some transfers failed:\n" + errors.join("\n"));
+    }
+  }
+
+  function initCargoTab() {
+    // Search filter
+    const searchInput = document.getElementById("cargoSearchInput");
+    if (searchInput) searchInput.addEventListener("input", () => renderCargoSitesTable());
+
+    // Source/dest selectors
+    const sourceSelect = document.getElementById("cargoSourceSelect");
+    if (sourceSelect) sourceSelect.addEventListener("change", () => {
+      cargoSourceKey = sourceSelect.value || null;
+      renderCargoSource();
+    });
+    const destSelect = document.getElementById("cargoDestSelect");
+    if (destSelect) destSelect.addEventListener("change", () => {
+      cargoDestKey = destSelect.value || null;
+      renderCargoDest();
+      renderStagingList(); // update transfer button state
+    });
+
+    // Transfer button
+    const transferBtn = document.getElementById("cargoTransferBtn");
+    if (transferBtn) transferBtn.addEventListener("click", () => executeCargoTransfers());
+
+    // Clear button
+    const clearBtn = document.getElementById("cargoClearBtn");
+    if (clearBtn) clearBtn.addEventListener("click", () => {
+      cargoStaged = [];
+      renderStagingList();
+    });
+
+    // Refresh button
+    const refreshBtn = document.getElementById("cargoRefreshBtn");
+    if (refreshBtn) refreshBtn.addEventListener("click", () => loadCargoContext());
+  }
+
+  /* ══════════════════════════════════════════════════════════
      FILTER & SEARCH
      ══════════════════════════════════════════════════════════ */
 
@@ -1216,6 +1630,7 @@
     pollTimer = setInterval(() => {
       loadSites();
       if (currentTab === "industrial" && industryLocationId) loadIndustryContent();
+      if (currentTab === "cargo" && cargoLocationId) loadCargoContext();
       if (selectedSiteId) selectSite(selectedSiteId);
     }, 10000);
 
@@ -1236,6 +1651,7 @@
     initDeployModal();
     initStartJobModal();
     initMiningModal();
+    initCargoTab();
     await loadSites();
     startPolling();
   }
