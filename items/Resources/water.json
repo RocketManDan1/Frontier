@@ -3,5 +3,6 @@
   "name": "Water",
   "type": "resource",
   "category_id": "fuel",
-  "mass_per_m3_kg": 1000
+  "mass_per_m3_kg": 1000,
+  "phase": "liquid"
 }

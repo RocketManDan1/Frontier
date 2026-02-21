@@ -48,6 +48,7 @@
 
   function esc(v) { return itemDisplay ? itemDisplay.escapeHtml(v) : String(v || ""); }
   function fmtKg(v) { return itemDisplay ? itemDisplay.fmtKg(v) : (function(){ var val = Math.max(0, Number(v||0)); return val >= 5000 ? (val/1000).toFixed(1)+' t' : val.toFixed(0)+' kg'; })(); }
+  function fmtM3(v) { return Math.max(0, Number(v) || 0).toFixed(2) + ' m³'; }
   function fmtPct(v) { return `${(Number(v||0) * 100).toFixed(1)}%`; }
   function fmtDuration(s) {
     s = Math.max(0, Math.round(Number(s) || 0));
@@ -1318,10 +1319,8 @@
     summary.className = "cargoEntitySummary";
     if (isShip) {
       const stats = entity.stats || {};
-      const cap = entity.capacity_summary;
-      let text = `Modules: ${(entity.stack_items || []).length}`;
-      if (stats.delta_v_remaining_m_s != null) text += ` · Δv ${Math.max(0, stats.delta_v_remaining_m_s).toFixed(0)} m/s`;
-      if (cap && cap.total_capacity_kg > 0) text += ` · Cargo: ${fmtKg(cap.used_mass_kg)}/${fmtKg(cap.total_capacity_kg)}`;
+      let text = `MODULES: ${(entity.stack_items || []).length}`;
+      if (stats.delta_v_remaining_m_s != null) text += ` · ΔV ${Math.max(0, stats.delta_v_remaining_m_s).toFixed(0)} M/S`;
       summary.textContent = text;
     } else {
       const rCount = (entity.inventory_items || []).length;
@@ -1330,46 +1329,79 @@
     }
     containerEl.appendChild(summary);
 
-    // Container groups (ships)
+    // Capacity summary bar (ships)
+    if (isShip && entity.capacity_summary) {
+      const capEl = renderCargoCapacitySummary(entity.capacity_summary);
+      if (capEl) containerEl.appendChild(capEl);
+    }
+
+    // Container groups (ships) — hangar style
     const groups = entity.container_groups || [];
     if (groups.length) {
-      groups.forEach((cg, cgIdx) => {
-        const groupEl = document.createElement("div");
-        groupEl.className = "cargoContainerGroup";
+      const groupList = document.createElement("div");
+      groupList.className = "inventoryContainerGroupList";
 
-        const groupHead = document.createElement("div");
-        groupHead.className = "cargoContainerGroupHead";
-        const cap = cg.capacity || {};
-        groupHead.innerHTML = `<span class="cargoContainerName">${esc(cg.container_name || `Container ${cgIdx}`)}</span>
-          <span class="cargoContainerCap muted">${fmtKg(cap.used_mass_kg || 0)} / ${fmtKg(cap.capacity_kg || 0)}</span>`;
-        groupEl.appendChild(groupHead);
+      groups.forEach((cg) => {
+        const phase = String(cg.phase || "solid").toLowerCase();
+        const section = document.createElement("section");
+        section.className = `inventoryContainerGroup containerPhase-${phase}`;
 
-        const itemsGrid = document.createElement("div");
-        itemsGrid.className = "invGrid cargoItemGrid";
-        (cg.items || []).forEach(item => {
-          const cell = buildCargoCell(item, eKey, side);
-          itemsGrid.appendChild(cell);
-        });
-        if (!(cg.items || []).length) {
-          const empty = document.createElement("div");
-          empty.className = "muted";
-          empty.textContent = "Empty";
-          itemsGrid.appendChild(empty);
+        // Head row
+        const head = document.createElement("div");
+        head.className = "inventoryContainerGroupHead";
+
+        const phaseBadge = document.createElement("span");
+        phaseBadge.className = `containerPhaseBadge containerPhaseBadge-${phase}`;
+        const phaseIcons = { solid: "◆", liquid: "💧", gas: "☁" };
+        phaseBadge.textContent = phaseIcons[phase] || "◆";
+
+        const title = document.createElement("div");
+        title.className = "inventoryContainerGroupTitle";
+        title.textContent = String(cg.name || "Container");
+
+        const used = Math.max(0, Number(cg.used_m3) || 0);
+        const cap = Math.max(0, Number(cg.capacity_m3) || 0);
+        const sub = document.createElement("div");
+        sub.className = "inventoryContainerGroupSub";
+        sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} · ${fmtM3(used)} / ${fmtM3(cap)}`;
+
+        const headLeft = document.createElement("div");
+        headLeft.className = "containerGroupHeadLeft";
+        headLeft.append(phaseBadge, title);
+
+        head.append(headLeft, sub);
+
+        // Items grid
+        const itemsWrap = document.createElement("div");
+        itemsWrap.className = "inventoryContainerItems";
+        const items = Array.isArray(cg.items) ? cg.items : [];
+        if (!items.length) {
+          const emptySlot = document.createElement("div");
+          emptySlot.className = `containerEmptySlot containerEmptySlot-${phase}`;
+          emptySlot.textContent = `Empty ${phase} container`;
+          itemsWrap.appendChild(emptySlot);
+        } else {
+          items.forEach(item => {
+            const cell = buildCargoCell(item, eKey, side);
+            itemsWrap.appendChild(cell);
+          });
         }
-        groupEl.appendChild(itemsGrid);
-        containerEl.appendChild(groupEl);
+
+        section.append(head, itemsWrap);
+        groupList.appendChild(section);
       });
+
+      containerEl.appendChild(groupList);
     }
 
     // Loose inventory items (resources not in containers)
     const looseItems = (entity.inventory_items || []).filter(item => {
-      // Skip items that are inside container groups
       return !item.container_index && item.container_index !== 0;
     });
     if (looseItems.length) {
       const looseHead = document.createElement("div");
       looseHead.className = "cargoGroupLabel";
-      looseHead.textContent = isShip ? "Loose Resources" : "Resources";
+      looseHead.textContent = isShip ? "LOOSE RESOURCES" : "RESOURCES";
       containerEl.appendChild(looseHead);
 
       const looseGrid = document.createElement("div");
@@ -1386,7 +1418,7 @@
     if (stackItems.length) {
       const stackHead = document.createElement("div");
       stackHead.className = "cargoGroupLabel";
-      stackHead.textContent = isShip ? "Installed Modules" : "Parts";
+      stackHead.textContent = isShip ? "INSTALLED MODULES" : "PARTS";
       containerEl.appendChild(stackHead);
 
       const stackGrid = document.createElement("div");
@@ -1401,6 +1433,41 @@
     if (!groups.length && !looseItems.length && !stackItems.length) {
       containerEl.innerHTML = '<div class="muted">No cargo or parts</div>';
     }
+  }
+
+  /** Capacity summary bar — matches hangar style */
+  function renderCargoCapacitySummary(capSummary) {
+    if (!capSummary) return null;
+    const used = Math.max(0, Number(capSummary.used_m3) || 0);
+    const cap = Math.max(0, Number(capSummary.capacity_m3) || 0);
+    const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
+    const byPhase = capSummary.by_phase && typeof capSummary.by_phase === "object" ? capSummary.by_phase : {};
+
+    const wrap = document.createElement("div");
+    wrap.className = "inventoryCapSummary";
+
+    const line = document.createElement("div");
+    line.className = "inventoryCapSummaryLine";
+    line.textContent = `${fmtM3(used)} / ${fmtM3(cap)} used`;
+
+    const bar = document.createElement("div");
+    bar.className = "inventoryCapBar";
+    const fill = document.createElement("div");
+    fill.className = "inventoryCapBarFill";
+    fill.style.width = `${pct.toFixed(2)}%`;
+    bar.appendChild(fill);
+
+    const phases = document.createElement("div");
+    phases.className = "inventoryCapSummaryPhases";
+    phases.textContent = ["solid", "liquid", "gas"].map(ph => {
+      const row = byPhase[ph] || {};
+      const pUsed = Math.max(0, Number(row.used_m3) || 0);
+      const pCap = Math.max(0, Number(row.capacity_m3) || 0);
+      return `${ph[0].toUpperCase()}${ph.slice(1)} ${fmtM3(pUsed)} / ${fmtM3(pCap)}`;
+    }).join(" · ");
+
+    wrap.append(line, bar, phases);
+    return wrap;
   }
 
   function buildCargoCell(item, entityKey, side) {
@@ -1440,9 +1507,11 @@
     const maxAmount = Number(transfer.amount || item.amount || item.quantity || 1);
     const isStack = sourceKind === "ship_part" || sourceKind === "location_part";
 
+    const resourceId = String(transfer.resource_id || item.resource_id || "");
+
     // Check if already staged
     const existingIdx = cargoStaged.findIndex(s =>
-      s.sourceKind === sourceKind && s.sourceId === sourceId && s.sourceKeyStr === sourceKeyStr
+      s.sourceKind === sourceKind && s.sourceId === sourceId && s.sourceKeyStr === sourceKeyStr && s.resourceId === resourceId
     );
     if (existingIdx >= 0) return; // already staged
 
@@ -1460,6 +1529,7 @@
       sourceKind,
       sourceId,
       sourceKeyStr,
+      resourceId: String(transfer.resource_id || item.resource_id || ""),
       amount,
       maxAmount,
       isStack,
@@ -1547,14 +1617,16 @@
             target_id: destId,
           });
         } else {
-          await postJSON("/api/inventory/transfer", {
+          const transferBody = {
             source_kind: staged.sourceKind,
             source_id: staged.sourceId,
             source_key: staged.sourceKeyStr,
             target_kind: destKind,
             target_id: destId,
             amount: staged.amount,
-          });
+          };
+          if (staged.resourceId) transferBody.resource_id = staged.resourceId;
+          await postJSON("/api/inventory/transfer", transferBody);
         }
       } catch (e) {
         errors.push(`${staged.label}: ${e.message}`);

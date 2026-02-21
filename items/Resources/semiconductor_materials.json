@@ -4,5 +4,6 @@
   "type": "resource",
   "category_id": "finished_material",
   "mass_per_m3_kg": 2330,
-  "description": "High-purity silicon-centered electronics feedstock; purification is mass-inefficient. Total feed ~3.57 t per 1 t output."
+  "description": "High-purity silicon-centered electronics feedstock; purification is mass-inefficient. Total feed ~3.57 t per 1 t output.",
+  "phase": "solid"
 }

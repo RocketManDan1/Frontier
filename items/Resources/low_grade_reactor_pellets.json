@@ -4,5 +4,6 @@
   "type": "resource",
   "category_id": "finished_material",
   "mass_per_m3_kg": 4500,
-  "description": "Low-grade reactor fuel feedstock pellets produced from radioactive ores with strategic element additives."
+  "description": "Low-grade reactor fuel feedstock pellets produced from radioactive ores with strategic element additives.",
+  "phase": "solid"
 }

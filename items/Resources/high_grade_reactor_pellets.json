@@ -4,5 +4,6 @@
   "type": "resource",
   "category_id": "finished_material",
   "mass_per_m3_kg": 6000,
-  "description": "High-grade reactor fuel pellets produced from concentrated radioactives with strategic and precious-metal dopants."
+  "description": "High-grade reactor fuel pellets produced from concentrated radioactives with strategic and precious-metal dopants.",
+  "phase": "solid"
 }

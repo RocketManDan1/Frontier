@@ -4,5 +4,6 @@
   "type": "resource",
   "category_id": "raw_material",
   "mass_per_m3_kg": 20000,
-  "description": "Platinum-group metals and gold; high-value export resources from metallic asteroids."
+  "description": "Platinum-group metals and gold; high-value export resources from metallic asteroids.",
+  "phase": "solid"
 }

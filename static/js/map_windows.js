@@ -381,33 +381,42 @@
     }
 
     groups.forEach((group) => {
+      const phase = String(group?.phase || "solid").toLowerCase();
       const section = document.createElement("section");
-      section.className = "inventoryContainerGroup inventoryDropZone";
+      section.className = `inventoryContainerGroup inventoryDropZone containerPhase-${phase}`;
 
       const head = document.createElement("div");
       head.className = "inventoryContainerGroupHead";
+
+      const phaseBadge = document.createElement("span");
+      phaseBadge.className = `containerPhaseBadge containerPhaseBadge-${phase}`;
+      const phaseIcons = { solid: "◆", liquid: "💧", gas: "☁" };
+      phaseBadge.textContent = phaseIcons[phase] || "◆";
 
       const title = document.createElement("div");
       title.className = "inventoryContainerGroupTitle";
       title.textContent = String(group?.name || "Container");
 
-      const phase = String(group?.phase || "solid");
       const used = Math.max(0, Number(group?.used_m3) || 0);
       const cap = Math.max(0, Number(group?.capacity_m3) || 0);
       const sub = document.createElement("div");
       sub.className = "inventoryContainerGroupSub";
       sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} · ${fmtM3(used)} / ${fmtM3(cap)}`;
 
-      head.append(title, sub);
+      const headLeft = document.createElement("div");
+      headLeft.className = "containerGroupHeadLeft";
+      headLeft.append(phaseBadge, title);
+
+      head.append(headLeft, sub);
 
       const itemsWrap = document.createElement("div");
       itemsWrap.className = "inventoryContainerItems";
       const items = Array.isArray(group?.items) ? group.items : [];
       if (!items.length) {
-        const empty = document.createElement("div");
-        empty.className = "muted small";
-        empty.textContent = "Empty";
-        itemsWrap.appendChild(empty);
+        const emptySlot = document.createElement("div");
+        emptySlot.className = `containerEmptySlot containerEmptySlot-${phase}`;
+        emptySlot.textContent = `Empty ${phase} container`;
+        itemsWrap.appendChild(emptySlot);
       } else {
         items.forEach((item) => {
           itemsWrap.appendChild(renderInventoryItemCard(item));
@@ -500,10 +509,7 @@
       throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
     }
 
-    const resp = await fetch("/api/inventory/transfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const body = {
         source_kind: sourceKind,
         source_id: sourceId,
         source_key: sourceKey,
@@ -511,7 +517,12 @@
         target_kind: destKind,
         target_id: destId,
         target_key: destKey || undefined,
-      }),
+      };
+    if (payload?.resource_id) body.resource_id = String(payload.resource_id);
+    const resp = await fetch("/api/inventory/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Inventory transfer failed"));

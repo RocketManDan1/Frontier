@@ -441,8 +441,87 @@ body.embedMode .pagePanel {
 }
 
 .mapPage .inventoryContainerGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   border-bottom: 1px solid rgba(120, 165, 214, 0.12);
   padding-bottom: 5px;
+}
+
+.mapPage .containerGroupHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mapPage .containerPhaseBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.mapPage .containerPhaseBadge-solid {
+  background: rgba(180, 140, 80, 0.22);
+  border: 1px solid rgba(200, 160, 90, 0.4);
+  color: #d4b06a;
+}
+
+.mapPage .containerPhaseBadge-liquid {
+  background: rgba(70, 140, 220, 0.22);
+  border: 1px solid rgba(80, 160, 240, 0.4);
+  color: #6abbd4;
+}
+
+.mapPage .containerPhaseBadge-gas {
+  background: rgba(160, 100, 220, 0.22);
+  border: 1px solid rgba(180, 120, 240, 0.4);
+  color: #c4a0e8;
+}
+
+/* Phase-colored container group borders */
+.mapPage .containerPhase-solid {
+  border-color: rgba(200, 160, 90, 0.25);
+}
+
+.mapPage .containerPhase-liquid {
+  border-color: rgba(80, 160, 240, 0.25);
+}
+
+.mapPage .containerPhase-gas {
+  border-color: rgba(180, 120, 240, 0.25);
+}
+
+/* Empty container placeholder */
+.mapPage .containerEmptySlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border: 1px dashed rgba(120, 165, 214, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 8px 12px;
+}
+
+.mapPage .containerEmptySlot-solid {
+  color: rgba(200, 170, 100, 0.55);
+  border-color: rgba(200, 160, 90, 0.2);
+}
+
+.mapPage .containerEmptySlot-liquid {
+  color: rgba(100, 180, 240, 0.55);
+  border-color: rgba(80, 160, 240, 0.2);
+}
+
+.mapPage .containerEmptySlot-gas {
+  color: rgba(180, 140, 240, 0.55);
+  border-color: rgba(180, 120, 240, 0.2);
 }
 
 .mapPage .inventoryContainerGroupTitle {
@@ -3705,7 +3784,7 @@ body.fleetPage {
 
 .cargoTabLayout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 380px 1fr;
   gap: 12px;
   padding: 0 16px 16px;
   height: 100%;
@@ -3835,31 +3914,6 @@ body.fleetPage {
   border-bottom: 1px solid rgba(120, 165, 214, 0.10);
 }
 
-.cargoContainerGroup {
-  border: 1px solid rgba(120, 165, 214, 0.14);
-  background: rgba(7, 12, 20, 0.55);
-  border-radius: 5px;
-  padding: 6px;
-}
-
-.cargoContainerGroupHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 5px;
-  margin-bottom: 5px;
-  border-bottom: 1px solid rgba(120, 165, 214, 0.10);
-}
-
-.cargoContainerName {
-  font-size: 11px;
-  color: rgba(235, 245, 252, 0.92);
-}
-
-.cargoContainerCap {
-  font-size: 10px;
-}
-
 .cargoItemGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, 76px);
@@ -3874,6 +3928,152 @@ body.fleetPage {
   color: var(--muted);
   padding: 4px 0 2px;
   border-bottom: 1px solid rgba(120, 165, 214, 0.08);
+}
+
+/* ── Shared container phase styles (hangar + cargo tab) ─── */
+.inventoryCapSummary {
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.inventoryCapSummaryLine,
+.inventoryCapSummaryPhases {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.inventoryCapBar {
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(117, 160, 208, 0.38);
+  background: rgba(11, 20, 33, 0.95);
+  overflow: hidden;
+}
+
+.inventoryCapBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(76, 147, 221, 0.84), rgba(68, 224, 255, 0.9));
+}
+
+.inventoryContainerGroupList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.inventoryContainerGroup {
+  border: 1px solid rgba(120, 165, 214, 0.16);
+  background: rgba(7, 12, 20, 0.6);
+  border-radius: 5px;
+  padding: 7px;
+  display: grid;
+  gap: 6px;
+}
+
+.inventoryContainerGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.12);
+  padding-bottom: 5px;
+}
+
+.containerGroupHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.containerPhaseBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.containerPhaseBadge-solid {
+  background: rgba(180, 140, 80, 0.22);
+  border: 1px solid rgba(200, 160, 90, 0.4);
+  color: #d4b06a;
+}
+
+.containerPhaseBadge-liquid {
+  background: rgba(70, 140, 220, 0.22);
+  border: 1px solid rgba(80, 160, 240, 0.4);
+  color: #6abbd4;
+}
+
+.containerPhaseBadge-gas {
+  background: rgba(160, 100, 220, 0.22);
+  border: 1px solid rgba(180, 120, 240, 0.4);
+  color: #c4a0e8;
+}
+
+.containerPhase-solid {
+  border-color: rgba(200, 160, 90, 0.25);
+}
+
+.containerPhase-liquid {
+  border-color: rgba(80, 160, 240, 0.25);
+}
+
+.containerPhase-gas {
+  border-color: rgba(180, 120, 240, 0.25);
+}
+
+.containerEmptySlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border: 1px dashed rgba(120, 165, 214, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 8px 12px;
+}
+
+.containerEmptySlot-solid {
+  color: rgba(200, 170, 100, 0.55);
+  border-color: rgba(200, 160, 90, 0.2);
+}
+
+.containerEmptySlot-liquid {
+  color: rgba(100, 180, 240, 0.55);
+  border-color: rgba(80, 160, 240, 0.2);
+}
+
+.containerEmptySlot-gas {
+  color: rgba(180, 140, 240, 0.55);
+  border-color: rgba(180, 120, 240, 0.2);
+}
+
+.inventoryContainerGroupTitle {
+  font-size: 12px;
+  color: rgba(235, 245, 252, 0.95);
+}
+
+.inventoryContainerGroupSub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventoryContainerItems {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 76px);
+  gap: 4px;
+  justify-content: start;
 }
 
 /* Staging column */
