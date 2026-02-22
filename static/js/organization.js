@@ -199,6 +199,28 @@
     boostBtn.disabled = false;
   }
 
+  async function loadBoostHistory() {
+    try {
+      const resp = await fetch("/api/org/boost-history", { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const history = data.history || [];
+      if (history.length === 0) {
+        boostHistory.innerHTML = '<span class="muted small">No launches yet.</span>';
+        return;
+      }
+      boostHistory.innerHTML = "";
+      for (const entry of history) {
+        const row = document.createElement("div");
+        row.className = "orgBoostHistoryRow";
+        row.innerHTML =
+          `<span class="orgBoostHistoryItem">${entry.item_name} x${entry.quantity}</span>` +
+          `<span class="muted small">${fmtMass(entry.mass_kg)} · ${fmtUsd(entry.cost_usd)} → ${entry.destination}</span>`;
+        boostHistory.appendChild(row);
+      }
+    } catch { /* ignore */ }
+  }
+
   async function doBoost() {
     const itemId = boostItemSelect.value;
     const qty = parseFloat(boostQuantity.value) || 1;
@@ -219,6 +241,7 @@
       }
       boostStatus.textContent = `Launched ${data.item_name} x${data.quantity} to ${data.destination} (${fmtUsd(data.cost_usd)})`;
       await loadOrg();
+      await loadBoostHistory();
     } catch (e) {
       boostStatus.textContent = "Error: " + e.message;
     } finally {
@@ -244,5 +267,6 @@
   // ── Auto-refresh ────────────────────────────────────────────────────────────
   loadOrg();
   loadBoostableItems();
+  loadBoostHistory();
   setInterval(loadOrg, 30000); // refresh every 30s
 })();

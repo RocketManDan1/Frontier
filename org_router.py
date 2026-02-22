@@ -142,6 +142,15 @@ def api_boost_to_leo(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/api/org/boost-history")
+def api_boost_history(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Return recent LEO boost launches for the org."""
+    user = require_login(conn, request)
+    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    history = org_service.get_boost_history(conn, org_id)
+    return {"history": history}
+
+
 # ── Research Unlock ────────────────────────────────────────────────────────────
 
 @router.get("/api/org/research/unlocks")

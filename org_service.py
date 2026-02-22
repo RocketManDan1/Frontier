@@ -409,6 +409,32 @@ def _add_to_location_inventory(
         )
 
 
+def get_boost_history(conn: sqlite3.Connection, org_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Return the most recent LEO boosts for an org, newest first."""
+    rows = conn.execute(
+        """SELECT id, item_id, item_name, quantity, mass_kg, cost_usd,
+                  boosted_at, destination_location_id
+           FROM leo_boosts
+           WHERE org_id = ?
+           ORDER BY boosted_at DESC
+           LIMIT ?""",
+        (org_id, limit),
+    ).fetchall()
+    return [
+        {
+            "id": str(r["id"]),
+            "item_id": str(r["item_id"]),
+            "item_name": str(r["item_name"]),
+            "quantity": float(r["quantity"]),
+            "mass_kg": float(r["mass_kg"]),
+            "cost_usd": float(r["cost_usd"]),
+            "boosted_at": float(r["boosted_at"]),
+            "destination": str(r["destination_location_id"]),
+        }
+        for r in rows
+    ]
+
+
 # ── Research Unlock (KSP Tech Tree) ──────────────────────────────────────────
 
 
