@@ -1015,7 +1015,13 @@
       });
     }
 
-    if (!html) html = '<div class="muted" style="padding:12px">No mining data available</div>';
+    if (!html) {
+      if (industryData.is_surface_site && industryData.is_prospected === false) {
+        html = '<div class="muted" style="padding:12px">⚠ Site not yet prospected. Use a ship with a robonaut to prospect this site before mining.</div>';
+      } else {
+        html = '<div class="muted" style="padding:12px">No mining data available</div>';
+      }
+    }
     content.innerHTML = html;
   }
 
@@ -1297,7 +1303,11 @@
 
     const minable = industryData.minable_resources || [];
     if (!minable.length) {
-      content.innerHTML = '<div class="muted">No minable resources at this site</div>';
+      if (industryData.is_surface_site && industryData.is_prospected === false) {
+        content.innerHTML = '<div class="muted">⚠ Site not prospected. Use a ship with a robonaut to prospect before mining.</div>';
+      } else {
+        content.innerHTML = '<div class="muted">No minable resources at this site</div>';
+      }
       return;
     }
 

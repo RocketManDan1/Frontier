@@ -270,7 +270,12 @@ def api_site_detail(
             "orbit_node_id": site["orbit_node_id"],
             "gravity_m_s2": float(site["gravity_m_s2"]),
         }
-        result["minable_resources"] = industry_service.get_minable_resources(conn, location_id)
+        # Only show minable resources if the user's org has prospected this site
+        import org_service
+        org_id = org_service.get_org_id_for_user(conn, user["username"])
+        site_prospected = org_id and org_service.is_site_prospected(conn, org_id, location_id)
+        result["is_prospected"] = bool(site_prospected)
+        result["minable_resources"] = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
 
     return result
 
@@ -300,7 +305,11 @@ def api_industry_overview(
         "SELECT body_id, gravity_m_s2 FROM surface_sites WHERE location_id = ?",
         (location_id,),
     ).fetchone()
-    minable = industry_service.get_minable_resources(conn, location_id) if site else []
+    # Only show minable resources if the user's org has prospected this site
+    import org_service
+    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    site_prospected = site and org_id and org_service.is_site_prospected(conn, org_id, location_id)
+    minable = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
 
     # Idle constructors for mining
     idle_constructors = [
@@ -320,6 +329,7 @@ def api_industry_overview(
         "available_recipes": available_recipes,
         "inventory": inv,
         "is_surface_site": site is not None,
+        "is_prospected": bool(site_prospected),
         "minable_resources": minable,
         "idle_constructors": idle_constructors,
         "power_balance": power_balance,

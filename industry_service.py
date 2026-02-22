@@ -747,6 +747,15 @@ def start_mining_job(
     if not site:
         raise ValueError("Mining can only be done at surface sites")
 
+    # Verify the site has been prospected by the user's org
+    import org_service
+    org_id = org_service.get_org_id_for_user(conn, username)
+    if org_id:
+        if not org_service.is_site_prospected(conn, org_id, location_id):
+            raise ValueError("Site must be prospected before mining can begin")
+    else:
+        raise ValueError("You must belong to an organization to mine")
+
     # Verify the resource exists in the site's distribution
     site_resource = conn.execute(
         """

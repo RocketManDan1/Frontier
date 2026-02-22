@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Fleet</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout30" />
+    <link rel="stylesheet" href="/static/styles.css?v=fleet2" />
   </head>
 
   <body class="fleetPage">
@@ -13,7 +13,7 @@
         <div class="topbar">
           <div>
             <div class="title">Fleet</div>
-            <div class="subtitle">All ships (synced from /api/state)</div>
+            <div class="subtitle" id="fleetSummary">Loading…</div>
           </div>
 
           <nav class="tabs">
@@ -28,32 +28,23 @@
         </div>
       </div>
 
-      <div class="panel pagePanel">
-        <div class="fleetHeader">
-          <div id="fleetSummary" class="muted">Loading…</div>
-          <div class="muted">Refresh: 1s</div>
-        </div>
+      <div class="fleetLayout">
+        <!-- Ship list sidebar -->
+        <aside class="fleetSidebar" id="fleetSidebar">
+          <div class="fleetSidebarHead">Ships</div>
+          <div class="fleetShipList" id="fleetShipList"></div>
+        </aside>
 
-        <div class="tableWrap">
-          <table class="fleetTable" id="fleetTable">
-            <thead>
-              <tr>
-                <th>Ship</th>
-                <th>Status</th>
-                <th>Location / Route</th>
-                <th>ETA</th>
-                <th>Δv</th>
-                <th>Path</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <!-- Detail pane -->
+        <section class="fleetDetail" id="fleetDetail">
+          <div class="fleetDetailEmpty muted">Select a ship from the list</div>
+        </section>
       </div>
     </div>
 
     <script src="/static/js/auth.js?v=au2"></script>
     <script src="/static/js/clock.js?v=ti3"></script>
-    <script src="/static/js/fleet.js?v=ti6"></script>
+    <script src="/static/js/item_display.js?v=id2"></script>
+    <script src="/static/js/fleet.js?v=fleet2"></script>
   </body>
 </html>

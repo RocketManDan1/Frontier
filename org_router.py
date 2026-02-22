@@ -191,6 +191,18 @@ def api_prospected_sites(request: Request, conn: sqlite3.Connection = Depends(ge
     return {"sites": sites}
 
 
+@router.get("/api/org/prospecting/in_range/{ship_id}")
+def api_sites_in_range(ship_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Get all surface sites within prospecting range of a ship's robonaut."""
+    user = require_login(conn, request)
+    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    try:
+        result = org_service.get_sites_in_range(conn, org_id, ship_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/api/org/prospecting/prospect")
 def api_prospect_site(
     body: ProspectRequest,

@@ -12,6 +12,7 @@ from elapsed game time since last settlement, not from a background tick.
 """
 
 import json
+import math
 import sqlite3
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -505,6 +506,120 @@ def unlock_tech(
 # ── Prospecting ────────────────────────────────────────────────────────────────
 
 
+def _get_location_xy(conn: sqlite3.Connection, location_id: str) -> Optional[Tuple[float, float]]:
+    """Return (x_km, y_km) for a location, or None if not found."""
+    row = conn.execute("SELECT x, y FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not row:
+        return None
+    return (float(row["x"]), float(row["y"]))
+
+
+def _distance_km(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """Euclidean distance between two (x_km, y_km) points."""
+    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+
+def _get_ship_robonaut_range(parts_json: str) -> float:
+    """
+    Return the maximum prospect_range_km from all robonauts on the ship.
+    Returns 0 if no robonaut is equipped.
+    """
+    parts = json.loads(parts_json or "[]")
+    max_range = 0.0
+    for p in parts:
+        if not isinstance(p, dict):
+            continue
+        cat = str(p.get("category") or p.get("category_id") or p.get("type") or "").lower()
+        if cat in ("robonaut", "robonauts"):
+            rng = float(p.get("prospect_range_km") or 0.0)
+            if rng > max_range:
+                max_range = rng
+    return max_range
+
+
+def get_sites_in_range(
+    conn: sqlite3.Connection,
+    org_id: str,
+    ship_id: str,
+) -> Dict[str, Any]:
+    """
+    Get all surface sites within prospecting range of a ship's robonaut.
+    Returns ship info and list of sites with distance and prospected status.
+    """
+    ship = conn.execute(
+        "SELECT id, name, location_id, parts_json FROM ships WHERE id = ?",
+        (ship_id,),
+    ).fetchone()
+    if not ship:
+        raise ValueError("Ship not found")
+
+    parts_json = ship["parts_json"] or "[]"
+    prospect_range = _get_ship_robonaut_range(parts_json)
+    if prospect_range <= 0:
+        raise ValueError("Ship has no robonaut equipped for prospecting")
+
+    ship_loc_id = str(ship["location_id"] or "")
+    ship_pos = _get_location_xy(conn, ship_loc_id)
+    if not ship_pos:
+        raise ValueError("Ship location not found")
+
+    # Get all surface sites with their orbit_node coordinates
+    sites = conn.execute(
+        """
+        SELECT ss.location_id, ss.body_id, ss.orbit_node_id, ss.gravity_m_s2,
+               l.name AS site_name
+        FROM surface_sites ss
+        JOIN locations l ON l.id = ss.location_id
+        ORDER BY l.sort_order, l.name
+        """
+    ).fetchall()
+
+    # Get prospected site IDs for this org
+    prospected_sites: set = set()
+    if org_id:
+        for r in conn.execute(
+            "SELECT DISTINCT site_location_id FROM prospecting_results WHERE org_id = ?",
+            (org_id,),
+        ).fetchall():
+            prospected_sites.add(str(r["site_location_id"]))
+
+    results = []
+    for site in sites:
+        site_id = str(site["location_id"])
+        orbit_node_id = str(site["orbit_node_id"])
+
+        # Distance is measured from ship to the site's parent orbital node
+        site_orbit_pos = _get_location_xy(conn, orbit_node_id)
+        if not site_orbit_pos:
+            # Fallback to site's own position
+            site_orbit_pos = _get_location_xy(conn, site_id)
+        if not site_orbit_pos:
+            continue
+
+        dist = _distance_km(ship_pos, site_orbit_pos)
+        if dist <= prospect_range:
+            results.append({
+                "location_id": site_id,
+                "name": str(site["site_name"]),
+                "body_id": str(site["body_id"]),
+                "orbit_node_id": orbit_node_id,
+                "gravity_m_s2": float(site["gravity_m_s2"]),
+                "distance_km": round(dist, 1),
+                "is_prospected": site_id in prospected_sites,
+            })
+
+    # Sort by distance
+    results.sort(key=lambda s: s["distance_km"])
+
+    return {
+        "ship_id": str(ship["id"]),
+        "ship_name": str(ship["name"]),
+        "ship_location": ship_loc_id,
+        "prospect_range_km": prospect_range,
+        "sites": results,
+    }
+
+
 def prospect_site(
     conn: sqlite3.Connection,
     org_id: str,
@@ -513,34 +628,47 @@ def prospect_site(
 ) -> Dict[str, Any]:
     """
     Prospect a surface site using a ship with a robonaut.
+    The ship must be within the robonaut's prospect_range_km of the site's orbit node.
     Reveals actual resource distribution to the org.
     """
-    # Verify the ship exists and is at the site location
     ship = conn.execute(
         "SELECT id, name, location_id, parts_json FROM ships WHERE id = ?",
         (ship_id,),
     ).fetchone()
     if not ship:
         raise ValueError("Ship not found")
-    if str(ship["location_id"]) != site_location_id:
-        raise ValueError("Ship is not at the specified site location")
 
-    # Check ship has a robonaut
-    parts = json.loads(ship["parts_json"] or "[]")
-    has_robonaut = any(
-        str(p.get("category") or "").lower() in ("robonaut", "robonauts")
-        for p in parts
-    )
-    if not has_robonaut:
+    # Check ship has a robonaut and get its range
+    parts_json = ship["parts_json"] or "[]"
+    prospect_range = _get_ship_robonaut_range(parts_json)
+    if prospect_range <= 0:
         raise ValueError("Ship must have a robonaut equipped to prospect")
 
     # Verify it's a surface site
     site = conn.execute(
-        "SELECT location_id, body_id FROM surface_sites WHERE location_id = ?",
+        "SELECT location_id, body_id, orbit_node_id FROM surface_sites WHERE location_id = ?",
         (site_location_id,),
     ).fetchone()
     if not site:
         raise ValueError("Location is not a surface site")
+
+    # Check range: distance from ship location to site's orbit node
+    ship_pos = _get_location_xy(conn, str(ship["location_id"]))
+    if not ship_pos:
+        raise ValueError("Ship location not found")
+
+    orbit_node_id = str(site["orbit_node_id"])
+    site_orbit_pos = _get_location_xy(conn, orbit_node_id)
+    if not site_orbit_pos:
+        site_orbit_pos = _get_location_xy(conn, site_location_id)
+    if not site_orbit_pos:
+        raise ValueError("Site location coordinates not found")
+
+    dist = _distance_km(ship_pos, site_orbit_pos)
+    if dist > prospect_range:
+        raise ValueError(
+            f"Site is {dist:,.0f} km away but robonaut range is only {prospect_range:,.0f} km"
+        )
 
     # Check if already prospected
     already = conn.execute(
@@ -569,6 +697,7 @@ def prospect_site(
         "site_location_id": site_location_id,
         "ship_id": ship_id,
         "ship_name": str(ship["name"]),
+        "distance_km": round(dist, 1),
         "resources_found": [
             {"resource_id": str(r["resource_id"]), "mass_fraction": float(r["mass_fraction"])}
             for r in resources

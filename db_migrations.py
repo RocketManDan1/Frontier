@@ -263,6 +263,78 @@ def _migration_0006_organizations(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0007_corporations(conn: sqlite3.Connection) -> None:
+    """Add corporation-based auth and ownership.
+
+    Corporations replace individual user accounts for gameplay.
+    Admin login remains separate via the users table.
+    """
+    conn.executescript(
+        """
+        -- ── Corporations ──────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS corporations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          password_hash TEXT NOT NULL,
+          color TEXT NOT NULL DEFAULT '#ffffff',
+          org_id TEXT REFERENCES organizations(id),
+          created_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS corp_sessions (
+          token TEXT PRIMARY KEY,
+          corp_id TEXT NOT NULL REFERENCES corporations(id) ON DELETE CASCADE,
+          created_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_corp_sessions_corp ON corp_sessions(corp_id);
+        """
+    )
+
+    # Add corp_id ownership columns to game tables
+    _safe_add_column(conn, "ships", "corp_id", "TEXT")
+    _safe_add_column(conn, "deployed_equipment", "corp_id", "TEXT")
+    _safe_add_column(conn, "production_jobs", "corp_id", "TEXT")
+
+    # Recreate location_inventory_stacks with corp_id in primary key
+    # (old PK was location_id, stack_type, stack_key — now includes corp_id)
+    conn.executescript(
+        """
+        DROP TABLE IF EXISTS location_inventory_stacks;
+        CREATE TABLE location_inventory_stacks (
+          location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+          corp_id TEXT NOT NULL DEFAULT '',
+          stack_type TEXT NOT NULL,
+          stack_key TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 0,
+          mass_kg REAL NOT NULL DEFAULT 0,
+          volume_m3 REAL NOT NULL DEFAULT 0,
+          payload_json TEXT NOT NULL DEFAULT '{}',
+          updated_at REAL NOT NULL,
+          PRIMARY KEY (location_id, corp_id, stack_type, stack_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_location_inventory_lookup
+          ON location_inventory_stacks(location_id, corp_id, stack_type, item_id);
+        """
+    )
+
+    # Wipe game data — clean slate for corp ownership model
+    conn.executescript(
+        """
+        DELETE FROM ships;
+        DELETE FROM deployed_equipment;
+        DELETE FROM production_jobs;
+        DELETE FROM organizations;
+        DELETE FROM org_members;
+        DELETE FROM research_teams;
+        DELETE FROM leo_boosts;
+        DELETE FROM research_unlocks;
+        DELETE FROM prospecting_results;
+        """
+    )
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -271,6 +343,7 @@ def _migrations() -> List[Migration]:
     Migration("0004_surface_sites", "Add surface sites and resource distribution tables", _migration_0004_surface_sites),
     Migration("0005_industry", "Add deployed equipment and production/mining job tables", _migration_0005_industry),
     Migration("0006_organizations", "Organizations, research, LEO boosts, prospecting", _migration_0006_organizations),
+    Migration("0007_corporations", "Corporation auth, ownership columns, data wipe", _migration_0007_corporations),
     ]
 
 

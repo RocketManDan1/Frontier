@@ -1762,6 +1762,228 @@ button:disabled {
   overflow: auto;
 }
 
+/* ── Fleet page layout (sidebar + detail) ─────────────── */
+
+.fleetLayout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+
+.fleetSidebar {
+  border-right: 1px solid var(--border-soft);
+  background: rgba(7, 12, 20, 0.96);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fleetSidebarHead {
+  padding: 10px 12px;
+  font-weight: 650;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(218, 236, 252, 0.8);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.fleetShipList {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.fleetShipRow {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.08);
+  transition: background 80ms ease;
+}
+
+.fleetShipRow:hover {
+  background: rgba(80, 130, 182, 0.10);
+}
+
+.fleetShipRow.isActive {
+  background: rgba(68, 140, 220, 0.16);
+  border-left: 3px solid rgba(109, 182, 255, 0.7);
+  padding-left: 9px;
+}
+
+.fleetShipRowName {
+  font-weight: 650;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.fleetShipRowMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.fleetShipRowLoc {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.fleetShipRowStats {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── Detail pane ─────────────────────────────────────── */
+
+.fleetDetail {
+  overflow-y: auto;
+  padding: 12px 16px;
+  background: rgba(10, 17, 27, 0.6);
+}
+
+.fleetDetailEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 13px;
+}
+
+.fleetDetailHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.fleetDetailHeadInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.fleetDetailName {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.fleetDetailSub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.fleetDetailActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn.btnSmall {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(34, 54, 78, 0.34);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn.btnSmall:hover:not(:disabled) {
+  background: rgba(68, 140, 220, 0.18);
+  border-color: rgba(109, 182, 255, 0.45);
+}
+
+.btn.btnSmall:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── Fleet sections ──────────────────────────────────── */
+
+.fleetSection {
+  margin-bottom: 14px;
+}
+
+.fleetSectionTitle {
+  font-weight: 650;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(218, 236, 252, 0.7);
+  margin-bottom: 6px;
+}
+
+.fleetTransitInfo {
+  font-size: 12px;
+}
+
+/* ── Cargo display ───────────────────────────────────── */
+
+.fleetCargoSummary {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.fleetContainerBreakdown {
+  margin-top: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: rgba(6, 11, 18, 0.8);
+  overflow: hidden;
+}
+
+.fleetContainerRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(120, 165, 214, 0.08);
+  align-items: center;
+}
+
+.fleetContainerRow:last-child {
+  border-bottom: none;
+}
+
+.fleetContainerName {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fleetContainerContent {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fleetContainerBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ── Legacy fleet table (reusable bits) ──────────────── */
+
 .fleetTable {
   width: 100%;
   border-collapse: separate;
@@ -1910,20 +2132,19 @@ button:disabled {
 }
 
 body.fleetPage {
-  height: auto;
-  overflow-y: auto;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .fleetPage .app {
-  height: auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .fleetPage .panel {
   overflow: visible;
-}
-
-.fleetPage .pagePanel {
-  padding: 8px;
+  flex-shrink: 0;
 }
 
 .fleetPage .muted,
@@ -4942,4 +5163,195 @@ tr.bodyGroupHeader td {
 
 .kspUnlockStats {
   font-size: 11px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Prospecting Dialog
+   ══════════════════════════════════════════════════════════ */
+
+.prospectModal {
+  position: relative;
+  width: min(680px, 94vw);
+  max-height: 85vh;
+  overflow: hidden;
+  border-radius: 2px;
+  border: 1px solid rgba(122, 170, 222, 0.4);
+  background:
+    linear-gradient(180deg, rgba(24, 40, 60, 0.42), transparent 22%),
+    var(--panel-solid);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.62);
+}
+
+.prospectHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, rgba(18, 28, 42, 0.6), transparent);
+}
+
+.prospectHeaderLeft { display: flex; flex-direction: column; gap: 2px; }
+
+.prospectTitle {
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.prospectSubtitle {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.prospectBody {
+  overflow-y: auto;
+  padding: 12px 16px;
+  max-height: calc(85vh - 60px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prospectLoading,
+.prospectEmpty,
+.prospectError {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.prospectError { color: var(--fuel-low, #f44); }
+
+.prospectSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 2px;
+  background: rgba(8, 13, 22, 0.65);
+  border: 1px solid var(--border-soft);
+  font-size: 12px;
+}
+
+.prospectSummaryCount {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.prospectSummaryDetail {
+  color: var(--muted);
+}
+
+.prospectBodyGroup {
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  background: rgba(8, 13, 22, 0.5);
+  overflow: hidden;
+}
+
+.prospectBodyHeader {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: rgba(16, 24, 36, 0.7);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.prospectSiteRow {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(40, 55, 75, 0.3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.prospectSiteRow:last-child { border-bottom: none; }
+
+.prospectSiteRow:hover {
+  background: rgba(60, 100, 160, 0.08);
+}
+
+.prospectSiteRow.isUncharted {
+  border-left: 3px solid rgba(200, 160, 60, 0.5);
+}
+
+.prospectSiteRow.isProspected {
+  border-left: 3px solid rgba(80, 180, 120, 0.4);
+}
+
+.prospectSiteInfo {
+  flex: 1;
+  min-width: 180px;
+}
+
+.prospectSiteName {
+  font-weight: 500;
+  font-size: 13px;
+  color: #e0e8f0;
+}
+
+.prospectSiteMeta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.prospectSiteAction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prospectBtn {
+  font-size: 12px;
+  padding: 4px 14px;
+  min-height: 28px;
+}
+
+.prospectBadge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.prospectBadgeGreen {
+  background: rgba(60, 160, 100, 0.18);
+  color: #6fd890;
+  border: 1px solid rgba(60, 160, 100, 0.3);
+}
+
+.prospectResourceList {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(4, 8, 14, 0.5);
+  border-radius: 2px;
+  border: 1px solid rgba(40, 55, 75, 0.25);
+}
+
+.prospectResourceRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.prospectResName {
+  color: #b0c0d8;
+}
+
+.prospectResFraction {
+  color: var(--accent);
+  font-weight: 500;
 }

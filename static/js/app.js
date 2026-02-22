@@ -1241,6 +1241,20 @@
       });
     }
 
+    // Add Prospect option if ship has a robonaut
+    const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
+    const hasRobonaut = shipParts.some((p) => {
+      if (!p || typeof p !== "object") return false;
+      const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
+      return cat === "robonaut" || cat === "robonauts";
+    });
+    if (hasRobonaut && ship.status === "docked") {
+      actionsList.push({
+        label: "Prospect…",
+        onClick: () => openProspectDialog(ship),
+      });
+    }
+
     showContextMenu(ship.name || ship.id, actionsList, pt.x, pt.y);
     e?.stopPropagation?.();
   }
@@ -4244,6 +4258,216 @@
     btn.appendChild(row);
     btn.onclick = () => onSelectLeaf(node);
     containerEl.appendChild(btn);
+  }
+
+  // ── Prospecting Dialog ──────────────────────────────────────────────────────
+
+  async function openProspectDialog(ship) {
+    if (!ship) return;
+    hideContextMenu();
+
+    function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    function fmtDist(km) {
+      km = Math.max(0, Number(km) || 0);
+      if (km >= 1e6) return `${(km / 1e6).toFixed(1)}M km`;
+      if (km >= 1e3) return `${(km / 1e3).toFixed(0)}k km`;
+      return `${km.toFixed(0)} km`;
+    }
+
+    function fmtPct(v) { return `${(Number(v || 0) * 100).toFixed(1)}%`; }
+
+    // Get robonaut info from parts
+    const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
+    const robonauts = shipParts.filter((p) => {
+      if (!p || typeof p !== "object") return false;
+      const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
+      return cat === "robonaut" || cat === "robonauts";
+    });
+    const bestRobonaut = robonauts.reduce((best, r) => {
+      const range = Number(r.prospect_range_km || 0);
+      return range > (Number(best?.prospect_range_km) || 0) ? r : best;
+    }, robonauts[0] || {});
+    const rangeKm = Number(bestRobonaut.prospect_range_km || 0);
+
+    // Build overlay
+    const overlay = document.createElement("div");
+    overlay.id = "prospectModalRoot";
+    overlay.className = "modal";
+
+    overlay.innerHTML = `
+      <div class="modalOverlay"></div>
+      <div class="prospectModal">
+        <div class="prospectHeader">
+          <div class="prospectHeaderLeft">
+            <div class="prospectTitle">Prospecting</div>
+            <div class="prospectSubtitle">${_esc(ship.name)} &bull; ${_esc(bestRobonaut.name || "Robonaut")} &bull; Range ${fmtDist(rangeKm)}</div>
+          </div>
+          <button class="iconBtn btnSecondary" id="prospectClose">✕</button>
+        </div>
+        <div class="prospectBody">
+          <div class="prospectLoading">Loading sites in range…</div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+      overlay.remove();
+      document.removeEventListener("keydown", escClose);
+    }
+    function escClose(e) { if (e.key === "Escape") closeModal(); }
+    document.getElementById("prospectClose").onclick = closeModal;
+    overlay.addEventListener("pointerdown", (e) => {
+      if (e.target === overlay || e.target.classList.contains("modalOverlay")) closeModal();
+    });
+    document.addEventListener("keydown", escClose);
+
+    const bodyEl = overlay.querySelector(".prospectBody");
+
+    // Fetch sites in range
+    try {
+      const resp = await fetch(`/api/org/prospecting/in_range/${encodeURIComponent(ship.id)}`, { cache: "no-store" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.detail || "Failed to load prospecting data");
+
+      const sites = Array.isArray(data.sites) ? data.sites : [];
+      if (!sites.length) {
+        bodyEl.innerHTML = '<div class="prospectEmpty">No surface sites within range of this ship\'s robonaut.</div>';
+        return;
+      }
+
+      renderProspectSiteList(bodyEl, sites, ship, data, closeModal);
+    } catch (err) {
+      bodyEl.innerHTML = `<div class="prospectError">${_esc(err?.message || "Failed to load")}</div>`;
+    }
+  }
+
+  function renderProspectSiteList(container, sites, ship, rangeData, closeModal) {
+    function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    function fmtDist(km) {
+      km = Math.max(0, Number(km) || 0);
+      if (km >= 1e6) return `${(km / 1e6).toFixed(1)}M km`;
+      if (km >= 1e3) return `${(km / 1e3).toFixed(0)}k km`;
+      return `${km.toFixed(0)} km`;
+    }
+
+    function fmtPct(v) { return `${(Number(v || 0) * 100).toFixed(1)}%`; }
+
+    container.innerHTML = "";
+
+    // Summary bar
+    const summary = document.createElement("div");
+    summary.className = "prospectSummary";
+    const totalSites = sites.length;
+    const prospected = sites.filter((s) => s.is_prospected).length;
+    const unprospected = totalSites - prospected;
+    summary.innerHTML = `
+      <span class="prospectSummaryCount">${totalSites} site${totalSites !== 1 ? "s" : ""} in range</span>
+      <span class="prospectSummaryDetail">${prospected} prospected &bull; ${unprospected} uncharted</span>
+    `;
+    container.appendChild(summary);
+
+    // Group sites by body
+    const byBody = new Map();
+    for (const site of sites) {
+      const body = site.body_id || "Unknown";
+      if (!byBody.has(body)) byBody.set(body, []);
+      byBody.get(body).push(site);
+    }
+
+    for (const [bodyId, bodySites] of byBody) {
+      const group = document.createElement("div");
+      group.className = "prospectBodyGroup";
+
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "prospectBodyHeader";
+      groupHeader.textContent = bodyId;
+      group.appendChild(groupHeader);
+
+      for (const site of bodySites) {
+        const row = document.createElement("div");
+        row.className = `prospectSiteRow ${site.is_prospected ? "isProspected" : "isUncharted"}`;
+
+        const infoCol = document.createElement("div");
+        infoCol.className = "prospectSiteInfo";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "prospectSiteName";
+        nameEl.textContent = site.name || site.location_id;
+        infoCol.appendChild(nameEl);
+
+        const metaEl = document.createElement("div");
+        metaEl.className = "prospectSiteMeta";
+        metaEl.innerHTML = `${fmtDist(site.distance_km)} &bull; ${site.gravity_m_s2.toFixed(2)} m/s²`;
+        infoCol.appendChild(metaEl);
+
+        row.appendChild(infoCol);
+
+        const actionCol = document.createElement("div");
+        actionCol.className = "prospectSiteAction";
+
+        if (site.is_prospected) {
+          const badge = document.createElement("span");
+          badge.className = "prospectBadge prospectBadgeGreen";
+          badge.textContent = "Prospected ✓";
+          actionCol.appendChild(badge);
+        } else {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btnPrimary prospectBtn";
+          btn.textContent = "Prospect";
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            btn.textContent = "Prospecting…";
+            try {
+              const resp = await fetch("/api/org/prospecting/prospect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ship_id: ship.id, site_location_id: site.location_id }),
+              });
+              const result = await resp.json().catch(() => ({}));
+              if (!resp.ok) throw new Error(result?.detail || "Prospecting failed");
+
+              // Update the site in our list to show results
+              site.is_prospected = true;
+              site.resources_found = result.resources_found || [];
+
+              // Re-render the list with updated data
+              renderProspectSiteList(container, sites, ship, rangeData, closeModal);
+
+              // Refresh map state
+              if (typeof syncState === "function") syncState();
+            } catch (err) {
+              btn.disabled = false;
+              btn.textContent = "Prospect";
+              alert(err?.message || "Prospecting failed");
+            }
+          });
+          actionCol.appendChild(btn);
+        }
+
+        row.appendChild(actionCol);
+
+        // If prospected, show resource results below
+        if (site.is_prospected && Array.isArray(site.resources_found) && site.resources_found.length) {
+          const resWrap = document.createElement("div");
+          resWrap.className = "prospectResourceList";
+          for (const res of site.resources_found) {
+            const resRow = document.createElement("div");
+            resRow.className = "prospectResourceRow";
+            resRow.innerHTML = `<span class="prospectResName">${_esc(res.resource_id)}</span><span class="prospectResFraction">${fmtPct(res.mass_fraction)}</span>`;
+            resWrap.appendChild(resRow);
+          }
+          row.appendChild(resWrap);
+        }
+
+        group.appendChild(row);
+      }
+
+      container.appendChild(group);
+    }
   }
 
   async function openTransferPlanner(ship, initialDestId = null) {
