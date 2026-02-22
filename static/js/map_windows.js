@@ -15,7 +15,7 @@
     shipyard: { title: "Shipyard", url: "/shipyard", icon: "/static/img/dock/shipyard.png" },
     sites: { title: "Sites", url: "/sites", icon: "/static/img/dock/sites.svg" },
     research: { title: "Research", url: "/research", icon: "/static/img/dock/research.png" },
-    profile: { title: "Profile", url: "/profile?embed=1", icon: "/static/img/dock/profile.png" },
+    profile: { title: "Organization", url: "/organization?embed=1", icon: "/static/img/dock/profile.png" },
     admin: { title: "Admin", url: "/admin", icon: "" },
   };
 
@@ -1297,8 +1297,13 @@
 
   function bootstrapDockButton(btn, iconSrc) {
     if (!btn) return;
+    const labelText = (
+      btn.querySelector(".mapDockBtnLabel")?.textContent ||
+      btn.getAttribute("aria-label") ||
+      btn.textContent ||
+      ""
+    ).trim();
     if (!btn.querySelector(".mapDockBtnLabel")) {
-      const labelText = (btn.textContent || "").trim();
       btn.textContent = "";
       const iconEl = document.createElement("span");
       iconEl.className = "mapDockBtnIcon";
@@ -1307,6 +1312,11 @@
       labelEl.className = "mapDockBtnLabel";
       labelEl.textContent = labelText;
       btn.append(iconEl, labelEl);
+    }
+    if (labelText) {
+      btn.setAttribute("aria-label", labelText);
+      btn.setAttribute("data-tooltip", labelText);
+      btn.removeAttribute("title");
     }
     if (iconSrc) {
       btn.classList.add("hasIcon");

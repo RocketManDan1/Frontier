@@ -425,6 +425,7 @@ def _add_to_location_inventory(
     """Upsert an item into location inventory."""
     stack_type = "resource" if item_type == "resource" else "part"
     stack_key = item_id
+    payload_json = _inventory_payload_json_for_item(item_id, name, item_type, mass_kg)
 
     existing = conn.execute(
         """SELECT quantity, mass_kg FROM location_inventory_stacks
@@ -435,17 +436,54 @@ def _add_to_location_inventory(
     if existing:
         conn.execute(
             """UPDATE location_inventory_stacks
-               SET quantity = quantity + ?, mass_kg = mass_kg + ?, updated_at = ?
+               SET quantity = quantity + ?, mass_kg = mass_kg + ?, payload_json = ?, updated_at = ?
                WHERE location_id = ? AND corp_id = ? AND stack_type = ? AND stack_key = ?""",
-            (quantity, mass_kg, now, location_id, corp_id, stack_type, stack_key),
+            (quantity, mass_kg, payload_json, now, location_id, corp_id, stack_type, stack_key),
         )
     else:
         conn.execute(
             """INSERT INTO location_inventory_stacks
                (location_id, corp_id, stack_type, stack_key, item_id, name, quantity, mass_kg, volume_m3, payload_json, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.0, '{}', ?)""",
-            (location_id, corp_id, stack_type, stack_key, item_id, name, quantity, mass_kg, now),
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, ?)""",
+            (location_id, corp_id, stack_type, stack_key, item_id, name, quantity, mass_kg, payload_json, now),
         )
+
+
+def _inventory_payload_json_for_item(item_id: str, name: str, item_type: str, mass_kg: float) -> str:
+    """Build inventory payload JSON with enough metadata for UI part categorization."""
+    if item_type == "resource":
+        return json.dumps({"resource_id": item_id}, sort_keys=True, separators=(",", ":"))
+
+    loader_map = {
+        "thruster": catalog_service.load_thruster_main_catalog,
+        "reactor": catalog_service.load_reactor_catalog,
+        "generator": catalog_service.load_generator_catalog,
+        "radiator": catalog_service.load_radiator_catalog,
+        "constructor": catalog_service.load_constructor_catalog,
+        "refinery": catalog_service.load_refinery_catalog,
+        "robonaut": catalog_service.load_robonaut_catalog,
+        "storage": catalog_service.load_storage_catalog,
+    }
+
+    part_catalog = loader_map.get(item_type, lambda: {})()
+    part = dict(part_catalog.get(item_id) or {})
+
+    if not part:
+        part = {
+            "item_id": item_id,
+            "name": name,
+            "type": item_type,
+            "category_id": item_type,
+            "mass_kg": max(0.0, float(mass_kg or 0.0)),
+        }
+    else:
+        part.setdefault("item_id", item_id)
+        part.setdefault("name", name)
+        part.setdefault("type", item_type)
+        part.setdefault("category_id", item_type)
+        part.setdefault("mass_kg", max(0.0, float(mass_kg or 0.0)))
+
+    return json.dumps({"part": part}, sort_keys=True, separators=(",", ":"))
 
 
 def get_boost_history(conn: sqlite3.Connection, org_id: str, limit: int = 20) -> List[Dict[str, Any]]:

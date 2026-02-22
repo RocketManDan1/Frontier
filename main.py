@@ -1669,13 +1669,51 @@ def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *
             resources.append(base)
             continue
         if stack_type == "part":
-            base["part"] = payload.get("part") if isinstance(payload, dict) else None
+            part = payload.get("part") if isinstance(payload, dict) else None
+            if not isinstance(part, dict) or not part:
+                part = _resolve_inventory_part_fallback(base["item_id"], base["name"], base["mass_kg"], base["quantity"])
+            else:
+                part = dict(part)
+                part.setdefault("item_id", base["item_id"])
+                part.setdefault("name", base["name"])
+            base["part"] = part
             parts.append(base)
 
     return {
         "location_id": location_id,
         "resources": resources,
         "parts": parts,
+    }
+
+
+def _resolve_inventory_part_fallback(item_id: str, name: str, stack_mass_kg: float, quantity: float) -> Dict[str, Any]:
+    loaders = (
+        load_thruster_main_catalog,
+        load_reactor_catalog,
+        load_generator_catalog,
+        load_radiator_catalog,
+        load_constructor_catalog,
+        load_refinery_catalog,
+        load_robonaut_catalog,
+        load_storage_catalog,
+    )
+    item_key = str(item_id or "").strip()
+    for loader in loaders:
+        part = loader().get(item_key)
+        if isinstance(part, dict) and part:
+            hydrated = dict(part)
+            hydrated.setdefault("item_id", item_key)
+            hydrated.setdefault("name", str(name or item_key))
+            return hydrated
+
+    qty = max(0.0, float(quantity or 0.0))
+    per_unit_mass = max(0.0, float(stack_mass_kg or 0.0)) / qty if qty > 0.0 else 0.0
+    return {
+        "item_id": item_key,
+        "name": str(name or item_key),
+        "type": "generic",
+        "category_id": "generic",
+        "mass_kg": per_unit_mass,
     }
 
 

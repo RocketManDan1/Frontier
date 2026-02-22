@@ -12,6 +12,10 @@
   const zoneJumpBarEl = document.getElementById("zoneJumpBar");
   const overviewPanelEl = document.getElementById("overviewPanel");
   const infoPanelEl = document.getElementById("infoPanel");
+  const mapOrgBalanceEl = document.getElementById("mapOrgBalance");
+  const mapOrgIncomeEl = document.getElementById("mapOrgIncome");
+  const mapOrgResearchEl = document.getElementById("mapOrgResearch");
+  const mapOrgExpensesEl = document.getElementById("mapOrgExpenses");
   const stageParallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const cameraMotion = { x: 0, y: 0, energy: 0 };
   const PARALLAX_MAX_PX = 12;
@@ -66,6 +70,54 @@
     }
   }
 
+  function fmtOrgUsd(value) {
+    if (value == null || !Number.isFinite(Number(value))) return "—";
+    const amount = Number(value);
+    if (Math.abs(amount) >= 1e9) return `$${(amount / 1e9).toFixed(2)}B`;
+    if (Math.abs(amount) >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
+    if (Math.abs(amount) >= 1e3) return `$${(amount / 1e3).toFixed(0)}K`;
+    return `$${amount.toFixed(0)}`;
+  }
+
+  function fmtOrgPoints(value) {
+    if (value == null || !Number.isFinite(Number(value))) return "—";
+    return `${Number(value).toFixed(1)} RP`;
+  }
+
+  function renderMapOrgSummary(org) {
+    if (!mapOrgBalanceEl || !mapOrgIncomeEl || !mapOrgResearchEl || !mapOrgExpensesEl) return;
+
+    if (!org || typeof org !== "object") {
+      mapOrgBalanceEl.textContent = "—";
+      mapOrgIncomeEl.textContent = "—";
+      mapOrgResearchEl.textContent = "—";
+      mapOrgExpensesEl.textContent = "—";
+      return;
+    }
+
+    const teams = Array.isArray(org.research_teams) ? org.research_teams : [];
+    const activeTeamCount = teams.filter((team) => team?.status === "active").length;
+    const teamCost = Number(org.team_cost_per_month_usd) || 150000000;
+    const monthlyExpenses = activeTeamCount * teamCost;
+
+    mapOrgBalanceEl.textContent = fmtOrgUsd(org.balance_usd);
+    mapOrgIncomeEl.textContent = `${fmtOrgUsd(org.income_per_month_usd)}/mo`;
+    mapOrgResearchEl.textContent = fmtOrgPoints(org.research_points);
+    mapOrgExpensesEl.textContent = `${fmtOrgUsd(monthlyExpenses)}/mo`;
+  }
+
+  async function syncMapOrgSummary() {
+    if (!mapOrgBalanceEl) return;
+    try {
+      const resp = await fetch("/api/org", { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderMapOrgSummary(data?.org || null);
+    } catch {
+      // Keep current values if summary refresh fails.
+    }
+  }
+
   function loadWindowLayoutState() {
     try {
       const raw = localStorage.getItem(MAP_WINDOW_LAYOUT_KEY);
@@ -91,8 +143,8 @@
     const appWindowLayerEl = document.getElementById("appWindowLayer");
     const mapDockEl = document.querySelector(".mapPage .mapDock");
     const mapDockWindowConfig = {
-      overview: { icon: "/static/img/dock/map.png" },
-      info: { icon: "/static/img/dock/info.png" },
+      overview: { icon: "/static/img/dock/map.png", tooltip: "Map Overview" },
+      info: { icon: "/static/img/dock/info.png", tooltip: "Details" },
     };
 
     const layoutState = loadWindowLayoutState();
@@ -100,8 +152,13 @@
 
     function bootstrapDockButton(btn, iconSrc) {
       if (!btn) return;
+      const labelText = (
+        btn.querySelector(".mapDockBtnLabel")?.textContent ||
+        btn.getAttribute("aria-label") ||
+        btn.textContent ||
+        ""
+      ).trim();
       if (!btn.querySelector(".mapDockBtnLabel")) {
-        const labelText = (btn.textContent || "").trim();
         btn.textContent = "";
         const iconEl = document.createElement("span");
         iconEl.className = "mapDockBtnIcon";
@@ -110,6 +167,11 @@
         labelEl.className = "mapDockBtnLabel";
         labelEl.textContent = labelText;
         btn.append(iconEl, labelEl);
+      }
+      if (labelText) {
+        btn.setAttribute("aria-label", labelText);
+        btn.setAttribute("data-tooltip", labelText);
+        btn.removeAttribute("title");
       }
       if (iconSrc) {
         btn.classList.add("hasIcon");
@@ -121,6 +183,10 @@
       Object.entries(mapDockWindowConfig).forEach(([panelId, cfg]) => {
         const btn = mapDockEl.querySelector(`[data-map-window='${panelId}']`);
         bootstrapDockButton(btn, cfg?.icon || "");
+        if (btn && cfg?.tooltip) {
+          btn.setAttribute("aria-label", cfg.tooltip);
+          btn.setAttribute("data-tooltip", cfg.tooltip);
+        }
       });
     }
 
@@ -5209,9 +5275,13 @@
   // ---------- Boot ----------
   await syncLocationsOnce();
   await syncState();
+  await syncMapOrgSummary();
   setInterval(() => {
     syncState().catch((err) => console.error(err));
   }, 1000);
+  setInterval(() => {
+    syncMapOrgSummary().catch((err) => console.error(err));
+  }, 30000);
 
   setInfo("Select a ship", "", "", ["Click a ship, then Move to plan a transfer."]);
   actions.innerHTML = "";
