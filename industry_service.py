@@ -68,6 +68,22 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
     # Lazy import to avoid circular ref
     import main as _main
 
+    # Build a lookup of all known part catalogs so we can distinguish parts from resources
+    part_catalogs = {}
+    for loader in (
+        catalog_service.load_constructor_catalog,
+        catalog_service.load_refinery_catalog,
+        catalog_service.load_thruster_main_catalog,
+        catalog_service.load_reactor_catalog,
+        catalog_service.load_generator_catalog,
+        catalog_service.load_radiator_catalog,
+        catalog_service.load_robonaut_catalog,
+        catalog_service.load_storage_catalog,
+    ):
+        part_catalogs.update(loader())
+
+    resource_catalog = catalog_service.load_resource_catalog()
+
     for row in rows:
         job_id = row["id"]
         loc_id = row["location_id"]
@@ -80,12 +96,13 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
             qty = float(out.get("qty") or 0.0)
             if not item_id or qty <= 0:
                 continue
-            # Check if this is a resource or a part
-            resources = catalog_service.load_resource_catalog()
-            if item_id in resources:
-                _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty)
+
+            if item_id in part_catalogs:
+                # It's an equipment part — add with proper name, mass, and type
+                part_entry = dict(part_catalogs[item_id])
+                _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty)
             else:
-                # It's a finished part/material — add as resource with generic mass
+                # It's a resource or refined material
                 _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty)
 
         # Mark job completed, free equipment
@@ -150,12 +167,22 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
         if rate_kg_hr <= 0:
             continue
 
+        # Scale mining rate by the resource's mass fraction at this site
+        site_res = conn.execute(
+            "SELECT mass_fraction FROM surface_site_resources WHERE site_location_id = ? AND resource_id = ?",
+            (loc_id, resource_id),
+        ).fetchone()
+        mass_fraction = float(site_res["mass_fraction"]) if site_res else 0.0
+        effective_rate = rate_kg_hr * mass_fraction
+        if effective_rate <= 0:
+            continue
+
         # Calculate elapsed time since last settle
         inputs = json.loads(row["inputs_json"] or "{}")
         last_settled = float(inputs.get("last_settled") or row["started_at"])
         elapsed_s = max(0.0, now - last_settled)
         elapsed_hr = elapsed_s / 3600.0
-        mined_kg = rate_kg_hr * elapsed_hr
+        mined_kg = effective_rate * elapsed_hr
 
         if mined_kg > 0.01:  # threshold to avoid tiny writes
             _main.add_resource_to_location_inventory(conn, loc_id, resource_id, mined_kg)
@@ -175,6 +202,24 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
 # ── Deploy / Undeploy ──────────────────────────────────────────────────────────
 
 
+DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "reactor", "generator", "radiator")
+
+
+def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
+    """Look up an item across all deployable catalogs."""
+    for loader in (
+        catalog_service.load_refinery_catalog,
+        catalog_service.load_constructor_catalog,
+        catalog_service.load_reactor_catalog,
+        catalog_service.load_generator_catalog,
+        catalog_service.load_radiator_catalog,
+    ):
+        cat = loader()
+        if item_id in cat:
+            return dict(cat[item_id])
+    return None
+
+
 def deploy_equipment(
     conn: sqlite3.Connection,
     location_id: str,
@@ -182,19 +227,16 @@ def deploy_equipment(
     username: str,
 ) -> Dict[str, Any]:
     """
-    Deploy a refinery or constructor from location inventory to the site.
+    Deploy equipment from location inventory to the site.
+    Supports refineries, constructors, reactors, generators, and radiators.
     Consumes the part from inventory and creates a deployed_equipment row.
     """
-    # Resolve catalog entry
-    refineries = catalog_service.load_refinery_catalog()
-    constructors = catalog_service.load_constructor_catalog()
-
-    catalog_entry = refineries.get(item_id) or constructors.get(item_id)
+    catalog_entry = _resolve_deployable_catalog_entry(item_id)
     if not catalog_entry:
-        raise ValueError(f"Item '{item_id}' is not a deployable refinery or constructor")
+        raise ValueError(f"Item '{item_id}' is not deployable equipment")
 
     category = str(catalog_entry.get("category_id") or catalog_entry.get("type") or "")
-    if category not in ("refinery", "constructor"):
+    if category not in DEPLOYABLE_CATEGORIES:
         raise ValueError(f"Item '{item_id}' is not deployable (category: {category})")
 
     # Constructors require surface gravity — check if location is a surface site
@@ -237,6 +279,22 @@ def deploy_equipment(
             "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
             "construction_rate_kg_per_hr": catalog_entry.get("construction_rate_kg_per_hr", 0),
             "excavation_type": catalog_entry.get("excavation_type", ""),
+        })
+    elif category == "reactor":
+        config.update({
+            "thermal_mw": catalog_entry.get("thermal_mw", 0),
+        })
+    elif category == "generator":
+        config.update({
+            "thermal_mw_input": catalog_entry.get("thermal_mw_input", 0),
+            "electric_mw": catalog_entry.get("electric_mw", 0),
+            "conversion_efficiency": catalog_entry.get("conversion_efficiency", 0),
+            "waste_heat_mw": catalog_entry.get("waste_heat_mw", 0),
+        })
+    elif category == "radiator":
+        config.update({
+            "heat_rejection_mw": catalog_entry.get("heat_rejection_mw", 0),
+            "operating_temp_k": catalog_entry.get("operating_temp_k", 0),
         })
 
     equip_id = str(uuid.uuid4())
@@ -293,9 +351,7 @@ def undeploy_equipment(
     category = equip["category"]
 
     # Look up the catalog entry to restore the part
-    refineries = catalog_service.load_refinery_catalog()
-    constructors = catalog_service.load_constructor_catalog()
-    catalog_entry = refineries.get(item_id) or constructors.get(item_id) or {}
+    catalog_entry = _resolve_deployable_catalog_entry(item_id) or {}
 
     # Build a part dict to add back to inventory
     import main as _main
@@ -317,6 +373,110 @@ def undeploy_equipment(
     return {"undeployed": True, "item_id": item_id, "location_id": location_id}
 
 
+# ── Site Power & Thermal Balance ───────────────────────────────────────────────
+
+
+def compute_site_power_balance(equipment: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Compute power and thermal balance from deployed equipment at a site.
+
+    Energy flow:
+      Reactors → thermal_mw
+      Generators consume thermal → produce electric + waste heat
+      Radiators reject waste heat (excess MWth absorbed by celestial — no overheat)
+      Refineries / Constructors consume electric
+
+    Returns summary dict for the UI.
+    """
+    # Totals
+    total_thermal_mw = 0.0       # reactor output
+    total_thermal_consumed = 0.0 # generator thermal input
+    total_electric_supply = 0.0  # generator electric output
+    total_electric_demand = 0.0  # refinery + constructor demand
+    total_waste_heat = 0.0       # generator waste heat
+    total_heat_rejection = 0.0   # radiator capacity
+
+    # Item breakdowns
+    reactors = []
+    generators = []
+    radiators = []
+    consumers = []
+
+    for eq in equipment:
+        cfg = eq.get("config") or {}
+        cat = eq.get("category", "")
+
+        if cat == "reactor":
+            thermal = float(cfg.get("thermal_mw") or 0)
+            total_thermal_mw += thermal
+            reactors.append({
+                "name": eq["name"], "thermal_mw": thermal,
+            })
+
+        elif cat == "generator":
+            th_in = float(cfg.get("thermal_mw_input") or 0)
+            el_out = float(cfg.get("electric_mw") or 0)
+            waste = float(cfg.get("waste_heat_mw") or 0)
+            total_thermal_consumed += th_in
+            total_electric_supply += el_out
+            total_waste_heat += waste
+            generators.append({
+                "name": eq["name"], "thermal_mw_input": th_in,
+                "electric_mw": el_out, "waste_heat_mw": waste,
+            })
+
+        elif cat == "radiator":
+            rejection = float(cfg.get("heat_rejection_mw") or 0)
+            total_heat_rejection += rejection
+            radiators.append({
+                "name": eq["name"], "heat_rejection_mw": rejection,
+            })
+
+        elif cat in ("refinery", "constructor"):
+            demand = float(cfg.get("electric_mw") or 0)
+            is_active = eq.get("status") == "active"
+            if is_active:
+                total_electric_demand += demand
+            consumers.append({
+                "name": eq["name"], "electric_mw": demand,
+                "category": cat, "active": is_active,
+            })
+
+    # Derived values
+    # Generator throttle: limited by available thermal
+    if total_thermal_consumed > 0 and total_thermal_mw < total_thermal_consumed:
+        gen_throttle = total_thermal_mw / total_thermal_consumed
+        actual_electric = total_electric_supply * gen_throttle
+        actual_waste_heat = total_waste_heat * gen_throttle
+    else:
+        gen_throttle = 1.0
+        actual_electric = total_electric_supply
+        actual_waste_heat = total_waste_heat
+
+    electric_surplus = actual_electric - total_electric_demand
+    thermal_surplus = total_thermal_mw - total_thermal_consumed
+    waste_heat_surplus = actual_waste_heat - total_heat_rejection
+    # Excess waste heat absorbed by celestial body — no overheat penalty
+
+    return {
+        "thermal_mw_supply": round(total_thermal_mw, 2),
+        "thermal_mw_consumed": round(total_thermal_consumed, 2),
+        "thermal_mw_surplus": round(thermal_surplus, 2),
+        "electric_mw_supply": round(actual_electric, 2),
+        "electric_mw_demand": round(total_electric_demand, 2),
+        "electric_mw_surplus": round(electric_surplus, 2),
+        "waste_heat_mw": round(actual_waste_heat, 2),
+        "heat_rejection_mw": round(total_heat_rejection, 2),
+        "waste_heat_surplus_mw": round(max(0, waste_heat_surplus), 2),
+        "gen_throttle": round(gen_throttle, 4),
+        "reactors": reactors,
+        "generators": generators,
+        "radiators": radiators,
+        "consumers": consumers,
+        "power_ok": electric_surplus >= -0.001,
+    }
+
+
 # ── Production Jobs (Refinery recipes) ─────────────────────────────────────────
 
 
@@ -325,6 +485,7 @@ def start_production_job(
     equipment_id: str,
     recipe_id: str,
     username: str,
+    batch_count: int = 1,
 ) -> Dict[str, Any]:
     """
     Start a production job on a deployed refinery or constructor.
@@ -386,13 +547,16 @@ def start_production_job(
                 f"Refinery specialization '{specialization}' does not match recipe category '{recipe_category}'"
             )
 
+    # Validate batch_count
+    batch_count = max(1, int(batch_count))
+
     # Consume inputs from location inventory
     import main as _main
 
     inputs = recipe.get("inputs") or []
     for inp in inputs:
         inp_id = str(inp.get("item_id") or "").strip()
-        inp_qty = float(inp.get("qty") or 0.0)
+        inp_qty = float(inp.get("qty") or 0.0) * batch_count
         if not inp_id or inp_qty <= 0:
             continue
 
@@ -413,7 +577,7 @@ def start_production_job(
     # All checks passed — consume inputs
     for inp in inputs:
         inp_id = str(inp.get("item_id") or "").strip()
-        inp_qty = float(inp.get("qty") or 0.0)
+        inp_qty = float(inp.get("qty") or 0.0) * batch_count
         if not inp_id or inp_qty <= 0:
             continue
         # Negative delta to consume
@@ -445,21 +609,21 @@ def start_production_job(
         throughput_mult = construction_rate / 50.0
     else:
         throughput_mult = max(0.01, float(config.get("throughput_mult") or 1.0))
-    actual_time = base_time / throughput_mult
+    actual_time = (base_time * batch_count) / throughput_mult
     completes_at = now + actual_time
 
-    # Build outputs
+    # Build outputs (scaled by batch_count)
     outputs = []
     output_item_id = str(recipe.get("output_item_id") or "").strip()
     output_qty = float(recipe.get("output_qty") or 0.0)
     efficiency = max(0.0, float(config.get("efficiency") or 1.0)) if equip_category == "refinery" else 1.0
     if output_item_id and output_qty > 0:
-        outputs.append({"item_id": output_item_id, "qty": output_qty * efficiency})
+        outputs.append({"item_id": output_item_id, "qty": output_qty * efficiency * batch_count})
     for bp in (recipe.get("byproducts") or []):
         bp_id = str(bp.get("item_id") or "").strip()
         bp_qty = float(bp.get("qty") or 0.0)
         if bp_id and bp_qty > 0:
-            outputs.append({"item_id": bp_id, "qty": bp_qty * efficiency})
+            outputs.append({"item_id": bp_id, "qty": bp_qty * efficiency * batch_count})
 
     job_id = str(uuid.uuid4())
     conn.execute(
@@ -470,7 +634,7 @@ def start_production_job(
         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
         """,
         (job_id, location_id, equipment_id, job_type, recipe_id, now, completes_at,
-         _json_dumps([{"item_id": inp["item_id"], "qty": inp["qty"]} for inp in inputs if inp.get("item_id")]),
+         _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0) * batch_count} for inp in inputs if inp.get("item_id")]),
          _json_dumps(outputs), username),
     )
 
@@ -594,9 +758,13 @@ def start_mining_job(
     if not site_resource:
         raise ValueError(f"Resource '{resource_id}' not available at this site")
 
-    rate = float(config.get("mining_rate_kg_per_hr") or 0.0)
-    if rate <= 0:
+    base_rate = float(config.get("mining_rate_kg_per_hr") or 0.0)
+    if base_rate <= 0:
         raise ValueError("Constructor has no mining capability")
+
+    # Effective mining rate = base rate × resource mass fraction at this site
+    mass_fraction = float(site_resource["mass_fraction"])
+    effective_rate = round(base_rate * mass_fraction, 4)
 
     now = game_now_s()
     job_id = str(uuid.uuid4())
@@ -613,7 +781,7 @@ def start_mining_job(
         """,
         (job_id, location_id, equipment_id, resource_id, now, far_future,
          _json_dumps({"last_settled": now, "total_mined_kg": 0}),
-         _json_dumps([{"item_id": resource_id, "rate_kg_per_hr": rate}]),
+         _json_dumps([{"item_id": resource_id, "rate_kg_per_hr": effective_rate}]),
          username),
     )
 
@@ -625,7 +793,7 @@ def start_mining_job(
         "equipment_id": equipment_id,
         "resource_id": resource_id,
         "resource_name": _load_resource_name(resource_id),
-        "rate_kg_per_hr": rate,
+        "rate_kg_per_hr": effective_rate,
         "started_at": now,
     }
 
@@ -864,9 +1032,10 @@ def get_available_recipes_for_location(
         if not compatible_refineries and not compatible_constructors:
             continue
 
-        # Check input availability
+        # Check input availability and compute max_batches
         inputs_status = []
         can_start = True
+        max_batches = None  # None = unlimited (no inputs)
         for inp in (recipe.get("inputs") or []):
             inp_id = str(inp.get("item_id") or "")
             inp_qty = float(inp.get("qty") or 0)
@@ -875,6 +1044,13 @@ def get_available_recipes_for_location(
             sufficient = available >= inp_qty - 1e-9
             if not sufficient:
                 can_start = False
+            # How many batches can this input support?
+            if inp_qty > 0:
+                batches_for_input = int(available / inp_qty)
+                if max_batches is None:
+                    max_batches = batches_for_input
+                else:
+                    max_batches = min(max_batches, batches_for_input)
             inputs_status.append({
                 "item_id": inp_id,
                 "name": str(res_info.get("name") or inp_id),
@@ -882,6 +1058,9 @@ def get_available_recipes_for_location(
                 "qty_available": available,
                 "sufficient": sufficient,
             })
+        if max_batches is None:
+            max_batches = 1
+        max_batches = max(max_batches, 0)
 
         # Find idle equipment
         idle_refineries = [r for r in compatible_refineries if r["status"] == "idle"]
@@ -896,6 +1075,7 @@ def get_available_recipes_for_location(
             **recipe,
             "output_category": output_category,
             "inputs_status": inputs_status,
+            "max_batches": max_batches,
             "can_start": can_start and has_idle,
             "compatible_refineries": [
                 {"id": r["id"], "name": r["name"], "status": r["status"]}

@@ -47,6 +47,7 @@ class UndeployRequest(BaseModel):
 class StartJobRequest(BaseModel):
     equipment_id: str
     recipe_id: str
+    batch_count: int = 1
 
 
 class CancelJobRequest(BaseModel):
@@ -308,6 +309,9 @@ def api_industry_overview(
         if e["category"] == "constructor" and e["status"] == "idle"
     ]
 
+    # Power & thermal balance
+    power_balance = industry_service.compute_site_power_balance(equipment)
+
     return {
         "location_id": location_id,
         "equipment": equipment,
@@ -318,6 +322,7 @@ def api_industry_overview(
         "is_surface_site": site is not None,
         "minable_resources": minable,
         "idle_constructors": idle_constructors,
+        "power_balance": power_balance,
     }
 
 
@@ -370,7 +375,8 @@ def api_start_job(
     industry_service.settle_industry(conn)
     try:
         result = industry_service.start_production_job(
-            conn, body.equipment_id, body.recipe_id, user["username"]
+            conn, body.equipment_id, body.recipe_id, user["username"],
+            batch_count=body.batch_count,
         )
         return {"ok": True, **result}
     except ValueError as e:

@@ -3451,23 +3451,27 @@ tr.bodyGroupHeader td {
 
 .industryTopRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
   padding: 0 16px 8px;
 }
 
-@media (max-width: 1020px) {
+@media (max-width: 1200px) {
+  .industryTopRow { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 800px) {
   .industryTopRow { grid-template-columns: 1fr; }
 }
 
 .industryEquipPanel, .industryJobsPanel, .industryChainPanel,
 .industryRecipesPanel, .industryMiningPanel, .industryHistoryPanel,
-.industryConstructPanel {
+.industryConstructPanel, .industryPowerPanel {
   margin: 0 16px 8px;
 }
 
 .industryTopRow .industryEquipPanel,
-.industryTopRow .industryJobsPanel {
+.industryTopRow .industryJobsPanel,
+.industryTopRow .industryPowerPanel {
   margin: 0;
 }
 
@@ -3495,6 +3499,74 @@ tr.bodyGroupHeader td {
 .eqName { font-size: 13px; font-weight: 500; color: var(--text); }
 .eqDetails { display: flex; gap: 8px; flex-wrap: wrap; }
 .eqDetail { font-size: 11px; color: var(--muted); }
+
+/* ── Power & Thermal panel ──────────────────────────────── */
+
+.pwrSection {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.pwrSection:last-child { border-bottom: none; }
+
+.pwrSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.pwrBarRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.pwrBarLabel {
+  font-size: 11px;
+  color: var(--muted);
+  width: 100px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.pwrBarTrack {
+  flex: 1;
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pwrBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.pwrFillThermal  { background: #ff9f43; }
+.pwrFillElectric { background: #5ee89c; }
+.pwrFillDemand   { background: #59b9e6; }
+.pwrFillWaste    { background: #ff6b7a; }
+.pwrFillRadiator { background: #a29bfe; }
+
+.pwrBarValue {
+  font-size: 11px;
+  color: var(--text);
+  width: 80px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pwrNote {
+  font-size: 11px;
+  padding: 2px 0 0 108px;
+}
+.pwrNote.ok   { color: #5ee89c; }
+.pwrNote.warn { color: #ff9f43; }
+.pwrNote.crit { color: #ff6b7a; font-weight: 600; }
 
 .eqStatus {
   font-size: 11px;
@@ -3775,6 +3847,24 @@ tr.bodyGroupHeader td {
 
 .startJobRecipeRow .sufficient { color: #5ee89c; }
 .startJobRecipeRow .insufficient { color: #ff6b7a; }
+
+/* Batch slider */
+.batchSliderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.batchSliderRow label { white-space: nowrap; }
+.batchSlider {
+  flex: 1;
+  max-width: 200px;
+  accent-color: var(--accent, #5ee89c);
+  cursor: pointer;
+}
+.batchCount { color: var(--text); font-weight: 600; min-width: 20px; text-align: center; }
 
 /* ── Mining section ─────────────────────────────────────── */
 

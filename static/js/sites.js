@@ -376,6 +376,7 @@
     if (!industryData) return;
     const renderers = [
       ["Equipment", renderIndustryEquipment],
+      ["PowerBalance", renderPowerBalance],
       ["RefineJobs", renderRefineJobs],
       ["ConstructJobs", renderConstructJobs],
       ["ProductionChain", renderProductionChain],
@@ -403,19 +404,33 @@
     list.innerHTML = equipment.map(eq => {
       const cfg = eq.config || {};
       const statusClass = eq.status === "active" ? "eqStatusActive" : "eqStatusIdle";
+      let icon = "⚙";
       let details = "";
       if (eq.category === "refinery") {
+        icon = "⚗";
         details = `<span class="eqDetail">${esc(cfg.specialization || "general")}</span>
           <span class="eqDetail">Tier ${cfg.max_recipe_tier || 1}</span>
-          <span class="eqDetail">${cfg.electric_mw || 0} MW</span>`;
-      } else {
+          <span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      } else if (eq.category === "constructor") {
+        icon = "⛏";
         details = `<span class="eqDetail">${cfg.mining_rate_kg_per_hr || 0} kg/hr mining</span>
           <span class="eqDetail">${cfg.construction_rate_kg_per_hr || 0} kg/hr build</span>
-          <span class="eqDetail">${cfg.electric_mw || 0} MW</span>`;
+          <span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      } else if (eq.category === "reactor") {
+        icon = "☢";
+        details = `<span class="eqDetail">${cfg.thermal_mw || 0} MWth</span>`;
+      } else if (eq.category === "generator") {
+        icon = "⚡";
+        details = `<span class="eqDetail">${cfg.thermal_mw_input || 0} MWth in</span>
+          <span class="eqDetail">${cfg.electric_mw || 0} MWe out</span>
+          <span class="eqDetail">${cfg.waste_heat_mw || 0} MWth waste</span>`;
+      } else if (eq.category === "radiator") {
+        icon = "🌡";
+        details = `<span class="eqDetail">${cfg.heat_rejection_mw || 0} MWth rejection</span>`;
       }
 
       return `<div class="industryEquipRow">
-        <div class="eqIcon">${eq.category === "refinery" ? "⚗" : "⛏"}</div>
+        <div class="eqIcon">${icon}</div>
         <div class="eqInfo">
           <div class="eqName">${esc(eq.name)}</div>
           <div class="eqDetails">${details}</div>
@@ -447,6 +462,78 @@
     list.querySelectorAll(".btnUndeploy").forEach(btn => {
       btn.addEventListener("click", () => undeployEquipment(btn.dataset.equipId));
     });
+  }
+
+  /* ── Power & Thermal Balance panel ──────────────────────── */
+
+  function renderPowerBalance() {
+    const el = document.getElementById("industryPowerContent");
+    const pb = industryData.power_balance;
+    if (!pb) {
+      el.innerHTML = '<div class="muted" style="padding:12px">No power data</div>';
+      return;
+    }
+
+    const noEquip = pb.reactors.length === 0 && pb.generators.length === 0 &&
+                    pb.radiators.length === 0 && pb.consumers.length === 0;
+    if (noEquip) {
+      el.innerHTML = '<div class="muted" style="padding:12px">Deploy reactors &amp; generators to power equipment.</div>';
+      return;
+    }
+
+    // Bars
+    function bar(label, value, max, unit, colorClass) {
+      const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+      return `<div class="pwrBarRow">
+        <span class="pwrBarLabel">${label}</span>
+        <div class="pwrBarTrack">
+          <div class="pwrBarFill ${colorClass}" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+        <span class="pwrBarValue">${value.toFixed(1)} ${unit}</span>
+      </div>`;
+    }
+
+    // Thermal section
+    const thMax = Math.max(pb.thermal_mw_supply, pb.thermal_mw_consumed, 1);
+    let html = '<div class="pwrSection">';
+    html += '<div class="pwrSectionTitle">☢ Thermal</div>';
+    html += bar("Reactor Output", pb.thermal_mw_supply, thMax, "MWth", "pwrFillThermal");
+    html += bar("Generator Demand", pb.thermal_mw_consumed, thMax, "MWth", "pwrFillDemand");
+    if (pb.thermal_mw_surplus > 0) {
+      html += `<div class="pwrNote ok">+${pb.thermal_mw_surplus.toFixed(1)} MWth surplus (absorbed by surface)</div>`;
+    }
+    if (pb.gen_throttle < 1) {
+      html += `<div class="pwrNote warn">Generators throttled to ${(pb.gen_throttle * 100).toFixed(0)}% — insufficient thermal</div>`;
+    }
+    html += '</div>';
+
+    // Electric section
+    const elMax = Math.max(pb.electric_mw_supply, pb.electric_mw_demand, 1);
+    html += '<div class="pwrSection">';
+    html += '<div class="pwrSectionTitle">⚡ Electric</div>';
+    html += bar("Generator Output", pb.electric_mw_supply, elMax, "MWe", "pwrFillElectric");
+    html += bar("Equipment Demand", pb.electric_mw_demand, elMax, "MWe", "pwrFillDemand");
+    if (pb.electric_mw_surplus >= 0) {
+      html += `<div class="pwrNote ok">+${pb.electric_mw_surplus.toFixed(1)} MWe surplus</div>`;
+    } else {
+      html += `<div class="pwrNote crit">⚠ ${pb.electric_mw_surplus.toFixed(1)} MWe — POWER DEFICIT</div>`;
+    }
+    html += '</div>';
+
+    // Waste heat section
+    const whMax = Math.max(pb.waste_heat_mw, pb.heat_rejection_mw, 1);
+    html += '<div class="pwrSection">';
+    html += '<div class="pwrSectionTitle">🌡 Waste Heat</div>';
+    html += bar("Generated", pb.waste_heat_mw, whMax, "MWth", "pwrFillWaste");
+    html += bar("Radiator Capacity", pb.heat_rejection_mw, whMax, "MWth", "pwrFillRadiator");
+    if (pb.waste_heat_surplus_mw > 0) {
+      html += `<div class="pwrNote ok">${pb.waste_heat_surplus_mw.toFixed(1)} MWth excess — absorbed by surface</div>`;
+    } else {
+      html += `<div class="pwrNote ok">Heat balanced</div>`;
+    }
+    html += '</div>';
+
+    el.innerHTML = html;
   }
 
   /* ── Refinery jobs panel ───────────────────────────────── */
@@ -991,9 +1078,10 @@
 
     try {
       const inv = await fetchJSON(`/api/inventory/location/${encodeURIComponent(industryLocationId)}`);
+      const deployableCategories = new Set(["refinery", "constructor", "reactor", "generator", "radiator"]);
       const parts = (inv.parts || []).filter(p => {
         const cat = (p.part || {}).category_id || (p.part || {}).type || "";
-        return cat === "refinery" || cat === "constructor";
+        return deployableCategories.has(cat);
       });
 
       if (!parts.length) {
@@ -1064,24 +1152,49 @@
     }
 
     content.innerHTML = `<div class="startJobEquipName">${esc(equip.name)} (${esc(spec)})</div>
-      <div class="startJobRecipes">${recipes.map(r => {
+      <div class="startJobRecipes">${recipes.map((r, idx) => {
         const inputStr = (r.inputs_status || []).map(i =>
           `<span class="${i.sufficient ? "sufficient" : "insufficient"}">${esc(i.name)}: ${i.qty_available.toFixed(2)}/${i.qty_needed.toFixed(2)}</span>`
         ).join(", ");
+        const maxB = r.max_batches || 0;
         return `<div class="startJobRecipeRow ${r.can_start ? "canStart" : "cantStart"}">
           <div class="recipeName">${esc(r.name)}</div>
           <div class="recipeInputs">${inputStr}</div>
-          <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×${r.output_qty} · ${fmtDuration(r.build_time_s)}</div>
-          ${r.can_start ? `<button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}">Start</button>` : '<span class="muted">Missing inputs</span>'}
+          <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×<span class="batchOutQty" data-idx="${idx}">${r.output_qty}</span> · <span class="batchDuration" data-idx="${idx}">${fmtDuration(r.build_time_s)}</span></div>
+          ${r.can_start ? `
+            <div class="batchSliderRow">
+              <label>Batches:</label>
+              <input type="range" class="batchSlider" data-idx="${idx}" min="1" max="${maxB}" value="1"
+                     data-base-qty="${r.output_qty}" data-base-time="${r.build_time_s}">
+              <span class="batchCount" data-idx="${idx}">1</span> / ${maxB}
+            </div>
+            <button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}" data-idx="${idx}">Start</button>` : '<span class="muted">Missing inputs</span>'}
         </div>`;
       }).join("")}</div>`;
 
+    // Wire up batch sliders
+    content.querySelectorAll(".batchSlider").forEach(slider => {
+      slider.addEventListener("input", () => {
+        const idx = slider.dataset.idx;
+        const count = parseInt(slider.value) || 1;
+        const baseQty = parseFloat(slider.dataset.baseQty) || 0;
+        const baseTime = parseFloat(slider.dataset.baseTime) || 0;
+        content.querySelector(`.batchCount[data-idx="${idx}"]`).textContent = count;
+        content.querySelector(`.batchOutQty[data-idx="${idx}"]`).textContent = (baseQty * count).toFixed(2);
+        content.querySelector(`.batchDuration[data-idx="${idx}"]`).textContent = fmtDuration(baseTime * count);
+      });
+    });
+
     content.querySelectorAll(".btnConfirmJob").forEach(btn => {
       btn.addEventListener("click", async () => {
+        const idx = btn.dataset.idx;
+        const slider = content.querySelector(`.batchSlider[data-idx="${idx}"]`);
+        const batchCount = slider ? parseInt(slider.value) || 1 : 1;
         try {
           await postJSON("/api/industry/jobs/start", {
             equipment_id: btn.dataset.equipId,
             recipe_id: btn.dataset.recipeId,
+            batch_count: batchCount,
           });
           modal.style.display = "none";
           loadIndustryContent();
@@ -1113,24 +1226,49 @@
     }
 
     content.innerHTML = `<div class="startJobEquipName">${esc(equip.name)} (Constructor)</div>
-      <div class="startJobRecipes">${recipes.map(r => {
+      <div class="startJobRecipes">${recipes.map((r, idx) => {
         const inputStr = (r.inputs_status || []).map(i =>
           `<span class="${i.sufficient ? "sufficient" : "insufficient"}">${esc(i.name)}: ${i.qty_available.toFixed(2)}/${i.qty_needed.toFixed(2)}</span>`
         ).join(", ");
+        const maxB = r.max_batches || 0;
         return `<div class="startJobRecipeRow ${r.can_start ? "canStart" : "cantStart"}">
           <div class="recipeName">${esc(r.name)}</div>
           <div class="recipeInputs">${inputStr}</div>
-          <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×${r.output_qty} · ${fmtDuration(r.build_time_s)}</div>
-          ${r.can_start ? `<button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}">Build</button>` : '<span class="muted">Missing inputs</span>'}
+          <div class="recipeMeta">→ ${esc(r.output_item_id?.replace(/_/g," "))} ×<span class="batchOutQty" data-idx="${idx}">${r.output_qty}</span> · <span class="batchDuration" data-idx="${idx}">${fmtDuration(r.build_time_s)}</span></div>
+          ${r.can_start ? `
+            <div class="batchSliderRow">
+              <label>Batches:</label>
+              <input type="range" class="batchSlider" data-idx="${idx}" min="1" max="${maxB}" value="1"
+                     data-base-qty="${r.output_qty}" data-base-time="${r.build_time_s}">
+              <span class="batchCount" data-idx="${idx}">1</span> / ${maxB}
+            </div>
+            <button class="btnSmall btnConfirmJob" data-recipe-id="${r.recipe_id}" data-equip-id="${equipId}" data-idx="${idx}">Build</button>` : '<span class="muted">Missing inputs</span>'}
         </div>`;
       }).join("")}</div>`;
 
+    // Wire up batch sliders
+    content.querySelectorAll(".batchSlider").forEach(slider => {
+      slider.addEventListener("input", () => {
+        const idx = slider.dataset.idx;
+        const count = parseInt(slider.value) || 1;
+        const baseQty = parseFloat(slider.dataset.baseQty) || 0;
+        const baseTime = parseFloat(slider.dataset.baseTime) || 0;
+        content.querySelector(`.batchCount[data-idx="${idx}"]`).textContent = count;
+        content.querySelector(`.batchOutQty[data-idx="${idx}"]`).textContent = (baseQty * count).toFixed(2);
+        content.querySelector(`.batchDuration[data-idx="${idx}"]`).textContent = fmtDuration(baseTime * count);
+      });
+    });
+
     content.querySelectorAll(".btnConfirmJob").forEach(btn => {
       btn.addEventListener("click", async () => {
+        const idx = btn.dataset.idx;
+        const slider = content.querySelector(`.batchSlider[data-idx="${idx}"]`);
+        const batchCount = slider ? parseInt(slider.value) || 1 : 1;
         try {
           await postJSON("/api/industry/jobs/start", {
             equipment_id: btn.dataset.equipId,
             recipe_id: btn.dataset.recipeId,
+            batch_count: batchCount,
           });
           modal.style.display = "none";
           loadIndustryContent();
