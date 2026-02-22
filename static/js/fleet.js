@@ -936,7 +936,7 @@
       const parsedScale = Number(data.time_scale);
       timeScale = Number.isFinite(parsedScale) && parsedScale >= 0 ? parsedScale : 1;
 
-      allShips = data.ships || [];
+      allShips = (data.ships || []).filter((s) => s.is_own);
       const moving = allShips.filter((s) => s.status === "transit").length;
       summaryEl.textContent = `${allShips.length} ships · ${moving} in transit`;
 

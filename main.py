@@ -1240,6 +1240,14 @@ def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[Lis
                 part["cargo_mass_kg"] = old_mass
                 for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
                     part[key] = old_vol
+                # Derive tank_phase from the original resource before clearing it
+                if old_rid and not str(part.get("tank_phase") or "").strip():
+                    old_meta = resources.get(old_rid) or {}
+                    part["tank_phase"] = classify_resource_phase(
+                        old_rid,
+                        str(old_meta.get("name") or old_rid),
+                        max(0.0, float(old_meta.get("mass_per_m3_kg") or old_density or 0.0)),
+                    )
                 # Clear legacy single-resource lock
                 if old_mass <= 1e-9:
                     part.pop("resource_id", None)
@@ -1247,6 +1255,18 @@ def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[Lis
 
             resource_id = str(part.get("resource_id") or "").strip().lower()
             capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+
+            # ── Derive tank_phase from resource_id if not already set ──
+            if resource_id and capacity_m3 > 0.0 and not str(part.get("tank_phase") or "").strip():
+                res_meta = resources.get(resource_id) or {}
+                res_density = max(0.0, float(res_meta.get("mass_per_m3_kg") or part.get("mass_per_m3_kg") or 0.0))
+                part["tank_phase"] = classify_resource_phase(
+                    resource_id,
+                    str(res_meta.get("name") or resource_id),
+                    res_density,
+                )
+                changed = True
+
             if resource_id == "water" and capacity_m3 > 0.0 and not _has_explicit_container_fill(part):
                 density = max(
                     0.0,
@@ -1345,11 +1365,14 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
 
         tank_phase = str(part.get("tank_phase") or "").strip().lower()
         if tank_phase not in {"solid", "liquid", "gas"}:
-            # Derive from part name/type or first manifest entry
+            # Derive from part's resource_id, first manifest entry, or part name/type
+            phase_hint_rid = str(part.get("resource_id") or "").strip()
             first_rid = manifest[0]["resource_id"] if manifest else ""
-            first_meta = resources.get(first_rid) or {}
-            first_density = float(first_meta.get("mass_per_m3_kg") or 0.0)
-            tank_phase = classify_resource_phase(first_rid, str(first_meta.get("name") or first_rid), first_density)
+            if not phase_hint_rid and first_rid:
+                phase_hint_rid = first_rid
+            phase_hint_meta = resources.get(phase_hint_rid) or {} if phase_hint_rid else {}
+            phase_hint_density = float(phase_hint_meta.get("mass_per_m3_kg") or 0.0)
+            tank_phase = classify_resource_phase(phase_hint_rid, str(phase_hint_meta.get("name") or phase_hint_rid), phase_hint_density)
 
         row = {
             "container_index": idx,
