@@ -32,7 +32,8 @@ def _get_org_id(conn: sqlite3.Connection, user) -> str:
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
     if corp_id:
         return org_service.ensure_org_for_corp(conn, corp_id)
-    return _get_org_id(conn, user)
+    username = user.get("username") if hasattr(user, "get") else user["username"]
+    return org_service.ensure_org_for_user(conn, username)
 
 
 # ── Request models ─────────────────────────────────────────────────────────────
@@ -143,8 +144,9 @@ def api_boost_to_leo(
     """Boost an item from Earth to LEO."""
     user = require_login(conn, request)
     org_id = _get_org_id(conn, user)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
     try:
-        result = org_service.boost_to_leo(conn, org_id, body.item_id, body.quantity)
+        result = org_service.boost_to_leo(conn, org_id, body.item_id, body.quantity, corp_id=corp_id or "")
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

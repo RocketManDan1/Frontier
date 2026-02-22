@@ -73,7 +73,7 @@ def api_shipyard_preview(req: ShipyardPreviewReq, request: Request, conn: sqlite
 
     item_ids = m.normalize_shipyard_item_ids(req.parts)
     parts = m.shipyard_parts_from_item_ids(item_ids)
-    stats = m.build_ship_stats_payload(parts)
+    stats = m.build_ship_stats_payload(parts, current_fuel_kg=0.0)
     power_balance = catalog_service.compute_power_balance(parts)
     return {
         "build_location_id": source_location_id,
@@ -112,7 +112,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     if not parts:
         raise HTTPException(status_code=400, detail="No valid parts found for build")
 
-    stats = m.build_ship_stats_payload(parts)
+    stats = m.build_ship_stats_payload(parts, current_fuel_kg=0.0)
 
     preferred_id = (req.ship_id or name).strip()
     ship_id = _next_available_ship_id(conn, preferred_id)

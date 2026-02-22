@@ -344,6 +344,8 @@ def boost_to_leo(
     org_id: str,
     item_id: str,
     quantity: float,
+    *,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Boost an item from Earth to LEO.
@@ -394,7 +396,7 @@ def boost_to_leo(
     )
 
     # Add item to LEO location inventory (using the same pattern as industry_service)
-    _add_to_location_inventory(conn, dest_location_id, item_id, item["name"], item["type"], quantity, total_mass_kg, now)
+    _add_to_location_inventory(conn, dest_location_id, item_id, item["name"], item["type"], quantity, total_mass_kg, now, corp_id=corp_id)
 
     conn.commit()
     return {
@@ -417,6 +419,8 @@ def _add_to_location_inventory(
     quantity: float,
     mass_kg: float,
     now: float,
+    *,
+    corp_id: str = "",
 ) -> None:
     """Upsert an item into location inventory."""
     stack_type = "resource" if item_type == "resource" else "part"
@@ -424,23 +428,23 @@ def _add_to_location_inventory(
 
     existing = conn.execute(
         """SELECT quantity, mass_kg FROM location_inventory_stacks
-           WHERE location_id = ? AND stack_type = ? AND stack_key = ?""",
-        (location_id, stack_type, stack_key),
+           WHERE location_id = ? AND corp_id = ? AND stack_type = ? AND stack_key = ?""",
+        (location_id, corp_id, stack_type, stack_key),
     ).fetchone()
 
     if existing:
         conn.execute(
             """UPDATE location_inventory_stacks
                SET quantity = quantity + ?, mass_kg = mass_kg + ?, updated_at = ?
-               WHERE location_id = ? AND stack_type = ? AND stack_key = ?""",
-            (quantity, mass_kg, now, location_id, stack_type, stack_key),
+               WHERE location_id = ? AND corp_id = ? AND stack_type = ? AND stack_key = ?""",
+            (quantity, mass_kg, now, location_id, corp_id, stack_type, stack_key),
         )
     else:
         conn.execute(
             """INSERT INTO location_inventory_stacks
-               (location_id, stack_type, stack_key, item_id, name, quantity, mass_kg, volume_m3, payload_json, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0.0, '{}', ?)""",
-            (location_id, stack_type, stack_key, item_id, name, quantity, mass_kg, now),
+               (location_id, corp_id, stack_type, stack_key, item_id, name, quantity, mass_kg, volume_m3, payload_json, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.0, '{}', ?)""",
+            (location_id, corp_id, stack_type, stack_key, item_id, name, quantity, mass_kg, now),
         )
 
 

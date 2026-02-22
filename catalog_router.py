@@ -85,19 +85,34 @@ def api_research_tree(request: Request, conn: sqlite3.Connection = Depends(get_d
 
 @router.get("/api/shipyard/catalog")
 def api_shipyard_catalog(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
     loc_rows = conn.execute(
         "SELECT id,name FROM locations WHERE is_group=0 ORDER BY sort_order, name"
     ).fetchall()
-    summary_rows = conn.execute(
-        """
-        SELECT location_id,
-               SUM(CASE WHEN stack_type='part' THEN quantity ELSE 0 END) AS part_qty,
-               SUM(CASE WHEN stack_type='resource' THEN mass_kg ELSE 0 END) AS resource_mass_kg
-        FROM location_inventory_stacks
-        GROUP BY location_id
-        """
-    ).fetchall()
+
+    if corp_id is not None:
+        summary_rows = conn.execute(
+            """
+            SELECT location_id,
+                   SUM(CASE WHEN stack_type='part' THEN quantity ELSE 0 END) AS part_qty,
+                   SUM(CASE WHEN stack_type='resource' THEN mass_kg ELSE 0 END) AS resource_mass_kg
+            FROM location_inventory_stacks
+            WHERE corp_id=?
+            GROUP BY location_id
+            """,
+            (corp_id,),
+        ).fetchall()
+    else:
+        summary_rows = conn.execute(
+            """
+            SELECT location_id,
+                   SUM(CASE WHEN stack_type='part' THEN quantity ELSE 0 END) AS part_qty,
+                   SUM(CASE WHEN stack_type='resource' THEN mass_kg ELSE 0 END) AS resource_mass_kg
+            FROM location_inventory_stacks
+            GROUP BY location_id
+            """
+        ).fetchall()
     inv_summary = {
         str(r["location_id"]): {
             "part_qty": float(r["part_qty"] or 0.0),

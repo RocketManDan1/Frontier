@@ -1978,7 +1978,7 @@ def build_shipyard_catalog_payload(
     parts.sort(key=lambda p: (str(p.get("category_id") or ""), str(p.get("name") or "")))
     recipes = sorted((recipe_catalog or {}).values(), key=lambda r: str(r.get("name") or "").lower())
     return {
-        "build_location_id": "LEO",
+        "build_location_id": "",
         "parts": parts,
         "recipes": recipes,
     }

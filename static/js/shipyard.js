@@ -118,8 +118,8 @@
   }
 
   function applyCatalogData(data, preserveSelection = true) {
-    const prev = String(buildLocationId || "LEO");
-    buildLocationId = String(data?.build_location_id || prev || "LEO");
+    const prev = String(buildLocationId || "");
+    buildLocationId = String(data?.build_location_id || prev || "");
     catalogParts = Array.isArray(data?.parts) ? data.parts : [];
     buildSourceLocations = Array.isArray(data?.build_source_locations) ? data.build_source_locations : [];
 
@@ -137,14 +137,14 @@
   }
 
   async function refreshSourcesOnly() {
-    const before = String(buildLocationId || "LEO");
+    const before = String(buildLocationId || "");
     const data = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
     const hash = computeCatalogHash(data);
     if (hash && hash === lastCatalogHash) return;
     lastCatalogHash = hash;
     applyCatalogData(data, true);
     renderSourceLocations();
-    const after = String(buildLocationId || "LEO");
+    const after = String(buildLocationId || "");
     if (after !== before) {
       selectedItemIds = [];
     }

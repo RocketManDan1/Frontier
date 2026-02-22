@@ -336,6 +336,13 @@ def _migration_0007_corporations(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0008_corp_session_heartbeat(conn: sqlite3.Connection) -> None:
+    """Add last_seen column so we can track which corps actually have the game open."""
+    _safe_add_column(conn, "corp_sessions", "last_seen", "REAL")
+    # Back-fill existing rows with created_at so they aren't NULL
+    conn.execute("UPDATE corp_sessions SET last_seen = created_at WHERE last_seen IS NULL")
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -345,6 +352,7 @@ def _migrations() -> List[Migration]:
     Migration("0005_industry", "Add deployed equipment and production/mining job tables", _migration_0005_industry),
     Migration("0006_organizations", "Organizations, research, LEO boosts, prospecting", _migration_0006_organizations),
     Migration("0007_corporations", "Corporation auth, ownership columns, data wipe", _migration_0007_corporations),
+    Migration("0008_corp_session_heartbeat", "Add last_seen heartbeat column to corp_sessions", _migration_0008_corp_session_heartbeat),
     ]
 
 

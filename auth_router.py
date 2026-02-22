@@ -166,6 +166,48 @@ def api_list_corps() -> Dict[str, Any]:
         conn.close()
 
 
+@router.get("/api/auth/online-corps")
+def api_online_corps() -> Dict[str, Any]:
+    """Return corporations that have sent a heartbeat within the last 90 seconds."""
+    conn = connect_db()
+    try:
+        cutoff = time.time() - 90
+        rows = conn.execute(
+            """SELECT DISTINCT c.id, c.name, c.color
+               FROM corp_sessions cs
+               JOIN corporations c ON c.id = cs.corp_id
+               WHERE cs.last_seen IS NOT NULL AND cs.last_seen > ?
+               ORDER BY c.name""",
+            (cutoff,),
+        ).fetchall()
+        return {
+            "corps": [
+                {"id": str(r["id"]), "name": str(r["name"]), "color": str(r["color"])}
+                for r in rows
+            ]
+        }
+    finally:
+        conn.close()
+
+
+@router.post("/api/auth/heartbeat")
+def api_auth_heartbeat(request: Request) -> Dict[str, Any]:
+    """Update last_seen timestamp for the current corp session."""
+    token = (request.cookies.get(SESSION_COOKIE_NAME) or "").strip()
+    if not token:
+        return {"ok": True}
+    conn = connect_db()
+    try:
+        conn.execute(
+            "UPDATE corp_sessions SET last_seen = ? WHERE token = ?",
+            (time.time(), token),
+        )
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
 @router.post("/api/auth/corp/register")
 def api_corp_register(req: CorpRegisterReq, response: Response) -> Dict[str, Any]:
     """Create a new corporation and log in."""

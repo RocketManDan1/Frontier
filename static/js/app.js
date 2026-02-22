@@ -4694,7 +4694,7 @@
 
       const html = `
         <!-- Departure Date -->
-        <div class="tpSection">
+        <div class="tpSection" style="display:none">
           <div class="tpSectionTitle">Departure</div>
           <div class="tpDateRow">
             <button class="tpDateBtn ${departureTimeOverride == null ? 'active' : ''}" id="tpDateNowBtn">Now</button>
@@ -4706,7 +4706,7 @@
         </div>
 
         <!-- Route Overview -->
-        <div class="tpSection">
+        <div class="tpSection" style="display:none">
           <div class="tpSectionTitle">Route — ${_esc(ship.location_id)} → ${_esc(destName)}</div>
           <div class="tpPathWrap">${pathHtml}</div>
           <div style="margin-top:8px;">
