@@ -4,12 +4,30 @@
   "output_item_id": "ascn_2_atlas",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "advanced_aerospace_alloys",   "qty": 21 },
-    { "item_id": "carbon_composites",           "qty": 13 },
-    { "item_id": "radiation_composite_armor",   "qty": 10 },
-    { "item_id": "high_grade_reactor_pellets",  "qty": 8 },
-    { "item_id": "superconductors",             "qty": 4 },
-    { "item_id": "semiconductor_materials",     "qty": 2 }
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 21000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 13000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 10000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 8000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 4000
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 2000
+    }
   ],
   "build_time_s": 10800,
   "facility_type": "shipyard",

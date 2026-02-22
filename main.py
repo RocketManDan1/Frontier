@@ -23,6 +23,7 @@ import catalog_service
 from industry_router import router as industry_router
 from inventory_router import router as inventory_router
 from location_router import router as location_router
+from org_router import router as org_router
 from shipyard_router import router as shipyard_router
 import celestial_config
 from constants import (
@@ -63,6 +64,7 @@ app.include_router(fleet_router)
 app.include_router(industry_router)
 app.include_router(inventory_router)
 app.include_router(location_router)
+app.include_router(org_router)
 app.include_router(shipyard_router)
 
 
@@ -2655,17 +2657,21 @@ def sites(request: Request):
     return _html_no_cache(str(APP_DIR / "static" / "sites.html"))
 
 
-@app.get("/profile")
-def profile(request: Request):
+@app.get("/organization")
+def organization(request: Request):
     conn = connect_db()
     try:
         if not get_current_user(conn, request):
             return RedirectResponse(url="/login", status_code=302)
     finally:
         conn.close()
-    if request.query_params.get("embed") != "1":
-        return RedirectResponse(url="/", status_code=302)
-    return _html_no_cache(str(APP_DIR / "static" / "profile.html"))
+    return _html_no_cache(str(APP_DIR / "static" / "organization.html"))
+
+
+@app.get("/profile")
+def profile(request: Request):
+    """Legacy redirect: /profile → /organization"""
+    return RedirectResponse(url="/organization", status_code=302)
 
 
 @app.get("/login")

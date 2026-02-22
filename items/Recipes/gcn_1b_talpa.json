@@ -6,15 +6,15 @@
   "inputs": [
     {
       "item_id": "structural_alloys",
-      "qty": 5.28
+      "qty": 5280.0
     },
     {
       "item_id": "advanced_ceramics",
-      "qty": 2.88
+      "qty": 2880.0
     },
     {
       "item_id": "semiconductor_materials",
-      "qty": 1.44
+      "qty": 1440.0
     }
   ],
   "build_time_s": 900,

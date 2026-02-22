@@ -4,12 +4,30 @@
   "output_item_id": "cgn_1_helios",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "advanced_aerospace_alloys",   "qty": 13 },
-    { "item_id": "advanced_ceramics",           "qty": 11 },
-    { "item_id": "carbon_composites",           "qty": 13 },
-    { "item_id": "radiation_composite_armor",   "qty": 11 },
-    { "item_id": "high_grade_reactor_pellets",  "qty": 6 },
-    { "item_id": "superconductors",             "qty": 3 }
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 13000
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 11000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 13000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 11000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 6000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 3000
+    }
   ],
   "build_time_s": 14400,
   "facility_type": "shipyard",

@@ -4,10 +4,22 @@
   "output_item_id": "scn_2_frontier",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "structural_alloys",           "qty": 19 },
-    { "item_id": "advanced_aerospace_alloys",   "qty": 24 },
-    { "item_id": "low_grade_reactor_pellets",   "qty": 8 },
-    { "item_id": "semiconductor_materials",     "qty": 5 }
+    {
+      "item_id": "structural_alloys",
+      "qty": 19000
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 24000
+    },
+    {
+      "item_id": "low_grade_reactor_pellets",
+      "qty": 8000
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 5000
+    }
   ],
   "build_time_s": 5400,
   "facility_type": "shipyard",

@@ -4,9 +4,18 @@
   "output_item_id": "scn_1_pioneer",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "structural_alloys",        "qty": 34 },
-    { "item_id": "low_grade_reactor_pellets", "qty": 4 },
-    { "item_id": "semiconductor_materials",  "qty": 2 }
+    {
+      "item_id": "structural_alloys",
+      "qty": 34000
+    },
+    {
+      "item_id": "low_grade_reactor_pellets",
+      "qty": 4000
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 2000
+    }
   ],
   "build_time_s": 3600,
   "facility_type": "shipyard",

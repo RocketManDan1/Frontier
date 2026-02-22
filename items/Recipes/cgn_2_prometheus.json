@@ -4,13 +4,34 @@
   "output_item_id": "cgn_2_prometheus",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "advanced_aerospace_alloys",   "qty": 17 },
-    { "item_id": "advanced_ceramics",           "qty": 17 },
-    { "item_id": "carbon_composites",           "qty": 17 },
-    { "item_id": "radiation_composite_armor",   "qty": 13 },
-    { "item_id": "high_grade_reactor_pellets",  "qty": 10 },
-    { "item_id": "superconductors",             "qty": 4 },
-    { "item_id": "strategic_elements",          "qty": 1 }
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 17000
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 17000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 17000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 13000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 10000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 4000
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 1000
+    }
   ],
   "build_time_s": 18000,
   "facility_type": "shipyard",

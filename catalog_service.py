@@ -1347,6 +1347,138 @@ def build_research_payload() -> Dict[str, Any]:
     }
 
 
+def build_ksp_tech_tree() -> Dict[str, Any]:
+    """
+    Build a KSP-style tech tree: each category is a vertical path of nodes.
+    Each node costs Research Points and unlocks specific catalog items.
+
+    The tree is organized by category (thrusters, reactors, etc.) and within
+    each category, nodes are ordered by research_unlock_level.
+    """
+    # ── Collect all items from all catalogs ────────────────────────────────
+    all_items: Dict[str, List[Dict[str, Any]]] = {}
+    loaders = [
+        ("thrusters", load_thruster_main_catalog),
+        ("reactors", load_reactor_catalog),
+        ("generators", load_generator_catalog),
+        ("radiators", load_radiator_catalog),
+        ("robonauts", load_robonaut_catalog),
+        ("constructors", load_constructor_catalog),
+        ("refineries", load_refinery_catalog),
+    ]
+
+    for cat_id, loader_fn in loaders:
+        catalog = loader_fn()
+        for item_id, item in catalog.items():
+            tech_level = int(item.get("research_unlock_level") or 1)
+            research_node = str(item.get("research_node") or "").strip()
+            entry = {
+                "item_id": item_id,
+                "name": item.get("name", item_id),
+                "mass_kg": float(item.get("mass_kg") or item.get("dry_mass_kg") or 0),
+                "tech_level": tech_level,
+                "research_node": research_node,
+                "branch": str(item.get("branch") or ""),
+                "category": cat_id,
+            }
+            # Add category-specific stats
+            if cat_id == "thrusters":
+                entry.update({
+                    "thrust_kn": float(item.get("thrust_kn") or 0),
+                    "isp_s": float(item.get("isp_s") or 0),
+                    "thermal_mw": float(item.get("thermal_mw") or 0),
+                })
+            elif cat_id == "reactors":
+                entry.update({
+                    "thermal_mw": float(item.get("thermal_mw") or 0),
+                })
+            elif cat_id == "generators":
+                entry.update({
+                    "electric_mw": float(item.get("electric_mw") or 0),
+                })
+            elif cat_id == "radiators":
+                entry.update({
+                    "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0),
+                })
+            if cat_id not in all_items:
+                all_items[cat_id] = []
+            all_items[cat_id].append(entry)
+
+    # ── Build tech tree per category ────────────────────────────────────────
+    # Research point costs per tech level
+    RP_COSTS = {1: 5, 2: 10, 3: 20, 4: 40, 5: 80, 6: 120, 7: 160, 8: 200, 9: 250, 10: 300}
+
+    categories: List[Dict[str, Any]] = []
+
+    for cat in RESEARCH_CATEGORIES:
+        cat_id = cat["id"]
+        cat_label = cat["label"]
+        items = all_items.get(cat_id, [])
+
+        # Group items by tech level
+        by_level: Dict[int, List[Dict[str, Any]]] = {}
+        for item in items:
+            lvl = item["tech_level"]
+            if lvl not in by_level:
+                by_level[lvl] = []
+            by_level[lvl].append(item)
+
+        levels_sorted = sorted(by_level.keys())
+        if not levels_sorted:
+            # Placeholder for categories with no items yet
+            levels_sorted = [1, 2, 3]
+
+        nodes: List[Dict[str, Any]] = []
+        edges: List[List[str]] = []
+
+        _level_names = {
+            1: "Fundamentals",
+            2: "Advanced Systems",
+            3: "High Performance",
+            4: "Cutting Edge",
+            5: "Experimental",
+            6: "Next Generation",
+            7: "Prototype",
+            8: "Theoretical",
+            9: "Speculative",
+            10: "Beyond",
+        }
+
+        for idx, level in enumerate(levels_sorted):
+            node_id = f"{cat_id}_lvl_{level}"
+            level_items = by_level.get(level, [])
+            rp_cost = RP_COSTS.get(level, level * 30)
+            level_name = _level_names.get(level, f"Level {level}")
+
+            node = {
+                "id": node_id,
+                "name": f"{cat_label} {level_name}",
+                "tech_level": level,
+                "cost_rp": rp_cost,
+                "items": sorted(level_items, key=lambda x: x.get("name", "")),
+                "y": idx * 180,  # vertical layout spacing
+                "x": 60,
+            }
+            nodes.append(node)
+
+            if idx > 0:
+                prev_node_id = f"{cat_id}_lvl_{levels_sorted[idx - 1]}"
+                edges.append([prev_node_id, node_id])
+
+        categories.append({
+            "id": cat_id,
+            "label": cat_label,
+            "nodes": nodes,
+            "edges": edges,
+        })
+
+    return {
+        "categories": categories,
+        "style": "ksp",
+        "version": "2.0",
+    }
+
+
 def canonical_item_category(raw: Any) -> str:
     text = str(raw or "").strip().lower()
     if not text:

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Organization</title>
+    <link rel="stylesheet" href="/static/styles.css?v=layout36" />
+  </head>
+
+  <body class="orgPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Organization</div>
+            <div class="subtitle">Manage your organization, research teams, and logistics</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/sites">Sites</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab active" href="/organization">Organization</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="orgLayout">
+        <!-- ═══ Left Column: Org Overview ═══ -->
+        <div class="orgLeftCol">
+          <div class="panel orgOverviewPanel">
+            <div class="titleSmall">Organization Overview</div>
+            <div id="orgInfo" class="muted">Loading…</div>
+            <div class="orgStatGrid" id="orgStatGrid" style="display:none;">
+              <div class="orgStat">
+                <div class="orgStatLabel">Balance</div>
+                <div class="orgStatValue" id="orgBalance">—</div>
+              </div>
+              <div class="orgStat">
+                <div class="orgStatLabel">Monthly Income</div>
+                <div class="orgStatValue" id="orgIncome">—</div>
+              </div>
+              <div class="orgStat">
+                <div class="orgStatLabel">Research Points</div>
+                <div class="orgStatValue" id="orgResearchPoints">—</div>
+              </div>
+              <div class="orgStat">
+                <div class="orgStatLabel">Monthly Expenses</div>
+                <div class="orgStatValue" id="orgExpenses">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Research Teams -->
+          <div class="panel orgTeamsPanel">
+            <div class="titleSmall">Research Teams</div>
+            <div class="muted small" id="teamSummary">Teams generate research points used to unlock technology.</div>
+            <div id="teamsList" class="orgTeamsList"></div>
+            <div class="orgTeamActions">
+              <button id="hireTeamBtn" class="btnPrimary" type="button">Hire Research Team ($150M)</button>
+              <div id="hireTeamStatus" class="muted small"></div>
+            </div>
+          </div>
+
+          <!-- Account -->
+          <div class="panel orgAccountPanel">
+            <div class="titleSmall">Account</div>
+            <div id="accountInfo" class="muted small"></div>
+            <div>
+              <button id="logoutBtn" class="btnSecondary" type="button">Log Out</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ Right Column: LEO Boost ═══ -->
+        <div class="orgRightCol">
+          <div class="panel orgBoostPanel">
+            <div class="titleSmall">Earth-to-LEO Boost</div>
+            <div class="muted small">Launch items from Earth to Low Earth Orbit. Only Tech Level 1-2 items and water are eligible.</div>
+            <div class="muted small">Base cost: $100M + $5,000/kg payload.</div>
+
+            <div class="orgBoostControls">
+              <div class="orgBoostField">
+                <label for="boostItemSelect">Item</label>
+                <select id="boostItemSelect" class="orgSelect">
+                  <option value="">Select item…</option>
+                </select>
+              </div>
+              <div class="orgBoostField">
+                <label for="boostQuantity">Quantity</label>
+                <input type="number" id="boostQuantity" class="orgInput" value="1" min="1" step="1" />
+              </div>
+              <div class="orgBoostField">
+                <label>Mass</label>
+                <div id="boostMass" class="orgStatValue small">—</div>
+              </div>
+              <div class="orgBoostField">
+                <label>Cost</label>
+                <div id="boostCost" class="orgStatValue small">—</div>
+              </div>
+            </div>
+            <button id="boostBtn" class="btnPrimary" type="button" disabled>Launch to LEO</button>
+            <div id="boostStatus" class="muted small"></div>
+          </div>
+
+          <!-- Boost History -->
+          <div class="panel orgBoostHistoryPanel">
+            <div class="titleSmall">Recent Launches</div>
+            <div id="boostHistory" class="orgBoostHistory muted small">No launches yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au2"></script>
+    <script src="/static/js/clock.js?v=ti3"></script>
+    <script src="/static/js/organization.js?v=org1"></script>
+  </body>
+</html>

@@ -65,8 +65,18 @@ def api_catalog_recipes_by_category(request: Request, conn: sqlite3.Connection =
 
 @router.get("/api/research/tree")
 def api_research_tree(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    require_login(conn, request)
-    return _main().build_research_payload()
+    user = require_login(conn, request)
+    tree = catalog_service.build_ksp_tech_tree()
+
+    # Include org's unlock state
+    import org_service
+    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    unlocked_ids: list = []
+    if org_id:
+        unlocks = org_service.get_unlocked_techs(conn, org_id)
+        unlocked_ids = [u["tech_id"] for u in unlocks]
+    tree["unlocked"] = unlocked_ids
+    return tree
 
 
 @router.get("/api/shipyard/catalog")

@@ -4,14 +4,38 @@
   "output_item_id": "ogn_1_icarus",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "advanced_aerospace_alloys",   "qty": 19 },
-    { "item_id": "advanced_ceramics",           "qty": 16 },
-    { "item_id": "carbon_composites",           "qty": 19 },
-    { "item_id": "radiation_composite_armor",   "qty": 10 },
-    { "item_id": "high_grade_reactor_pellets",  "qty": 8 },
-    { "item_id": "superconductors",             "qty": 6 },
-    { "item_id": "strategic_elements",          "qty": 2 },
-    { "item_id": "precious_rare_metals",        "qty": 1 }
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 19000
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 16000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 19000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 10000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 8000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 6000
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 2000
+    },
+    {
+      "item_id": "precious_rare_metals",
+      "qty": 1000
+    }
   ],
   "build_time_s": 21600,
   "facility_type": "shipyard",

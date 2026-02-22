@@ -193,6 +193,76 @@ def _migration_0005_industry(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0006_organizations(conn: sqlite3.Connection) -> None:
+    """Organizations, research teams, research points, LEO boosts, and prospecting."""
+    conn.executescript(
+        """
+        -- ── Organizations ──────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS organizations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          balance_usd REAL NOT NULL DEFAULT 1000000000.0,
+          research_points REAL NOT NULL DEFAULT 0.0,
+          last_settled_at REAL NOT NULL DEFAULT 0.0,
+          created_at REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS org_members (
+          username TEXT PRIMARY KEY REFERENCES users(username) ON DELETE CASCADE,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id);
+
+        CREATE TABLE IF NOT EXISTS research_teams (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          hired_at REAL NOT NULL,
+          cost_per_month_usd REAL NOT NULL DEFAULT 150000000.0,
+          points_per_week REAL NOT NULL DEFAULT 5.0,
+          status TEXT NOT NULL DEFAULT 'active'
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_teams_org ON research_teams(org_id);
+
+        -- ── LEO Boost Ledger ─────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS leo_boosts (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          item_id TEXT NOT NULL,
+          item_name TEXT NOT NULL,
+          quantity REAL NOT NULL DEFAULT 1.0,
+          mass_kg REAL NOT NULL DEFAULT 0.0,
+          cost_usd REAL NOT NULL DEFAULT 0.0,
+          boosted_at REAL NOT NULL,
+          destination_location_id TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_leo_boosts_org ON leo_boosts(org_id);
+
+        -- ── Research Unlocks (KSP tech tree) ─────────────────────────────
+        CREATE TABLE IF NOT EXISTS research_unlocks (
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          tech_id TEXT NOT NULL,
+          unlocked_at REAL NOT NULL,
+          cost_points REAL NOT NULL DEFAULT 0.0,
+          PRIMARY KEY (org_id, tech_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_unlocks_org ON research_unlocks(org_id);
+
+        -- ── Prospecting (per-org site visibility) ────────────────────────
+        CREATE TABLE IF NOT EXISTS prospecting_results (
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          site_location_id TEXT NOT NULL,
+          resource_id TEXT NOT NULL,
+          mass_fraction REAL NOT NULL DEFAULT 0.0,
+          prospected_at REAL NOT NULL,
+          prospected_by_ship TEXT,
+          PRIMARY KEY (org_id, site_location_id, resource_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_prospecting_org_site
+          ON prospecting_results(org_id, site_location_id);
+        """
+    )
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -200,6 +270,7 @@ def _migrations() -> List[Migration]:
     Migration("0003_location_inventory", "Add scalable location inventory stack table", _migration_0003_location_inventory),
     Migration("0004_surface_sites", "Add surface sites and resource distribution tables", _migration_0004_surface_sites),
     Migration("0005_industry", "Add deployed equipment and production/mining job tables", _migration_0005_industry),
+    Migration("0006_organizations", "Organizations, research, LEO boosts, prospecting", _migration_0006_organizations),
     ]
 
 
