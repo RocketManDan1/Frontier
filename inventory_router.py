@@ -516,7 +516,9 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     density = max(0.0, float((resources.get(move_resource_id) or {}).get("mass_per_m3_kg") or 0.0))
 
     if target_kind == "location":
-        destroyed_mass_kg = accepted_mass_kg
+        # Add the resource to the location's inventory
+        _main().add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg)
+        destroyed_mass_kg = 0.0
     else:
         if not target_ship_state:
             raise HTTPException(status_code=500, detail="Target ship state unavailable")

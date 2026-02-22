@@ -3348,35 +3348,38 @@
         if (rr > 1e-6) orbitLayer.drawCircle(sun.rx, sun.ry, rr);
       }
 
-      // Asteroid belt dust cloud — rusty red-brown annular band
+      // Asteroid belt dust cloud — wide overlapping bands for a smooth diffuse look
       const beltBodies = ["grp_vesta", "grp_ceres", "grp_pallas", "grp_hygiea"];
       const beltRadii = beltBodies.map(id => {
         const b = locationsById.get(id);
         return b ? Math.hypot(b.rx - sun.rx, b.ry - sun.ry) : 0;
       }).filter(r => r > 1e-6);
       if (beltRadii.length > 0) {
-        const innerR = Math.min(...beltRadii) * 0.88;
-        const outerR = Math.max(...beltRadii) * 1.12;
-        const beltAlpha = 0.06 * mainOrbitDetailAlpha;
-        const bandCount = 5;
+        const innerR = Math.min(...beltRadii) * 0.85;
+        const outerR = Math.max(...beltRadii) * 1.15;
+        const bandSpan = outerR - innerR;
+        const bandCount = 14;
+        const bandWidth = bandSpan / bandCount * 2.8; // overlap ≈ 2.8×
+        const beltAlpha = 0.04 * mainOrbitDetailAlpha;
         for (let i = 0; i < bandCount; i++) {
           const t = i / (bandCount - 1);
-          const r = innerR + t * (outerR - innerR);
+          const r = innerR + t * bandSpan;
           const edgeFade = 1 - Math.pow(2 * t - 1, 2);
-          const a = beltAlpha * (0.3 + 0.7 * edgeFade);
-          orbitLayer.lineStyle((ringScreenPx * 2.4) / zoom, 0x8b4513, a);
+          const a = beltAlpha * (0.25 + 0.75 * edgeFade);
+          orbitLayer.lineStyle(bandWidth, 0x8b4513, a);
           orbitLayer.drawCircle(sun.rx, sun.ry, r);
         }
-        // dashed scatter particles (lightweight procedural texture)
-        const scatterCount = 12;
+        // scatter particles — deterministic positions so they don't flicker
+        const scatterCount = 32;
         for (let i = 0; i < scatterCount; i++) {
           const angle = (i / scatterCount) * Math.PI * 2 + 0.37;
-          const rScatter = innerR + Math.random() * (outerR - innerR);
+          const rFrac = ((i * 7 + 3) % scatterCount) / scatterCount;
+          const rScatter = innerR + rFrac * bandSpan;
           const px = sun.rx + Math.cos(angle) * rScatter;
           const py = sun.ry + Math.sin(angle) * rScatter;
-          const dotR = (1.2 + Math.random() * 1.8) / zoom;
+          const dotR = (1.8 + ((i * 13) % 10) * 0.25) / zoom;
           orbitLayer.lineStyle(0);
-          orbitLayer.beginFill(0xa0522d, 0.08 * mainOrbitDetailAlpha);
+          orbitLayer.beginFill(0xa0522d, 0.12 * mainOrbitDetailAlpha);
           orbitLayer.drawCircle(px, py, dotR);
           orbitLayer.endFill();
         }
