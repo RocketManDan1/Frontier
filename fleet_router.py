@@ -38,6 +38,25 @@ def _main():
     return main
 
 
+def _require_ship_ownership(conn, request, ship_id: str):
+    """Verify the requesting user/corp owns the ship. Raises 403 if not."""
+    from auth_service import get_current_user
+    user = get_current_user(conn, request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    # Admin can operate on any ship
+    if user.get("is_admin") if hasattr(user, "get") else user["is_admin"]:
+        return
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    if not corp_id:
+        return  # non-corp non-admin — shouldn't happen but be lenient
+    row = conn.execute("SELECT corp_id FROM ships WHERE id=?", (ship_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ship not found")
+    if str(row["corp_id"] or "") != corp_id:
+        raise HTTPException(status_code=403, detail="This ship belongs to another corporation")
+
+
 # ── Pydantic models ────────────────────────────────────────
 
 class TransferReq(BaseModel):
@@ -370,12 +389,16 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     m.settle_arrivals(conn, now_s)
     conn.commit()
 
+    # Determine the requesting corp (None for admin)
+    my_corp_id = user.get("corp_id") if hasattr(user, "get") else None
+
     rows = conn.execute(
         """
         SELECT id,name,shape,color,size_px,notes_json,
                location_id,from_location_id,to_location_id,departed_at,arrives_at,
                  transfer_path_json,dv_planned_m_s,dock_slot,
-                 parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s
+                 parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
+                 corp_id
         FROM ships
         ORDER BY id
         """
@@ -383,28 +406,40 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
 
     ships = []
     for r in rows:
+        ship_corp_id = r["corp_id"] or None
+        is_admin = user.get("is_admin") if hasattr(user, "get") else user["is_admin"]
+        is_own = (my_corp_id is not None and ship_corp_id == my_corp_id) or (my_corp_id is None and is_admin)
+
         parts = m.normalize_parts(json.loads(r["parts_json"] or "[]"))
         stats = m.derive_ship_stats_from_parts(
             parts,
             current_fuel_kg=float(r["fuel_kg"] or 0.0),
         )
-        inventory_containers = m.compute_ship_inventory_containers(parts, stats["fuel_kg"])
-        inventory_items = m.compute_ship_inventory_resources(str(r["id"]), inventory_containers)
-        inventory_capacity_summary = m.compute_ship_capacity_summary(inventory_containers)
-        ships.append(
-            {
-                "id": r["id"],
-                "name": r["name"],
-                "shape": r["shape"],
-                "color": r["color"],
-                "size_px": r["size_px"],
+
+        ship_data = {
+            "id": r["id"],
+            "name": r["name"],
+            "shape": r["shape"],
+            "color": r["color"],
+            "size_px": r["size_px"],
+            "location_id": r["location_id"],
+            "from_location_id": r["from_location_id"],
+            "to_location_id": r["to_location_id"],
+            "departed_at": r["departed_at"],
+            "arrives_at": r["arrives_at"],
+            "transfer_path": json.loads(r["transfer_path_json"] or "[]"),
+            "status": "transit" if r["arrives_at"] else "docked",
+            "corp_id": ship_corp_id,
+            "is_own": is_own,
+        }
+
+        # Only include detailed data for own ships
+        if is_own:
+            inventory_containers = m.compute_ship_inventory_containers(parts, stats["fuel_kg"])
+            inventory_items = m.compute_ship_inventory_resources(str(r["id"]), inventory_containers)
+            inventory_capacity_summary = m.compute_ship_capacity_summary(inventory_containers)
+            ship_data.update({
                 "notes": json.loads(r["notes_json"] or "[]"),
-                "location_id": r["location_id"],
-                "from_location_id": r["from_location_id"],
-                "to_location_id": r["to_location_id"],
-                "departed_at": r["departed_at"],
-                "arrives_at": r["arrives_at"],
-                "transfer_path": json.loads(r["transfer_path_json"] or "[]"),
                 "dv_planned_m_s": r["dv_planned_m_s"],
                 "dock_slot": r["dock_slot"],
                 "parts": parts,
@@ -422,15 +457,26 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                     stats["isp_s"],
                 ),
                 "power_balance": catalog_service.compute_power_balance(parts),
-                "status": "transit" if r["arrives_at"] else "docked",
-            }
-        )
+            })
 
-    return {
-        "user": {
+        ships.append(ship_data)
+
+    user_info = {}
+    if my_corp_id:
+        user_info = {
+            "corp_id": my_corp_id,
+            "corp_name": user.get("corp_name"),
+            "corp_color": user.get("corp_color"),
+            "is_admin": False,
+        }
+    else:
+        user_info = {
             "username": user["username"],
             "is_admin": bool(user["is_admin"]),
-        },
+        }
+
+    return {
+        "user": user_info,
         "server_time": now_s,
         "time_scale": effective_time_scale(),
         "paused": simulation_paused(),
@@ -444,7 +490,8 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     now_s = game_now_s()
     to_id = req.to_location_id
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    _require_ship_ownership(conn, request, ship_id)
     m.settle_arrivals(conn, now_s)
 
     ship = conn.execute(
@@ -548,6 +595,26 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
                                f"ship thrust {thrust_kn:.1f} kN, mass {wet_mass_kg:.0f} kg)",
                     )
 
+    # ── Site claim gate: block landing on surface sites claimed by another corp ──
+    my_corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    if my_corp_id:
+        # Check if destination is a surface site claimed by another corp's refinery
+        dest_site = conn.execute(
+            "SELECT location_id FROM surface_sites WHERE location_id = ?", (to_id,)
+        ).fetchone()
+        if dest_site:
+            claiming_corp = conn.execute(
+                """SELECT corp_id FROM deployed_equipment
+                   WHERE location_id = ? AND category = 'refinery' AND corp_id != ?
+                   LIMIT 1""",
+                (to_id, my_corp_id),
+            ).fetchone()
+            if claiming_corp:
+                raise HTTPException(
+                    status_code=403,
+                    detail="This surface site is claimed by another corporation's refinery",
+                )
+
     fuel_used_kg = m.compute_fuel_needed_for_delta_v_kg(
         stats["dry_mass_kg"],
         stats["fuel_kg"],
@@ -599,6 +666,7 @@ def api_ship_inventory_jettison(ship_id: str, req: InventoryContainerReq, reques
         raise HTTPException(status_code=400, detail="ship_id is required")
 
     require_login(conn, request)
+    _require_ship_ownership(conn, request, sid)
 
     row = conn.execute(
         """
@@ -678,6 +746,12 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
         raise HTTPException(status_code=400, detail="ship_id is required")
 
     require_login(conn, request)
+    _require_ship_ownership(conn, request, sid)
+
+    # Get corp_id from the ship itself
+    ship_corp_row = conn.execute("SELECT corp_id FROM ships WHERE id=?", (sid,)).fetchone()
+    corp_id = str(ship_corp_row["corp_id"] or "") if ship_corp_row and "corp_id" in ship_corp_row.keys() else ""
+
     row = conn.execute(
         """
         SELECT id,name,location_id,arrives_at,parts_json,fuel_kg
@@ -706,7 +780,7 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
             resource_id = str(cargo.get("resource_id") or "").strip()
             cargo_mass_kg = max(0.0, float(cargo.get("cargo_mass_kg") or 0.0))
             if resource_id and cargo_mass_kg > 0.0:
-                m.add_resource_to_location_inventory(conn, location_id, resource_id, cargo_mass_kg)
+                m.add_resource_to_location_inventory(conn, location_id, resource_id, cargo_mass_kg, corp_id=corp_id)
                 if resource_id.lower() == "water":
                     transferred_fuel_like_kg += cargo_mass_kg
             for key in (
@@ -724,10 +798,10 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
             ):
                 clean_part.pop(key, None)
 
-        m.add_part_to_location_inventory(conn, location_id, clean_part)
+        m.add_part_to_location_inventory(conn, location_id, clean_part, corp_id=corp_id)
 
     if fuel_kg > transferred_fuel_like_kg + 1e-6:
-        m.add_resource_to_location_inventory(conn, location_id, "water", fuel_kg - transferred_fuel_like_kg)
+        m.add_resource_to_location_inventory(conn, location_id, "water", fuel_kg - transferred_fuel_like_kg, corp_id=corp_id)
 
     if req.keep_ship_record:
         conn.execute(
@@ -760,6 +834,11 @@ def api_ship_inventory_deploy(ship_id: str, req: InventoryContainerReq, request:
         raise HTTPException(status_code=400, detail="ship_id is required")
 
     require_login(conn, request)
+    _require_ship_ownership(conn, request, sid)
+
+    # Get corp_id from the ship
+    ship_corp_row = conn.execute("SELECT corp_id FROM ships WHERE id=?", (sid,)).fetchone()
+    corp_id = str(ship_corp_row["corp_id"] or "") if ship_corp_row and "corp_id" in ship_corp_row.keys() else ""
 
     row = conn.execute(
         """
@@ -799,7 +878,7 @@ def api_ship_inventory_deploy(ship_id: str, req: InventoryContainerReq, request:
         deployed_part["cargo_mass_kg"] = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
         deployed_part["cargo_used_m3"] = max(0.0, float(target.get("used_m3") or 0.0))
 
-    m.add_part_to_location_inventory(conn, location_id, deployed_part)
+    m.add_part_to_location_inventory(conn, location_id, deployed_part, corp_id=corp_id)
 
     stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=current_fuel_kg)
     conn.execute(

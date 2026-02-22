@@ -70,7 +70,11 @@ def api_research_tree(request: Request, conn: sqlite3.Connection = Depends(get_d
 
     # Include org's unlock state
     import org_service
-    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    corp_id = str(user.get("corp_id") or "") if hasattr(user, "get") else ""
+    if corp_id:
+        org_id = org_service.get_org_id_for_corp(conn, corp_id)
+    else:
+        org_id = org_service.get_org_id_for_user(conn, user["username"])
     unlocked_ids: list = []
     if org_id:
         unlocks = org_service.get_unlocked_techs(conn, org_id)
@@ -111,8 +115,7 @@ def api_shipyard_catalog(request: Request, conn: sqlite3.Connection = Depends(ge
             "inventory_resource_mass_kg": inv_summary.get(str(loc["id"]), {}).get("resource_mass_kg", 0.0),
         }
         for loc in loc_rows
-        if str(loc["id"]) == "LEO"
-        or inv_summary.get(str(loc["id"]), {}).get("part_qty", 0.0) > 0.0
+        if inv_summary.get(str(loc["id"]), {}).get("part_qty", 0.0) > 0.0
         or inv_summary.get(str(loc["id"]), {}).get("resource_mass_kg", 0.0) > 0.0
     ]
     return payload

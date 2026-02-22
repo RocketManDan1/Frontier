@@ -3,8 +3,92 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Login</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout27" />
+    <title>COMNET Access</title>
+    <link rel="stylesheet" href="/static/styles.css?v=layout28" />
+    <style>
+      .corpTabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 16px;
+      }
+      .corpTab {
+        flex: 1;
+        padding: 10px 12px;
+        text-align: center;
+        cursor: pointer;
+        border: 1px solid rgba(109, 182, 255, 0.3);
+        background: rgba(6, 12, 20, 0.6);
+        color: rgba(186, 216, 244, 0.6);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-family: "Consolas", "JetBrains Mono", monospace;
+        transition: all 0.15s ease;
+      }
+      .corpTab:first-child { border-radius: 4px 0 0 4px; }
+      .corpTab:last-child { border-radius: 0 4px 4px 0; }
+      .corpTab.active {
+        background: rgba(109, 182, 255, 0.15);
+        color: #c8ebff;
+        border-color: rgba(109, 182, 255, 0.6);
+      }
+      .corpTab:hover:not(.active) {
+        background: rgba(109, 182, 255, 0.08);
+        color: rgba(186, 216, 244, 0.8);
+      }
+      .tabPanel { display: none; }
+      .tabPanel.active { display: block; }
+
+      .colorPicker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .colorSwatch {
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color 0.15s ease, transform 0.1s ease;
+      }
+      .colorSwatch:hover { transform: scale(1.15); }
+      .colorSwatch.selected {
+        border-color: #fff;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+      }
+
+      .corpSelect {
+        width: 100%;
+        padding: 9px 10px;
+        border-radius: 3px;
+        border: 1px solid rgba(92, 142, 196, 0.52);
+        background: rgba(3, 8, 15, 0.94);
+        color: #dff3ff;
+        font-family: inherit;
+        font-size: 13px;
+      }
+      .corpSelect option {
+        background: #0a1420;
+        color: #dff3ff;
+      }
+
+      .adminToggle {
+        margin-top: 18px;
+        text-align: center;
+      }
+      .adminToggle a {
+        color: rgba(186, 216, 244, 0.35);
+        font-size: 10px;
+        text-decoration: none;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+      }
+      .adminToggle a:hover { color: rgba(186, 216, 244, 0.6); }
+      #adminPanel { display: none; margin-top: 12px; }
+      #adminPanel.active { display: block; }
+    </style>
   </head>
 
   <body>
@@ -15,28 +99,80 @@
           <p class="terminalLine">Syncing Comnet....</p>
           <p class="terminalLine">Establishing Connection...</p>
 
-          <div class="terminalPrompt">Enter encryption key</div>
+          <div class="corpTabs">
+            <div class="corpTab active" data-tab="login">Corporation Login</div>
+            <div class="corpTab" data-tab="register">Form New Corporation</div>
+          </div>
 
-          <form id="loginForm">
-            <div class="terminalField">
-              <label for="username">User:</label>
-              <input id="username" name="username" type="text" autocomplete="username" required />
-            </div>
+          <!-- LOGIN TAB -->
+          <div id="tab-login" class="tabPanel active">
+            <form id="corpLoginForm">
+              <div class="terminalField">
+                <label for="loginCorpSelect">Corporation:</label>
+                <select id="loginCorpSelect" class="corpSelect" required>
+                  <option value="">Loading corporations…</option>
+                </select>
+              </div>
+              <div class="terminalField">
+                <label for="loginPassword">Corp Password:</label>
+                <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+              </div>
+              <div class="terminalActions">
+                <button type="submit" class="adminBtn">Connect</button>
+              </div>
+              <div id="loginMsg" class="muted small terminalStatus"></div>
+            </form>
+          </div>
 
-            <div class="terminalField">
-              <label for="password">Pass:</label>
-              <input id="password" name="password" type="password" autocomplete="current-password" required />
-            </div>
+          <!-- REGISTER TAB -->
+          <div id="tab-register" class="tabPanel">
+            <form id="corpRegisterForm">
+              <div class="terminalField">
+                <label for="regCorpName">Corporation Name:</label>
+                <input id="regCorpName" name="corp_name" type="text" autocomplete="off" required
+                       placeholder="2-40 characters" maxlength="40" />
+              </div>
+              <div class="terminalField">
+                <label for="regPassword">Corp Password:</label>
+                <input id="regPassword" name="password" type="password" autocomplete="new-password" required
+                       placeholder="Min 3 characters" />
+              </div>
+              <div class="terminalField">
+                <label>Corp Color (ship icons):</label>
+                <div class="colorPicker" id="colorPicker"></div>
+                <input type="hidden" id="regColor" value="#4a9eff" />
+              </div>
+              <div class="terminalActions">
+                <button type="submit" class="adminBtn">Establish Corporation</button>
+              </div>
+              <div id="registerMsg" class="muted small terminalStatus"></div>
+            </form>
+          </div>
 
-            <div class="terminalActions">
-              <button type="submit" class="adminBtn">Connect</button>
-            </div>
-            <div id="loginMsg" class="muted small terminalStatus"></div>
-          </form>
+          <!-- Admin login (hidden toggle) -->
+          <div class="adminToggle">
+            <a id="adminToggleLink">ADMIN ACCESS</a>
+          </div>
+          <div id="adminPanel">
+            <form id="adminLoginForm">
+              <div class="terminalField">
+                <label for="adminUser">Admin User:</label>
+                <input id="adminUser" name="username" type="text" autocomplete="username" />
+              </div>
+              <div class="terminalField">
+                <label for="adminPass">Admin Pass:</label>
+                <input id="adminPass" name="password" type="password" autocomplete="current-password" />
+              </div>
+              <div class="terminalActions">
+                <button type="submit" class="adminBtn">Admin Login</button>
+              </div>
+              <div id="adminMsg" class="muted small terminalStatus"></div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
 
-    <script src="/static/js/login.js?v=lg2"></script>
+    <script src="/static/js/login.js?v=corp1"></script>
   </body>
 </html>

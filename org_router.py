@@ -27,6 +27,14 @@ import org_service
 router = APIRouter()
 
 
+def _get_org_id(conn: sqlite3.Connection, user) -> str:
+    """Resolve org_id from either a corp session or a legacy user session."""
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    if corp_id:
+        return org_service.ensure_org_for_corp(conn, corp_id)
+    return _get_org_id(conn, user)
+
+
 # ── Request models ─────────────────────────────────────────────────────────────
 
 class FireTeamRequest(BaseModel):
@@ -55,7 +63,7 @@ class ProspectRequest(BaseModel):
 def api_get_org(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Get the current org state with settled finances."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     org_state = org_service.settle_org(conn, org_id)
 
     # Include research unlocks
@@ -75,7 +83,7 @@ def api_get_org(request: Request, conn: sqlite3.Connection = Depends(get_db)) ->
 def api_hire_team(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Hire a new research team."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.hire_research_team(conn, org_id)
         return {"ok": True, **result}
@@ -91,7 +99,7 @@ def api_fire_team(
 ) -> Dict[str, Any]:
     """Dismiss a research team."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.fire_research_team(conn, org_id, body.team_id)
         return {"ok": True, **result}
@@ -105,7 +113,7 @@ def api_fire_team(
 def api_boostable_items(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """List items eligible for Earth-to-LEO boost (filtered by org's unlocked techs)."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     items = org_service.get_boostable_items(conn, org_id)
     return {
         "items": items,
@@ -134,7 +142,7 @@ def api_boost_to_leo(
 ) -> Dict[str, Any]:
     """Boost an item from Earth to LEO."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.boost_to_leo(conn, org_id, body.item_id, body.quantity)
         return {"ok": True, **result}
@@ -146,7 +154,7 @@ def api_boost_to_leo(
 def api_boost_history(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Return recent LEO boost launches for the org."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     history = org_service.get_boost_history(conn, org_id)
     return {"history": history}
 
@@ -157,7 +165,7 @@ def api_boost_history(request: Request, conn: sqlite3.Connection = Depends(get_d
 def api_get_unlocks(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Get all unlocked techs for the org."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     unlocks = org_service.get_unlocked_techs(conn, org_id)
     return {"unlocks": unlocks}
 
@@ -170,7 +178,7 @@ def api_unlock_tech(
 ) -> Dict[str, Any]:
     """Unlock a tech node using research points."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.unlock_tech(
             conn, org_id, body.tech_id, body.cost, body.prerequisites or None
@@ -186,7 +194,7 @@ def api_unlock_tech(
 def api_prospected_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Get all sites prospected by the org."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     sites = org_service.get_prospected_sites(conn, org_id)
     return {"sites": sites}
 
@@ -195,7 +203,7 @@ def api_prospected_sites(request: Request, conn: sqlite3.Connection = Depends(ge
 def api_sites_in_range(ship_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """Get all surface sites within prospecting range of a ship's robonaut."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.get_sites_in_range(conn, org_id, ship_id)
         return result
@@ -211,7 +219,7 @@ def api_prospect_site(
 ) -> Dict[str, Any]:
     """Prospect a surface site with a ship that has a robonaut."""
     user = require_login(conn, request)
-    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     try:
         result = org_service.prospect_site(conn, org_id, body.ship_id, body.site_location_id)
         return {"ok": True, **result}

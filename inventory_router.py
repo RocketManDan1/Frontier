@@ -32,27 +32,41 @@ def _main():
     return main
 
 
+def _check_ship_ownership(conn, user, ship_id: str):
+    """Verify the requesting corp owns the ship. Raises 403 if not."""
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    if not corp_id:
+        return  # Admin or legacy user — no restriction
+    row = conn.execute("SELECT corp_id FROM ships WHERE id=?", (ship_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ship not found")
+    if str(row["corp_id"] or "") != corp_id:
+        raise HTTPException(status_code=403, detail="This ship belongs to another corporation")
+
+
 @router.get("/api/inventory/location/{location_id}")
 def api_location_inventory(location_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     loc_id = (location_id or "").strip()
     if not loc_id:
         raise HTTPException(status_code=400, detail="location_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
     loc = conn.execute("SELECT id,is_group,name FROM locations WHERE id=?", (loc_id,)).fetchone()
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
     if int(loc["is_group"]):
         raise HTTPException(status_code=400, detail="location_id must be a non-group location")
 
-    payload = _main().get_location_inventory_payload(conn, loc_id)
+    payload = _main().get_location_inventory_payload(conn, loc_id, corp_id=corp_id)
     payload["location_name"] = str(loc["name"])
     return payload
 
 
 @router.get("/api/inventory/ship/{ship_id}")
 def api_ship_inventory(ship_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    require_login(conn, request)
+    user = require_login(conn, request)
+    _check_ship_ownership(conn, user, ship_id)
     _main().settle_arrivals(conn, game_now_s())
     state = _main()._load_ship_inventory_state(conn, ship_id)
     row = state["row"]
@@ -79,7 +93,8 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
     if not inv_id:
         raise HTTPException(status_code=400, detail="entity_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
     _main().settle_arrivals(conn, game_now_s())
     conn.commit()
 
@@ -102,7 +117,7 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
 
     inventories: List[Dict[str, Any]] = []
     if location_id:
-        location_payload = _main().get_location_inventory_payload(conn, location_id)
+        location_payload = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id)
         inventories.append(
             {
                 "inventory_kind": "location",
@@ -114,15 +129,27 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
             }
         )
 
-        ship_rows = conn.execute(
-            """
-            SELECT id,name
-            FROM ships
-            WHERE location_id=? AND arrives_at IS NULL
-            ORDER BY name, id
-            """,
-            (location_id,),
-        ).fetchall()
+        # Only show own ships at this location
+        if corp_id:
+            ship_rows = conn.execute(
+                """
+                SELECT id,name
+                FROM ships
+                WHERE location_id=? AND arrives_at IS NULL AND corp_id=?
+                ORDER BY name, id
+                """,
+                (location_id, corp_id),
+            ).fetchall()
+        else:
+            ship_rows = conn.execute(
+                """
+                SELECT id,name
+                FROM ships
+                WHERE location_id=? AND arrives_at IS NULL
+                ORDER BY name, id
+                """,
+                (location_id,),
+            ).fetchall()
 
         for ship_row in ship_rows:
             ship_state = _main()._load_ship_inventory_state(conn, str(ship_row["id"]))
@@ -174,7 +201,9 @@ def api_stack_context_ship(ship_id: str, request: Request, conn: sqlite3.Connect
     if not sid:
         raise HTTPException(status_code=400, detail="ship_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    _check_ship_ownership(conn, user, sid)
     _main().settle_arrivals(conn, game_now_s())
     conn.commit()
 
@@ -187,7 +216,7 @@ def api_stack_context_ship(ship_id: str, request: Request, conn: sqlite3.Connect
     location_name = str(loc_row["name"])
 
     stacks: List[Dict[str, Any]] = []
-    location_payload = _main().get_location_inventory_payload(conn, location_id)
+    location_payload = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id)
     loc_items = _main()._stack_items_for_location(location_payload)
     stacks.append(
         {
@@ -277,7 +306,15 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     if target_kind == "ship_container" and not target_key:
         raise HTTPException(status_code=400, detail="target_key is required for target_kind=ship_container")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+
+    # Verify ownership of referenced ships
+    if source_kind in {"ship_container", "ship_resource"}:
+        _check_ship_ownership(conn, user, source_id)
+    if target_kind in {"ship", "ship_container"}:
+        _check_ship_ownership(conn, user, target_id)
+
     _main().settle_arrivals(conn, game_now_s())
 
     resources = _main().load_resource_catalog()
@@ -368,7 +405,7 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     else:
         source_location_id = source_id
         _main()._get_location_row(conn, source_location_id)
-        source_resource_row = _main()._resource_stack_row(conn, source_location_id, source_key)
+        source_resource_row = _main()._resource_stack_row(conn, source_location_id, source_key, corp_id=corp_id or "")
         payload = json.loads(source_resource_row["payload_json"] or "{}")
         move_resource_id = str(payload.get("resource_id") or source_resource_row["item_id"] or "").strip()
         available_mass = max(0.0, float(source_resource_row["mass_kg"] or 0.0))
@@ -517,7 +554,7 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
 
     if target_kind == "location":
         # Add the resource to the location's inventory
-        _main().add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg)
+        _main().add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg, corp_id=corp_id or "")
         destroyed_mass_kg = 0.0
     else:
         if not target_ship_state:
@@ -733,7 +770,14 @@ def api_stack_transfer(req: StackTransferReq, request: Request, conn: sqlite3.Co
     if not target_id:
         raise HTTPException(status_code=400, detail="target_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = str(user.get("corp_id") or "") if hasattr(user, "get") else ""
+    # Verify ownership of referenced ships
+    if source_kind == "ship_part":
+        _check_ship_ownership(conn, user, source_id)
+    if target_kind == "ship":
+        _check_ship_ownership(conn, user, target_id)
+
     _main().settle_arrivals(conn, game_now_s())
 
     source_location_id = ""
@@ -761,7 +805,7 @@ def api_stack_transfer(req: StackTransferReq, request: Request, conn: sqlite3.Co
         moved_part = dict(source_parts[source_part_index]) if isinstance(source_parts[source_part_index], dict) else {"item_id": "part"}
     else:
         source_location_id = str(_main()._get_location_row(conn, source_id)["id"])
-        source_part_row = _main()._part_stack_row(conn, source_location_id, source_key)
+        source_part_row = _main()._part_stack_row(conn, source_location_id, source_key, corp_id=corp_id)
         moved_part = _main()._consume_location_part_unit(conn, source_part_row)
 
     if target_kind == "ship":
@@ -823,7 +867,7 @@ def api_stack_transfer(req: StackTransferReq, request: Request, conn: sqlite3.Co
                 fuel_kg=source_fuel_kg,
             )
 
-        _main().add_part_to_location_inventory(conn, destination_location_id, moved_part, count=1.0)
+        _main().add_part_to_location_inventory(conn, destination_location_id, moved_part, count=1.0, corp_id=corp_id)
 
     conn.commit()
     return {
@@ -854,7 +898,9 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
     if not sid:
         raise HTTPException(status_code=400, detail="ship_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    _check_ship_ownership(conn, user, sid)
     m = _main()
     m.settle_arrivals(conn, game_now_s())
     conn.commit()
@@ -871,7 +917,7 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
     entities: List[Dict[str, Any]] = []
 
     # 1. Location entity
-    location_payload = m.get_location_inventory_payload(conn, location_id)
+    location_payload = m.get_location_inventory_payload(conn, location_id, corp_id=corp_id)
     loc_inv_items = m._inventory_items_for_location(location_payload)
     loc_stack_items = m._stack_items_for_location(location_payload)
     entities.append({
@@ -888,16 +934,27 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
         "stack_items": loc_stack_items,
     })
 
-    # 2. All docked ships at this location
-    ship_rows = conn.execute(
-        """
-        SELECT id, name
-        FROM ships
-        WHERE location_id=? AND arrives_at IS NULL
-        ORDER BY name, id
-        """,
-        (location_id,),
-    ).fetchall()
+    # 2. All docked ships at this location (own corp only)
+    if corp_id:
+        ship_rows = conn.execute(
+            """
+            SELECT id, name
+            FROM ships
+            WHERE location_id=? AND arrives_at IS NULL AND corp_id=?
+            ORDER BY name, id
+            """,
+            (location_id, corp_id),
+        ).fetchall()
+    else:
+        ship_rows = conn.execute(
+            """
+            SELECT id, name
+            FROM ships
+            WHERE location_id=? AND arrives_at IS NULL
+            ORDER BY name, id
+            """,
+            (location_id,),
+        ).fetchall()
 
     for sr in ship_rows:
         ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))
@@ -968,7 +1025,8 @@ def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connecti
     if not lid:
         raise HTTPException(status_code=400, detail="location_id is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
     m = _main()
     m.settle_arrivals(conn, game_now_s())
     conn.commit()
@@ -980,7 +1038,7 @@ def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connecti
     entities: List[Dict[str, Any]] = []
 
     # 1. Location entity
-    location_payload = m.get_location_inventory_payload(conn, lid)
+    location_payload = m.get_location_inventory_payload(conn, lid, corp_id=corp_id)
     loc_inv_items = m._inventory_items_for_location(location_payload)
     loc_stack_items = m._stack_items_for_location(location_payload)
     entities.append({
@@ -997,16 +1055,27 @@ def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connecti
         "stack_items": loc_stack_items,
     })
 
-    # 2. All docked ships at this location
-    ship_rows = conn.execute(
-        """
-        SELECT id, name
-        FROM ships
-        WHERE location_id=? AND arrives_at IS NULL
-        ORDER BY name, id
-        """,
-        (lid,),
-    ).fetchall()
+    # 2. All docked ships at this location (own corp only)
+    if corp_id:
+        ship_rows = conn.execute(
+            """
+            SELECT id, name
+            FROM ships
+            WHERE location_id=? AND arrives_at IS NULL AND corp_id=?
+            ORDER BY name, id
+            """,
+            (lid, corp_id),
+        ).fetchall()
+    else:
+        ship_rows = conn.execute(
+            """
+            SELECT id, name
+            FROM ships
+            WHERE location_id=? AND arrives_at IS NULL
+            ORDER BY name, id
+            """,
+            (lid,),
+        ).fetchall()
 
     for sr in ship_rows:
         ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))

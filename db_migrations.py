@@ -331,6 +331,7 @@ def _migration_0007_corporations(conn: sqlite3.Connection) -> None:
         DELETE FROM leo_boosts;
         DELETE FROM research_unlocks;
         DELETE FROM prospecting_results;
+        DELETE FROM transfer_meta WHERE key LIKE 'sim_%';
         """
     )
 

@@ -55,7 +55,7 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
     rows = conn.execute(
         f"""
         SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
-               pj.recipe_id, pj.outputs_json, pj.completes_at
+               pj.recipe_id, pj.outputs_json, pj.completes_at, pj.corp_id
         FROM production_jobs pj
         {where}
         """,
@@ -88,6 +88,7 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
         job_id = row["id"]
         loc_id = row["location_id"]
         equip_id = row["equipment_id"]
+        job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
 
         # Deliver outputs to location inventory
         outputs = json.loads(row["outputs_json"] or "[]")
@@ -100,10 +101,10 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
             if item_id in part_catalogs:
                 # It's an equipment part — add with proper name, mass, and type
                 part_entry = dict(part_catalogs[item_id])
-                _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty)
+                _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty, corp_id=job_corp_id)
             else:
                 # It's a resource or refined material
-                _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty)
+                _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty, corp_id=job_corp_id)
 
         # Mark job completed, free equipment
         conn.execute(
@@ -133,7 +134,7 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
     rows = conn.execute(
         f"""
         SELECT pj.id, pj.location_id, pj.equipment_id, pj.resource_id,
-               pj.inputs_json, pj.started_at, pj.outputs_json
+               pj.inputs_json, pj.started_at, pj.outputs_json, pj.corp_id
         FROM production_jobs pj
         {where}
         """,
@@ -150,6 +151,7 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
         loc_id = row["location_id"]
         resource_id = row["resource_id"]
         equip_id = row["equipment_id"]
+        job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
 
         if not resource_id:
             continue
@@ -185,7 +187,7 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
         mined_kg = effective_rate * elapsed_hr
 
         if mined_kg > 0.01:  # threshold to avoid tiny writes
-            _main.add_resource_to_location_inventory(conn, loc_id, resource_id, mined_kg)
+            _main.add_resource_to_location_inventory(conn, loc_id, resource_id, mined_kg, corp_id=job_corp_id)
 
             # Update last_settled
             inputs["last_settled"] = now
@@ -225,6 +227,7 @@ def deploy_equipment(
     location_id: str,
     item_id: str,
     username: str,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Deploy equipment from location inventory to the site.
@@ -257,7 +260,7 @@ def deploy_equipment(
     # Consume part from location inventory
     import main as _main
 
-    consumed = _main.consume_parts_from_location_inventory(conn, location_id, [item_id])
+    consumed = _main.consume_parts_from_location_inventory(conn, location_id, [item_id], corp_id=corp_id)
     if not consumed:
         raise ValueError(f"No '{catalog_entry.get('name', item_id)}' found in location inventory")
 
@@ -303,11 +306,11 @@ def deploy_equipment(
     conn.execute(
         """
         INSERT INTO deployed_equipment
-          (id, location_id, item_id, name, category, deployed_at, deployed_by, status, config_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?)
+          (id, location_id, item_id, name, category, deployed_at, deployed_by, status, config_json, corp_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?)
         """,
         (equip_id, location_id, item_id, catalog_entry.get("name", item_id),
-         category, now, username, _json_dumps(config)),
+         category, now, username, _json_dumps(config), corp_id),
     )
     conn.commit()
 
@@ -349,6 +352,7 @@ def undeploy_equipment(
     location_id = equip["location_id"]
     item_id = equip["item_id"]
     category = equip["category"]
+    equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
 
     # Look up the catalog entry to restore the part
     catalog_entry = _resolve_deployable_catalog_entry(item_id) or {}
@@ -363,7 +367,7 @@ def undeploy_equipment(
         "category_id": category,
         "mass_kg": catalog_entry.get("mass_kg", 0),
     }
-    _main.add_part_to_location_inventory(conn, location_id, part, count=1.0)
+    _main.add_part_to_location_inventory(conn, location_id, part, count=1.0, corp_id=equip_corp_id)
 
     # Delete equipment and its completed jobs
     conn.execute("DELETE FROM production_jobs WHERE equipment_id = ? AND status != 'active'", (equipment_id,))
@@ -486,6 +490,7 @@ def start_production_job(
     recipe_id: str,
     username: str,
     batch_count: int = 1,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Start a production job on a deployed refinery or constructor.
@@ -564,9 +569,9 @@ def start_production_job(
         row = conn.execute(
             """
             SELECT quantity FROM location_inventory_stacks
-            WHERE location_id = ? AND stack_type = 'resource' AND stack_key = ?
+            WHERE location_id = ? AND corp_id = ? AND stack_type = 'resource' AND stack_key = ?
             """,
-            (location_id, inp_id),
+            (location_id, corp_id, inp_id),
         ).fetchone()
         available = float(row["quantity"]) if row else 0.0
         if available < inp_qty - 1e-9:
@@ -597,6 +602,7 @@ def start_production_job(
             mass_delta_kg=-inp_qty,
             volume_delta_m3=-volume,
             payload_json=_json_dumps({"resource_id": inp_id}),
+            corp_id=corp_id,
         )
 
     # Calculate completion time
@@ -630,12 +636,12 @@ def start_production_job(
         """
         INSERT INTO production_jobs
           (id, location_id, equipment_id, job_type, recipe_id, status,
-           started_at, completes_at, inputs_json, outputs_json, created_by)
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
         """,
         (job_id, location_id, equipment_id, job_type, recipe_id, now, completes_at,
          _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0) * batch_count} for inp in inputs if inp.get("item_id")]),
-         _json_dumps(outputs), username),
+         _json_dumps(outputs), username, corp_id),
     )
 
     # Mark equipment active
@@ -682,6 +688,7 @@ def cancel_production_job(
     location_id = job["location_id"]
     equipment_id = job["equipment_id"]
     inputs = json.loads(job["inputs_json"] or "[]")
+    job_corp_id = str(job["corp_id"] or "") if "corp_id" in job.keys() else ""
 
     import main as _main
 
@@ -692,7 +699,7 @@ def cancel_production_job(
             inp_qty = float(inp.get("qty") or 0.0)
             refund_qty = inp_qty * refund_fraction
             if inp_id and refund_qty > 0.01:
-                _main.add_resource_to_location_inventory(conn, location_id, inp_id, refund_qty)
+                _main.add_resource_to_location_inventory(conn, location_id, inp_id, refund_qty, corp_id=job_corp_id)
 
     conn.execute(
         "UPDATE production_jobs SET status = 'cancelled', completed_at = ? WHERE id = ?",
@@ -720,6 +727,7 @@ def start_mining_job(
     equipment_id: str,
     resource_id: str,
     username: str,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Start a continuous mining job on a deployed constructor at a surface site.
@@ -749,7 +757,10 @@ def start_mining_job(
 
     # Verify the site has been prospected by the user's org
     import org_service
-    org_id = org_service.get_org_id_for_user(conn, username)
+    if corp_id:
+        org_id = org_service.get_org_id_for_corp(conn, corp_id)
+    else:
+        org_id = org_service.get_org_id_for_user(conn, username)
     if org_id:
         if not org_service.is_site_prospected(conn, org_id, location_id):
             raise ValueError("Site must be prospected before mining can begin")
@@ -785,13 +796,13 @@ def start_mining_job(
         """
         INSERT INTO production_jobs
           (id, location_id, equipment_id, job_type, resource_id, status,
-           started_at, completes_at, inputs_json, outputs_json, created_by)
-        VALUES (?, ?, ?, 'mine', ?, 'active', ?, ?, ?, ?, ?)
+           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id)
+        VALUES (?, ?, ?, 'mine', ?, 'active', ?, ?, ?, ?, ?, ?)
         """,
         (job_id, location_id, equipment_id, resource_id, now, far_future,
          _json_dumps({"last_settled": now, "total_mined_kg": 0}),
          _json_dumps([{"item_id": resource_id, "rate_kg_per_hr": effective_rate}]),
-         username),
+         username, corp_id),
     )
 
     conn.execute("UPDATE deployed_equipment SET status = 'active' WHERE id = ?", (equipment_id,))
@@ -852,7 +863,7 @@ def get_deployed_equipment(conn: sqlite3.Connection, location_id: str) -> List[D
     rows = conn.execute(
         """
         SELECT id, location_id, item_id, name, category, deployed_at,
-               deployed_by, status, config_json
+               deployed_by, status, config_json, corp_id
         FROM deployed_equipment
         WHERE location_id = ?
         ORDER BY category, name
@@ -873,6 +884,7 @@ def get_deployed_equipment(conn: sqlite3.Connection, location_id: str) -> List[D
             "deployed_by": r["deployed_by"],
             "status": r["status"],
             "config": config,
+            "corp_id": str(r["corp_id"] or ""),
         }
         result.append(entry)
     return result
@@ -977,6 +989,7 @@ def get_job_history(conn: sqlite3.Connection, location_id: str, limit: int = 20)
 def get_available_recipes_for_location(
     conn: sqlite3.Connection,
     location_id: str,
+    corp_id: str = "",
 ) -> List[Dict[str, Any]]:
     """
     Get all recipes that could be run at a location, based on deployed equipment.
@@ -993,7 +1006,7 @@ def get_available_recipes_for_location(
 
     # Gather location inventory for availability checks
     import main as _main
-    inv = _main.get_location_inventory_payload(conn, location_id)
+    inv = _main.get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
     resource_stock: Dict[str, float] = {}
     for res in inv.get("resources") or []:
         rid = str(res.get("resource_id") or res.get("item_id") or "")

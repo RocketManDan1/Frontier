@@ -11,7 +11,7 @@
 
   const SHIPYARD_DRAG_MIME = "application/x-earthmoon-shipyard-item";
 
-  let buildLocationId = "LEO";
+  let buildLocationId = "";
   let catalogParts = [];
   let garageParts = [];
   let selectedItemIds = [];
@@ -67,7 +67,7 @@
     const name = String(loc?.name || id);
     const partQty = Math.max(0, Number(loc?.inventory_part_qty || 0));
     const resourceMass = Math.max(0, Number(loc?.inventory_resource_mass_kg || 0));
-    if (id === "LEO") return `${name} (${id}) · catalog`;
+
     return `${name} (${id}) · ${partQty.toFixed(0)} parts · ${fmtMassKg(resourceMass)} resources`;
   }
 
@@ -80,8 +80,7 @@
       .sort((a, b) => {
         const aId = String(a?.id || "");
         const bId = String(b?.id || "");
-        if (aId === "LEO" && bId !== "LEO") return -1;
-        if (bId === "LEO" && aId !== "LEO") return 1;
+
         return String(a?.name || aId).localeCompare(String(b?.name || bId));
       });
     for (const loc of options) {
@@ -93,14 +92,15 @@
 
     if (!options.length) {
       const opt = document.createElement("option");
-      opt.value = "LEO";
-      opt.textContent = "LEO";
+      opt.value = "";
+      opt.textContent = "No locations with inventory";
+      opt.disabled = true;
       sourceLocationEl.appendChild(opt);
     }
 
     sourceLocationEl.value = buildLocationId;
     if (!sourceLocationEl.value) {
-      buildLocationId = String(sourceLocationEl.options[0]?.value || "LEO");
+      buildLocationId = String(sourceLocationEl.options[0]?.value || "");
       sourceLocationEl.value = buildLocationId;
     }
     updateSourceHint();
@@ -112,10 +112,6 @@
     const sourceCount = Array.isArray(buildSourceLocations) ? buildSourceLocations.length : 0;
     if (!selected) {
       sourceHintEl.innerHTML = `Part source: <b>${buildLocationId}</b> · ${sourceCount} available`;
-      return;
-    }
-    if (buildLocationId === "LEO") {
-      sourceHintEl.innerHTML = `Part source: <b>${selected.name || selected.id}</b> (catalog supply) · ${sourceCount} available`;
       return;
     }
     sourceHintEl.innerHTML = `Part source: <b>${selected.name || selected.id}</b> · inventory consumed · ${sourceCount} available`;
@@ -180,12 +176,8 @@
   }
 
   async function loadGarageForCurrentSource() {
-    if (buildLocationId === "LEO") {
-      garageParts = catalogParts.map((part) => ({
-        ...part,
-        available_qty: Number.POSITIVE_INFINITY,
-        source_kind: "catalog",
-      }));
+    if (!buildLocationId) {
+      garageParts = [];
       return;
     }
 
@@ -797,7 +789,7 @@
   }
 
   sourceLocationEl?.addEventListener("change", async () => {
-    buildLocationId = String(sourceLocationEl.value || "LEO");
+    buildLocationId = String(sourceLocationEl.value || "");
     selectedItemIds = [];
     updateSourceHint();
     await loadGarageForCurrentSource();

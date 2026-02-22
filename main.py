@@ -1503,14 +1503,15 @@ def _upsert_inventory_stack(
     mass_delta_kg: float,
     volume_delta_m3: float,
     payload_json: str,
+    corp_id: str = "",
 ) -> None:
     row = conn.execute(
         """
         SELECT quantity,mass_kg,volume_m3
         FROM location_inventory_stacks
-        WHERE location_id=? AND stack_type=? AND stack_key=?
+        WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
         """,
-        (location_id, stack_type, stack_key),
+        (location_id, corp_id, stack_type, stack_key),
     ).fetchone()
 
     now = game_now_s()
@@ -1523,10 +1524,10 @@ def _upsert_inventory_stack(
         conn.execute(
             """
             INSERT INTO location_inventory_stacks (
-              location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+              location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (location_id, stack_type, stack_key, item_id, name, qty, mass, vol, payload_json, now),
+            (location_id, corp_id, stack_type, stack_key, item_id, name, qty, mass, vol, payload_json, now),
         )
         return
 
@@ -1536,8 +1537,8 @@ def _upsert_inventory_stack(
 
     if qty <= 1e-9 and mass <= 1e-9 and vol <= 1e-9:
         conn.execute(
-            "DELETE FROM location_inventory_stacks WHERE location_id=? AND stack_type=? AND stack_key=?",
-            (location_id, stack_type, stack_key),
+            "DELETE FROM location_inventory_stacks WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?",
+            (location_id, corp_id, stack_type, stack_key),
         )
         return
 
@@ -1545,13 +1546,13 @@ def _upsert_inventory_stack(
         """
         UPDATE location_inventory_stacks
         SET item_id=?, name=?, quantity=?, mass_kg=?, volume_m3=?, payload_json=?, updated_at=?
-        WHERE location_id=? AND stack_type=? AND stack_key=?
+        WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
         """,
-        (item_id, name, qty, mass, vol, payload_json, now, location_id, stack_type, stack_key),
+        (item_id, name, qty, mass, vol, payload_json, now, location_id, corp_id, stack_type, stack_key),
     )
 
 
-def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: str, resource_id: str, mass_kg: float) -> None:
+def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: str, resource_id: str, mass_kg: float, *, corp_id: str = "") -> None:
     rid = str(resource_id or "").strip()
     amount_kg = max(0.0, float(mass_kg or 0.0))
     if not rid or amount_kg <= 0.0:
@@ -1575,10 +1576,11 @@ def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: st
         mass_delta_kg=amount_kg,
         volume_delta_m3=volume,
         payload_json=payload_json,
+        corp_id=corp_id,
     )
 
 
-def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, part: Dict[str, Any], count: float = 1.0) -> None:
+def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, part: Dict[str, Any], count: float = 1.0, *, corp_id: str = "") -> None:
     if not isinstance(part, dict):
         return
     qty = max(0.0, float(count or 0.0))
@@ -1599,19 +1601,31 @@ def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, p
         mass_delta_kg=mass_per_part * qty,
         volume_delta_m3=0.0,
         payload_json=payload_json,
+        corp_id=corp_id,
     )
 
 
-def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str) -> Dict[str, Any]:
-    rows = conn.execute(
-        """
-        SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-        FROM location_inventory_stacks
-        WHERE location_id=?
-        ORDER BY stack_type, item_id, stack_key
-        """,
-        (location_id,),
-    ).fetchall()
+def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *, corp_id: str = None) -> Dict[str, Any]:
+    if corp_id is not None:
+        rows = conn.execute(
+            """
+            SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND corp_id=?
+            ORDER BY stack_type, item_id, stack_key
+            """,
+            (location_id, corp_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=?
+            ORDER BY stack_type, item_id, stack_key
+            """,
+            (location_id,),
+        ).fetchall()
 
     resources: List[Dict[str, Any]] = []
     parts: List[Dict[str, Any]] = []
@@ -1646,20 +1660,33 @@ def consume_parts_from_location_inventory(
     conn: sqlite3.Connection,
     location_id: str,
     requested_item_ids: List[str],
+    *,
+    corp_id: str = "",
 ) -> List[Dict[str, Any]]:
     requested = [str(x).strip() for x in (requested_item_ids or []) if str(x).strip()]
     if not requested:
         return []
 
-    available_rows = conn.execute(
-        """
-        SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-        FROM location_inventory_stacks
-        WHERE location_id=? AND stack_type='part'
-        ORDER BY item_id, updated_at, stack_key
-        """,
-        (location_id,),
-    ).fetchall()
+    if corp_id:
+        available_rows = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND corp_id=? AND stack_type='part'
+            ORDER BY item_id, updated_at, stack_key
+            """,
+            (location_id, corp_id),
+        ).fetchall()
+    else:
+        available_rows = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND stack_type='part'
+            ORDER BY item_id, updated_at, stack_key
+            """,
+            (location_id,),
+        ).fetchall()
 
     by_item: Dict[str, List[sqlite3.Row]] = {}
     for row in available_rows:
@@ -1699,6 +1726,7 @@ def consume_parts_from_location_inventory(
         mass_before = max(0.0, float(chosen["mass_kg"] or 0.0))
         mass_per = mass_before / qty_before if qty_before > 0 else max(0.0, float(part.get("mass_kg") or 0.0))
 
+        row_corp_id = str(chosen["corp_id"]) if "corp_id" in chosen.keys() else corp_id
         _upsert_inventory_stack(
             conn,
             location_id=location_id,
@@ -1710,15 +1738,16 @@ def consume_parts_from_location_inventory(
             mass_delta_kg=-mass_per,
             volume_delta_m3=0.0,
             payload_json=str(chosen["payload_json"] or "{}"),
+            corp_id=row_corp_id,
         )
 
         updated_row = conn.execute(
             """
-            SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
-            WHERE location_id=? AND stack_type='part' AND stack_key=?
+            WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
             """,
-            (location_id, str(chosen["stack_key"])),
+            (location_id, row_corp_id, str(chosen["stack_key"])),
         ).fetchone()
 
         if updated_row is None:
@@ -1884,15 +1913,25 @@ def _persist_ship_inventory_state(
     )
 
 
-def _resource_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str) -> sqlite3.Row:
-    row = conn.execute(
-        """
-        SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-        FROM location_inventory_stacks
-        WHERE location_id=? AND stack_type='resource' AND stack_key=?
-        """,
-        (location_id, stack_key),
-    ).fetchone()
+def _resource_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str, *, corp_id: str = None) -> sqlite3.Row:
+    if corp_id is not None:
+        row = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND corp_id=? AND stack_type='resource' AND stack_key=?
+            """,
+            (location_id, corp_id, stack_key),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND stack_type='resource' AND stack_key=?
+            """,
+            (location_id, stack_key),
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Resource stack not found")
     return row
@@ -1907,6 +1946,7 @@ def _consume_location_resource_mass(conn: sqlite3.Connection, row: sqlite3.Row, 
     available_vol = max(0.0, float(row["volume_m3"] or 0.0))
     volume_delta = -(available_vol * (amount / available_mass)) if available_mass > 1e-9 else 0.0
 
+    row_corp_id = str(row["corp_id"]) if "corp_id" in row.keys() else ""
     _upsert_inventory_stack(
         conn,
         location_id=str(row["location_id"]),
@@ -1918,19 +1958,30 @@ def _consume_location_resource_mass(conn: sqlite3.Connection, row: sqlite3.Row, 
         mass_delta_kg=-amount,
         volume_delta_m3=volume_delta,
         payload_json=str(row["payload_json"] or "{}"),
+        corp_id=row_corp_id,
     )
     return amount
 
 
-def _part_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str) -> sqlite3.Row:
-    row = conn.execute(
-        """
-        SELECT location_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-        FROM location_inventory_stacks
-        WHERE location_id=? AND stack_type='part' AND stack_key=?
-        """,
-        (location_id, stack_key),
-    ).fetchone()
+def _part_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str, *, corp_id: str = None) -> sqlite3.Row:
+    if corp_id is not None:
+        row = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
+            """,
+            (location_id, corp_id, stack_key),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            FROM location_inventory_stacks
+            WHERE location_id=? AND stack_type='part' AND stack_key=?
+            """,
+            (location_id, stack_key),
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Part stack not found")
     return row
@@ -1958,6 +2009,7 @@ def _consume_location_part_unit(conn: sqlite3.Connection, row: sqlite3.Row) -> D
     if normalized:
         part = normalized[0]
 
+    row_corp_id = str(row["corp_id"]) if "corp_id" in row.keys() else ""
     _upsert_inventory_stack(
         conn,
         location_id=str(row["location_id"]),
@@ -1969,6 +2021,7 @@ def _consume_location_part_unit(conn: sqlite3.Connection, row: sqlite3.Row) -> D
         mass_delta_kg=-unit_mass,
         volume_delta_m3=-unit_volume,
         payload_json=str(row["payload_json"] or "{}"),
+        corp_id=row_corp_id,
     )
 
     return dict(part)

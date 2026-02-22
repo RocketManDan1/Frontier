@@ -96,6 +96,40 @@ def ensure_org_for_user(conn: sqlite3.Connection, username: str) -> str:
     return org_id
 
 
+def create_org_for_corp(conn: sqlite3.Connection, corp_id: str, corp_name: str) -> str:
+    """Create an organization linked to a corporation. Returns org_id."""
+    org_id = str(uuid.uuid4())
+    now = game_now_s()
+    conn.execute(
+        """INSERT INTO organizations (id, name, balance_usd, research_points, last_settled_at, created_at)
+           VALUES (?, ?, ?, 20.0, ?, ?)""",
+        (org_id, f"{corp_name}", MONTHLY_INCOME_USD, now, now),
+    )
+    return org_id
+
+
+def get_org_id_for_corp(conn: sqlite3.Connection, corp_id: str) -> Optional[str]:
+    """Get the org_id linked to a corporation."""
+    row = conn.execute(
+        "SELECT org_id FROM corporations WHERE id = ?", (corp_id,)
+    ).fetchone()
+    return str(row["org_id"]) if row and row["org_id"] else None
+
+
+def ensure_org_for_corp(conn: sqlite3.Connection, corp_id: str) -> str:
+    """Get or create org for a corp. Returns org_id."""
+    org_id = get_org_id_for_corp(conn, corp_id)
+    if org_id:
+        return org_id
+    # Shouldn't normally happen — org is created at registration
+    row = conn.execute("SELECT name FROM corporations WHERE id = ?", (corp_id,)).fetchone()
+    corp_name = str(row["name"]) if row else corp_id
+    org_id = create_org_for_corp(conn, corp_id, corp_name)
+    conn.execute("UPDATE corporations SET org_id = ? WHERE id = ?", (org_id, corp_id))
+    conn.commit()
+    return org_id
+
+
 def get_org_id_for_user(conn: sqlite3.Connection, username: str) -> Optional[str]:
     row = conn.execute(
         "SELECT org_id FROM org_members WHERE username = ?", (username,)

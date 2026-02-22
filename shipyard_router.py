@@ -96,7 +96,9 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     if not item_ids:
         raise HTTPException(status_code=400, detail="At least one part is required")
 
-    require_login(conn, request)
+    user = require_login(conn, request)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    corp_color = user.get("corp_color") if hasattr(user, "get") else None
 
     loc = conn.execute(
         "SELECT id,is_group FROM locations WHERE id=?",
@@ -105,11 +107,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     if not loc or int(loc["is_group"]):
         raise HTTPException(status_code=400, detail="source_location_id must be a valid non-group location")
 
-    using_inventory_source = source_location_id != "LEO"
-    if using_inventory_source:
-        parts = m.consume_parts_from_location_inventory(conn, source_location_id, item_ids)
-    else:
-        parts = m.shipyard_parts_from_item_ids(item_ids)
+    parts = m.consume_parts_from_location_inventory(conn, source_location_id, item_ids, corp_id=corp_id)
 
     if not parts:
         raise HTTPException(status_code=400, detail="No valid parts found for build")
@@ -119,6 +117,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     preferred_id = (req.ship_id or name).strip()
     ship_id = _next_available_ship_id(conn, preferred_id)
     notes = [str(n) for n in (req.notes or []) if str(n).strip()]
+    ship_color = corp_color or "#ffffff"
 
     conn.execute(
         """
@@ -126,14 +125,15 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
           id,name,shape,color,size_px,notes_json,
           location_id,from_location_id,to_location_id,departed_at,arrives_at,
           transfer_path_json,dv_planned_m_s,dock_slot,
-          parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
+          corp_id
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             ship_id,
             name,
             "triangle",
-            "#ffffff",
+            ship_color,
             12.0,
             json.dumps(notes),
             source_location_id,
@@ -149,6 +149,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
             stats["fuel_capacity_kg"],
             stats["dry_mass_kg"],
             stats["isp_s"],
+            corp_id,
         ),
     )
     conn.commit()
@@ -162,6 +163,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
             "parts": parts,
             "notes": notes,
             "source_location_id": source_location_id,
+            "corp_id": corp_id,
             **stats,
             "status": "docked",
         },

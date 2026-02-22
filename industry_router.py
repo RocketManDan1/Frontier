@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from auth_service import require_login
 from db import get_db
 import industry_service
+import org_service
 
 router = APIRouter(tags=["industry"])
 
@@ -30,6 +31,19 @@ def _main():
     """Lazy import to avoid circular dependency."""
     import main
     return main
+
+
+def _get_corp_id(user) -> str:
+    """Extract corp_id from user session, or empty string for admin."""
+    return str(user.get("corp_id") or "") if user else ""
+
+
+def _get_org_id(conn, user) -> str:
+    """Get org_id from corp session or fallback to user-based org."""
+    corp_id = _get_corp_id(user)
+    if corp_id:
+        return org_service.get_org_id_for_corp(conn, corp_id) or ""
+    return org_service.ensure_org_for_user(conn, user["username"])
 
 
 # ── Request Models ─────────────────────────────────────────────────────────────
@@ -227,6 +241,7 @@ def api_site_detail(
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
+    corp_id = _get_corp_id(user)
     metadata = _main()._location_metadata_by_id()
     meta = metadata.get(location_id, {})
 
@@ -236,8 +251,8 @@ def api_site_detail(
         (location_id,),
     ).fetchone()
 
-    # Inventory
-    inv = _main().get_location_inventory_payload(conn, location_id)
+    # Inventory — filtered by corp
+    inv = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
 
     # Deployed equipment
     equipment = industry_service.get_deployed_equipment(conn, location_id)
@@ -271,8 +286,7 @@ def api_site_detail(
             "gravity_m_s2": float(site["gravity_m_s2"]),
         }
         # Only show minable resources if the user's org has prospected this site
-        import org_service
-        org_id = org_service.get_org_id_for_user(conn, user["username"])
+        org_id = _get_org_id(conn, user)
         site_prospected = org_id and org_service.is_site_prospected(conn, org_id, location_id)
         result["is_prospected"] = bool(site_prospected)
         result["minable_resources"] = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
@@ -294,11 +308,12 @@ def api_industry_overview(
     _main().settle_arrivals(conn, _main().game_now_s())
     industry_service.settle_industry(conn, location_id)
 
+    corp_id = _get_corp_id(user)
     equipment = industry_service.get_deployed_equipment(conn, location_id)
     active_jobs = industry_service.get_active_jobs(conn, location_id)
     history = industry_service.get_job_history(conn, location_id)
-    available_recipes = industry_service.get_available_recipes_for_location(conn, location_id)
-    inv = _main().get_location_inventory_payload(conn, location_id)
+    available_recipes = industry_service.get_available_recipes_for_location(conn, location_id, corp_id=corp_id)
+    inv = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
 
     # Surface site info for mining
     site = conn.execute(
@@ -306,8 +321,7 @@ def api_industry_overview(
         (location_id,),
     ).fetchone()
     # Only show minable resources if the user's org has prospected this site
-    import org_service
-    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    org_id = _get_org_id(conn, user)
     site_prospected = site and org_id and org_service.is_site_prospected(conn, org_id, location_id)
     minable = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
 
@@ -347,9 +361,10 @@ def api_deploy_equipment(
 ) -> Dict[str, Any]:
     """Deploy a refinery or constructor from location inventory."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
     try:
         result = industry_service.deploy_equipment(
-            conn, body.location_id, body.item_id, user["username"]
+            conn, body.location_id, body.item_id, user["username"], corp_id=corp_id
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -382,11 +397,12 @@ def api_start_job(
 ) -> Dict[str, Any]:
     """Start a refinery production job."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
     industry_service.settle_industry(conn)
     try:
         result = industry_service.start_production_job(
             conn, body.equipment_id, body.recipe_id, user["username"],
-            batch_count=body.batch_count,
+            batch_count=body.batch_count, corp_id=corp_id,
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -419,10 +435,11 @@ def api_start_mining(
 ) -> Dict[str, Any]:
     """Start mining a resource at a surface site."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
     industry_service.settle_industry(conn)
     try:
         result = industry_service.start_mining_job(
-            conn, body.equipment_id, body.resource_id, user["username"]
+            conn, body.equipment_id, body.resource_id, user["username"], corp_id=corp_id
         )
         return {"ok": True, **result}
     except ValueError as e:

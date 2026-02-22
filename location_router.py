@@ -96,7 +96,11 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
 
     # Get org for prospecting visibility
     import org_service
-    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    corp_id = str(user.get("corp_id") or "") if hasattr(user, "get") else ""
+    if corp_id:
+        org_id = org_service.get_org_id_for_corp(conn, corp_id)
+    else:
+        org_id = org_service.get_org_id_for_user(conn, user["username"])
 
     # Get prospected site IDs for this org
     prospected_sites: set = set()
@@ -158,7 +162,11 @@ def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connec
     user = require_login(conn, request)
 
     import org_service
-    org_id = org_service.get_org_id_for_user(conn, user["username"])
+    corp_id = str(user.get("corp_id") or "") if hasattr(user, "get") else ""
+    if corp_id:
+        org_id = org_service.get_org_id_for_corp(conn, corp_id)
+    else:
+        org_id = org_service.get_org_id_for_user(conn, user["username"])
 
     site = conn.execute(
         """
