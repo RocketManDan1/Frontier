@@ -2,7 +2,7 @@
   "id": "scn_1_pioneer",
   "name": "SCN-1 \"Pioneer\"",
   "research_node": "early_solid_core_ntr",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "solid_core",
   "mass_t": 20.0,
   "performance": {

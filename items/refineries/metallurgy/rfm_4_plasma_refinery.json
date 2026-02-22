@@ -2,7 +2,7 @@
   "id": "rfm_4_plasma_refinery",
   "name": "RFM-4 \"Plasma Refinery\"",
   "research_node": "plasma_metallurgy",
-  "research_unlock_level": 4,
+  "tech_level": 4,
   "branch": "metallurgy",
   "mass_t": 300,
   "power_requirements": {

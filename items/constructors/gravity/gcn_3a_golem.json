@@ -2,7 +2,7 @@
   "id": "gcn_3a_golem",
   "name": "GCN-3A \"Golem\"",
   "research_node": "laser_plasma_gravity_construction",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "laser_ablation_ebf",
   "mass_t": 45.0,
   "operational_environment": "surface_gravity",

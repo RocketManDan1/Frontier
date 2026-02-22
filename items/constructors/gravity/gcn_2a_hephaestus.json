@@ -2,7 +2,7 @@
   "id": "gcn_2a_hephaestus",
   "name": "GCN-2A \"Hephaestus\"",
   "research_node": "vibrothermal_gravity_construction",
-  "research_unlock_level": 1,
+  "tech_level": 2,
   "branch": "vibro_thermal_excavation",
   "mass_t": 10.0,
   "operational_environment": "surface_gravity",

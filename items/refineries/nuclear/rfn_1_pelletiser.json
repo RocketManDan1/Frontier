@@ -2,7 +2,7 @@
   "id": "rfn_1_pelletiser",
   "name": "RFN-1 \"Pelletiser\"",
   "research_node": "basic_nuclear_fuels",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "nuclear_exotic",
   "mass_t": 12,
   "power_requirements": {

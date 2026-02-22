@@ -2,7 +2,7 @@
   "id": "gcn_1a_antaeus",
   "name": "GCN-1A \"Antaeus\"",
   "research_node": "early_gravity_construction",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "mechanical_excavation",
   "mass_t": 2.5,
   "operational_environment": "surface_gravity",

@@ -2,7 +2,7 @@
   "id": "rfm_3_vacuum_arc",
   "name": "RFM-3 \"Vacuum Arc\"",
   "research_node": "electron_beam_metallurgy",
-  "research_unlock_level": 3,
+  "tech_level": 3,
   "branch": "metallurgy",
   "mass_t": 110,
   "power_requirements": {

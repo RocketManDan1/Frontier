@@ -2,7 +2,7 @@
   "id": "cgn_1_helios",
   "name": "CGN-1 \"Helios\"",
   "research_node": "closed_gas_cycle_ntr",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "gas_core_closed",
   "mass_t": 40.0,
   "performance": {

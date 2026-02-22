@@ -2,7 +2,7 @@
   "id": "gcn_2b_kyklops",
   "name": "GCN-2B \"Kyklops\"",
   "research_node": "vibrothermal_gravity_construction",
-  "research_unlock_level": 2,
+  "tech_level": 2.5,
   "branch": "laser_vibro_excavation",
   "mass_t": 20.0,
   "operational_environment": "surface_gravity",

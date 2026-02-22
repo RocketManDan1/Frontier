@@ -2,7 +2,7 @@
   "id": "sige_segmented_crane",
   "name": "SiGe-Segmented \"Crane\"",
   "research_node": "advanced_solid_state_thermoelectric",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "cascade",
   "mass_t": 24.5,
   "input": {

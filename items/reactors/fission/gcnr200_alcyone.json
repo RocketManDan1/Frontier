@@ -2,7 +2,7 @@
   "id": "gcnr200_alcyone",
   "name": "GCNR-200 \"Alcyone\"",
   "research_node": "gas_core_fission",
-  "research_unlock_level": 1,
+  "tech_level": 4,
   "branch": "gas_core",
   "mass_t": 3.8,
   "output": {

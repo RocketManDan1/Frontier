@@ -2,7 +2,7 @@
   "id": "rfn_4_ion_plasma_sep",
   "name": "RFN-4 \"Ion Plasma Sep\"",
   "research_node": "plasma_isotope_separation",
-  "research_unlock_level": 4,
+  "tech_level": 4,
   "branch": "nuclear_exotic",
   "mass_t": 260,
   "power_requirements": {

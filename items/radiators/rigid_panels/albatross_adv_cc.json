@@ -2,7 +2,7 @@
   "id": "albatross_adv_cc",
   "name": "Adv. C/C Panel \"Albatross\"",
   "research_node": "high_temp_rigid_panel_radiator",
-  "research_unlock_level": 3,
+  "tech_level": 4,
   "branch": "advanced_carbon_composite",
   "mass_t": 29.5,
   "substrate": "advanced_carbon_carbon_composite",

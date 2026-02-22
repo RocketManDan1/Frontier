@@ -2,7 +2,7 @@
   "id": "stork_cc_refractory",
   "name": "C/C Refractory Panel \"Stork\"",
   "research_node": "high_temp_rigid_panel_radiator",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "carbon_composite",
   "mass_t": 27.5,
   "substrate": "carbon_carbon_composite",

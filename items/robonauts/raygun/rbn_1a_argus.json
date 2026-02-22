@@ -2,7 +2,7 @@
   "id": "rbn_1a_argus",
   "name": "RBN-1A \"Argus\"",
   "research_node": "early_radar_laser_prospecting",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "mmwave_radar",
   "mass_t": 1.5,
   "power_requirements": {

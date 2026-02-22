@@ -2,7 +2,7 @@
   "id": "ascn_2_atlas",
   "name": "ASCN-2 \"Atlas\"",
   "research_node": "advanced_solid_core_ntr",
-  "research_unlock_level": 4,
+  "tech_level": 2.5,
   "branch": "solid_core",
   "mass_t": 35.0,
   "performance": {

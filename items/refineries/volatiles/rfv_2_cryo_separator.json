@@ -2,7 +2,7 @@
   "id": "rfv_2_cryo_separator",
   "name": "RFV-2 \"Cryo Separator\"",
   "research_node": "cryogenic_separation",
-  "research_unlock_level": 2,
+  "tech_level": 2,
   "branch": "volatiles_cryogenics",
   "mass_t": 16,
   "power_requirements": {

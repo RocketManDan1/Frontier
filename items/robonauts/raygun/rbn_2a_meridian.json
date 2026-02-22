@@ -2,7 +2,7 @@
   "id": "rbn_2a_meridian",
   "name": "RBN-2A \"Meridian\"",
   "research_node": "uv_laser_xrf_prospecting",
-  "research_unlock_level": 1,
+  "tech_level": 2,
   "branch": "hyperspectral_cw_laser",
   "mass_t": 7.5,
   "power_requirements": {

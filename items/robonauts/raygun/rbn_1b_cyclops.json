@@ -2,7 +2,7 @@
   "id": "rbn_1b_cyclops",
   "name": "RBN-1B \"Cyclops\"",
   "research_node": "early_radar_laser_prospecting",
-  "research_unlock_level": 2,
+  "tech_level": 1.5,
   "branch": "mmwave_radar",
   "mass_t": 3.2,
   "power_requirements": {

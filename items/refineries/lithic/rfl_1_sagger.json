@@ -2,7 +2,7 @@
   "id": "rfl_1_sagger",
   "name": "RFL-1 \"Sagger\"",
   "research_node": "basic_material_processing",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "lithic_processing",
   "mass_t": 8,
   "power_requirements": {

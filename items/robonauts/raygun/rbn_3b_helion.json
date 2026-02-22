@@ -2,7 +2,7 @@
   "id": "rbn_3b_helion",
   "name": "RBN-3B \"Helion\"",
   "research_node": "free_electron_laser_prospecting",
-  "research_unlock_level": 2,
+  "tech_level": 3.5,
   "branch": "coherent_xray_neutron",
   "mass_t": 95.0,
   "power_requirements": {

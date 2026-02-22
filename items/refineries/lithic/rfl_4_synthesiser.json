@@ -2,7 +2,7 @@
   "id": "rfl_4_synthesiser",
   "name": "RFL-4 \"Synthesiser\"",
   "research_node": "molecular_deposition",
-  "research_unlock_level": 4,
+  "tech_level": 4,
   "branch": "lithic_processing",
   "mass_t": 180,
   "power_requirements": {

@@ -2,7 +2,7 @@
   "id": "rbn_4a_quasar",
   "name": "RBN-4A \"Quasar\"",
   "research_node": "coherent_gamma_prospecting",
-  "research_unlock_level": 1,
+  "tech_level": 4,
   "branch": "coherent_gamma_emitter",
   "mass_t": 220.0,
   "power_requirements": {

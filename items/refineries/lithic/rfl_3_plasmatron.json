@@ -2,7 +2,7 @@
   "id": "rfl_3_plasmatron",
   "name": "RFL-3 \"Plasmatron\"",
   "research_node": "plasma_synthesis",
-  "research_unlock_level": 3,
+  "tech_level": 3,
   "branch": "lithic_processing",
   "mass_t": 60,
   "power_requirements": {

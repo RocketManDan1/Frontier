@@ -2,7 +2,7 @@
   "id": "gcn_3b_archon",
   "name": "GCN-3B \"Archon\"",
   "research_node": "laser_plasma_gravity_construction",
-  "research_unlock_level": 2,
+  "tech_level": 3.5,
   "branch": "plasma_torch_multiaxis",
   "mass_t": 85.0,
   "operational_environment": "surface_gravity",

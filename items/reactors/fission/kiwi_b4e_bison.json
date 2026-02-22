@@ -2,7 +2,7 @@
   "id": "kiwi_b4e_bison",
   "name": "KIWI-B4E \"Bison\"",
   "research_node": "early_solid_core_fission",
-  "research_unlock_level": 4,
+  "tech_level": 1.5,
   "branch": "solid_core",
   "mass_t": 0.95,
   "output": {

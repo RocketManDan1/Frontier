@@ -2,7 +2,7 @@
   "id": "nerva2_aegis",
   "name": "NERVA-2 \"Aegis\"",
   "research_node": "high_power_solid_core_fission",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "solid_core",
   "mass_t": 1.8,
   "output": {

@@ -2,7 +2,7 @@
   "id": "advanced_skut_egret",
   "name": "ASC-Skutterudite \"Egret\"",
   "research_node": "advanced_solid_state_thermoelectric",
-  "research_unlock_level": 3,
+  "tech_level": 4,
   "branch": "advanced_solid_state",
   "mass_t": 42.0,
   "input": {

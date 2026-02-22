@@ -2,7 +2,7 @@
   "id": "snap_sige_wren",
   "name": "SNAP-SiGe \"Wren\"",
   "research_node": "early_thermoelectric",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "silicon_germanium",
   "mass_t": 5.0,
   "input": {

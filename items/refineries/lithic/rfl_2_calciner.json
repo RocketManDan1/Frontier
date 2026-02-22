@@ -2,7 +2,7 @@
   "id": "rfl_2_calciner",
   "name": "RFL-2 \"Calciner\"",
   "research_node": "advanced_ceramics_fabrication",
-  "research_unlock_level": 2,
+  "tech_level": 2,
   "branch": "lithic_processing",
   "mass_t": 22,
   "power_requirements": {

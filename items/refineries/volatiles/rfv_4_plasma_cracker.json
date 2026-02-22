@@ -2,7 +2,7 @@
   "id": "rfv_4_plasma_cracker",
   "name": "RFV-4 \"Plasma Cracker\"",
   "research_node": "thermochemical_cracking",
-  "research_unlock_level": 4,
+  "tech_level": 4,
   "branch": "volatiles_cryogenics",
   "mass_t": 140,
   "power_requirements": {

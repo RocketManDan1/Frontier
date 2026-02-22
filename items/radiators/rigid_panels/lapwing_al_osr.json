@@ -2,7 +2,7 @@
   "id": "lapwing_al_osr",
   "name": "Al/OSR Panel \"Lapwing\"",
   "research_node": "early_rigid_panel_radiator",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "aluminum",
   "mass_t": 14.5,
   "substrate": "aluminum_honeycomb",

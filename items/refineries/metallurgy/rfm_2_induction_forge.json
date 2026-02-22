@@ -2,7 +2,7 @@
   "id": "rfm_2_induction_forge",
   "name": "RFM-2 \"Induction Forge\"",
   "research_node": "vacuum_metallurgy",
-  "research_unlock_level": 2,
+  "tech_level": 2,
   "branch": "metallurgy",
   "mass_t": 38,
   "power_requirements": {

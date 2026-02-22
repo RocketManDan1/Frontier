@@ -2,7 +2,7 @@
   "id": "rbn_3a_solaris",
   "name": "RBN-3A \"Solaris\"",
   "research_node": "free_electron_laser_prospecting",
-  "research_unlock_level": 1,
+  "tech_level": 3,
   "branch": "free_electron_laser",
   "mass_t": 48.0,
   "power_requirements": {

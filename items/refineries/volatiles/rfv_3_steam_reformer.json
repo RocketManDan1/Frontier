@@ -2,7 +2,7 @@
   "id": "rfv_3_steam_reformer",
   "name": "RFV-3 \"Steam Reformer\"",
   "research_node": "catalytic_reforming",
-  "research_unlock_level": 3,
+  "tech_level": 3,
   "branch": "volatiles_cryogenics",
   "mass_t": 50,
   "power_requirements": {

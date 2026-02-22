@@ -2,7 +2,7 @@
   "id": "gcn_4b_demiurge",
   "name": "GCN-4B \"Demiurge\"",
   "research_node": "industrial_plasma_gravity_construction",
-  "research_unlock_level": 2,
+  "tech_level": 4.5,
   "branch": "molecular_plasma_fabrication",
   "mass_t": 350.0,
   "operational_environment": "surface_gravity",

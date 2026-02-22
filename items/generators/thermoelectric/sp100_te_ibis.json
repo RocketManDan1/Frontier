@@ -2,7 +2,7 @@
   "id": "sp100_te_ibis",
   "name": "SP-100 TE \"Ibis\"",
   "research_node": "advanced_thermoelectric",
-  "research_unlock_level": 1,
+  "tech_level": 2,
   "branch": "silicon_germanium",
   "mass_t": 12.0,
   "input": {

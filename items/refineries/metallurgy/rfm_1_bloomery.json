@@ -2,7 +2,7 @@
   "id": "rfm_1_bloomery",
   "name": "RFM-1 \"Bloomery\"",
   "research_node": "basic_metallurgy",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "metallurgy",
   "mass_t": 14,
   "power_requirements": {

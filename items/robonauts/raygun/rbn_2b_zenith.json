@@ -2,7 +2,7 @@
   "id": "rbn_2b_zenith",
   "name": "RBN-2B \"Zenith\"",
   "research_node": "uv_laser_xrf_prospecting",
-  "research_unlock_level": 2,
+  "tech_level": 2.5,
   "branch": "xrf_pulsed_laser",
   "mass_t": 15.0,
   "power_requirements": {

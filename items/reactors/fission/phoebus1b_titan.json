@@ -2,7 +2,7 @@
   "id": "phoebus1b_titan",
   "name": "Phoebus-1B \"Titan\"",
   "research_node": "advanced_solid_core_fission",
-  "research_unlock_level": 4,
+  "tech_level": 2.5,
   "branch": "solid_core",
   "mass_t": 1.02,
   "output": {

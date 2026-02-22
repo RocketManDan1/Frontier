@@ -2,7 +2,7 @@
   "id": "gcnr4000_hyperion",
   "name": "GCNR-4000 \"Hyperion\"",
   "research_node": "gas_core_fission",
-  "research_unlock_level": 4,
+  "tech_level": 4.5,
   "branch": "gas_core",
   "mass_t": 7.5,
   "output": {

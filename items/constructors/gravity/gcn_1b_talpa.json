@@ -2,7 +2,7 @@
   "id": "gcn_1b_talpa",
   "name": "GCN-1B \"Talpa\"",
   "research_node": "early_gravity_construction",
-  "research_unlock_level": 2,
+  "tech_level": 1.5,
   "branch": "percussive_sintering",
   "mass_t": 4.8,
   "operational_environment": "surface_gravity",

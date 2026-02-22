@@ -2,7 +2,7 @@
   "id": "rfn_3_centrifuge_cascade",
   "name": "RFN-3 \"Centrifuge Cascade\"",
   "research_node": "centrifuge_enrichment",
-  "research_unlock_level": 3,
+  "tech_level": 3,
   "branch": "nuclear_exotic",
   "mass_t": 95,
   "power_requirements": {

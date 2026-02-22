@@ -2,7 +2,7 @@
   "id": "pewee1_sparrow",
   "name": "PEWEE-1 \"Sparrow\"",
   "research_node": "advanced_solid_core_fission",
-  "research_unlock_level": 1,
+  "tech_level": 2,
   "branch": "solid_core",
   "mass_t": 0.647,
   "output": {

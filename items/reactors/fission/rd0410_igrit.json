@@ -2,7 +2,7 @@
   "id": "rd0410_igrit",
   "name": "RD-0410 \"Igrit\"",
   "research_node": "early_solid_core_fission",
-  "research_unlock_level": 1,
+  "tech_level": 1,
   "branch": "solid_core",
   "mass_t": 0.52,
   "output": {

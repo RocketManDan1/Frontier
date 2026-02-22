@@ -2,7 +2,7 @@
   "id": "ascn_1_venture",
   "name": "ASCN-1 \"Venture\"",
   "research_node": "advanced_solid_core_ntr",
-  "research_unlock_level": 1,
+  "tech_level": 2,
   "branch": "solid_core",
   "mass_t": 24.0,
   "performance": {

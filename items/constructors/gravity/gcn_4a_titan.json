@@ -2,7 +2,7 @@
   "id": "gcn_4a_titan",
   "name": "GCN-4A \"Titan\"",
   "research_node": "industrial_plasma_gravity_construction",
-  "research_unlock_level": 1,
+  "tech_level": 4,
   "branch": "plasma_arc_disaggregation",
   "mass_t": 180.0,
   "operational_environment": "surface_gravity",

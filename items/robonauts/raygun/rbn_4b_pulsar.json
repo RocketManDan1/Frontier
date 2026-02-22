@@ -2,7 +2,7 @@
   "id": "rbn_4b_pulsar",
   "name": "RBN-4B \"Pulsar\"",
   "research_node": "coherent_gamma_prospecting",
-  "research_unlock_level": 2,
+  "tech_level": 4.5,
   "branch": "fusion_pumped_xray_gamma",
   "mass_t": 420.0,
   "power_requirements": {
