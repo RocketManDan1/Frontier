@@ -373,7 +373,8 @@ def _normalize_main_from_item(entry: Dict[str, Any]) -> Dict[str, Any]:
         "isp_s": performance.get("isp_s"),
         "max_thrust_kN": performance.get("max_thrust_kN"),
         "branch": str(entry.get("branch") or "core"),
-        "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+        "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+        "research_node": str(entry.get("research_node") or ""),
         "consumables": {
             "reaction_mass": str(consumables.get("reaction_mass") or ""),
             "fissiles": {
@@ -503,7 +504,8 @@ def load_thruster_main_catalog() -> Dict[str, Dict[str, Any]]:
                 "thrust_kn": max(0.0, float(main.get("max_thrust_kN") or 0.0)),
                 "thermal_mw": float(main.get("P_req_mw_th") or 0.0),
                 "reaction_mass": str((main.get("consumables") or {}).get("reaction_mass") or ""),
-                "research_unlock_level": max(1, int(main.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(main.get("tech_level") or 1)),
+                "research_node": str(main.get("research_node") or ""),
             }
 
     return catalog
@@ -607,7 +609,8 @@ def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
                 "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
                 "thermal_mw": max(0.0, float(output.get("thermal_mw") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -658,7 +661,8 @@ def load_generator_catalog() -> Dict[str, Dict[str, Any]]:
                 "conversion_efficiency": efficiency,
                 "waste_heat_mw": waste_heat_mw,
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -702,7 +706,8 @@ def load_radiator_catalog() -> Dict[str, Dict[str, Any]]:
                 "heat_rejection_mw": max(0.0, float(out.get("heat_rejection_mw") or 0.0)),
                 "operating_temp_k": max(0.0, float(entry.get("operating_temp_k") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -750,7 +755,8 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
                 "melt_rate_t_per_hr": max(0.0, float(perf.get("melt_rate_t_per_hr") or 0.0)),
                 "emission_type": str(perf.get("emission_type") or ""),
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -799,7 +805,8 @@ def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
                 "operational_environment": str(entry.get("operational_environment") or "surface_gravity"),
                 "min_surface_gravity_ms2": max(0.0, float(entry.get("min_surface_gravity_ms2") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -847,7 +854,8 @@ def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
                 "max_concurrent_recipes": max(1, int(perf.get("max_concurrent_recipes") or 1)),
                 "specialization": str(perf.get("specialization") or ""),
                 "branch": str(entry.get("branch") or ""),
-                "research_unlock_level": max(1, int(entry.get("research_unlock_level") or 1)),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
 
@@ -1353,8 +1361,33 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
     Each node costs Research Points and unlocks specific catalog items.
 
     The tree is organized by category (thrusters, reactors, etc.) and within
-    each category, nodes are ordered by research_unlock_level.
+    each category, nodes are ordered by tech_level.
+
+    Categories may contain multiple *subtrees* (e.g. Refineries has four
+    vertical paths — Lithic, Metallurgy, Nuclear, Volatiles — all shown
+    side-by-side under one tab).
     """
+    # ── Map refinery branches to subtree IDs ──────────────────────────────
+    _REFINERY_BRANCH_TO_SUB = {
+        "lithic_processing": "refineries_lithic",
+        "metallurgy": "refineries_metallurgy",
+        "nuclear_exotic": "refineries_nuclear",
+        "volatiles_cryogenics": "refineries_volatiles",
+    }
+    _REFINERY_SUBTREE_LABELS = {
+        "refineries_lithic": "Lithic",
+        "refineries_metallurgy": "Metallurgy",
+        "refineries_nuclear": "Nuclear",
+        "refineries_volatiles": "Volatiles",
+    }
+    # Ordered list of refinery subtree IDs for consistent layout
+    _REFINERY_SUBTREE_ORDER = [
+        "refineries_lithic",
+        "refineries_metallurgy",
+        "refineries_nuclear",
+        "refineries_volatiles",
+    ]
+
     # ── Collect all items from all catalogs ────────────────────────────────
     all_items: Dict[str, List[Dict[str, Any]]] = {}
     loaders = [
@@ -1370,8 +1403,15 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
     for cat_id, loader_fn in loaders:
         catalog = loader_fn()
         for item_id, item in catalog.items():
-            tech_level = int(item.get("research_unlock_level") or 1)
+            tech_level = float(item.get("tech_level") or 1)
             research_node = str(item.get("research_node") or "").strip()
+
+            # Refineries are split by branch into separate subtrees
+            actual_key = cat_id
+            if cat_id == "refineries":
+                branch = str(item.get("branch") or "")
+                actual_key = _REFINERY_BRANCH_TO_SUB.get(branch, "refineries")
+
             entry = {
                 "item_id": item_id,
                 "name": item.get("name", item_id),
@@ -1379,7 +1419,7 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
                 "tech_level": tech_level,
                 "research_node": research_node,
                 "branch": str(item.get("branch") or ""),
-                "category": cat_id,
+                "category": actual_key,
             }
             # Add category-specific stats
             if cat_id == "thrusters":
@@ -1400,23 +1440,37 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
                 entry.update({
                     "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0),
                 })
-            if cat_id not in all_items:
-                all_items[cat_id] = []
-            all_items[cat_id].append(entry)
+            if actual_key not in all_items:
+                all_items[actual_key] = []
+            all_items[actual_key].append(entry)
 
-    # ── Build tech tree per category ────────────────────────────────────────
-    # Research point costs per tech level
-    RP_COSTS = {1: 5, 2: 10, 3: 20, 4: 40, 5: 80, 6: 120, 7: 160, 8: 200, 9: 250, 10: 300}
+    # ── Research point costs per tech level ─────────────────────────────────
+    RP_COSTS: Dict[float, int] = {
+        1: 5, 1.5: 8,
+        2: 10, 2.5: 15,
+        3: 20, 3.5: 30,
+        4: 40, 4.5: 60,
+    }
 
-    categories: List[Dict[str, Any]] = []
+    def _fmt_level(level: float) -> str:
+        """Format a tech level for use in node IDs (e.g. 1, 1.5)."""
+        return str(int(level)) if level == int(level) else str(level)
 
-    for cat in RESEARCH_CATEGORIES:
-        cat_id = cat["id"]
-        cat_label = cat["label"]
-        items = all_items.get(cat_id, [])
+    def _format_node_name(research_node: str) -> str:
+        """Convert a research_node slug to a human-readable title."""
+        if not research_node:
+            return "Unknown"
+        return research_node.replace("_", " ").title()
 
-        # Group items by tech level
-        by_level: Dict[int, List[Dict[str, Any]]] = {}
+    def _build_nodes_and_edges(
+        items: List[Dict[str, Any]],
+        id_prefix: str,
+        x_offset: int = 60,
+    ) -> tuple:
+        """Build a vertical path of nodes+edges from a list of items.
+        Returns (nodes_list, edges_list).
+        """
+        by_level: Dict[float, List[Dict[str, Any]]] = {}
         for item in items:
             lvl = item["tech_level"]
             if lvl not in by_level:
@@ -1425,52 +1479,91 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
 
         levels_sorted = sorted(by_level.keys())
         if not levels_sorted:
-            # Placeholder for categories with no items yet
-            levels_sorted = [1, 2, 3]
+            levels_sorted = [1.0, 2.0, 3.0]
 
         nodes: List[Dict[str, Any]] = []
         edges: List[List[str]] = []
-
-        _level_names = {
-            1: "Fundamentals",
-            2: "Advanced Systems",
-            3: "High Performance",
-            4: "Cutting Edge",
-            5: "Experimental",
-            6: "Next Generation",
-            7: "Prototype",
-            8: "Theoretical",
-            9: "Speculative",
-            10: "Beyond",
-        }
+        seen_research_nodes: Dict[str, int] = {}
 
         for idx, level in enumerate(levels_sorted):
-            node_id = f"{cat_id}_lvl_{level}"
+            node_id = f"{id_prefix}_lvl_{_fmt_level(level)}"
             level_items = by_level.get(level, [])
-            rp_cost = RP_COSTS.get(level, level * 30)
-            level_name = _level_names.get(level, f"Level {level}")
+            rp_cost = RP_COSTS.get(level, int(level) * 30)
+
+            research_node_slug = ""
+            if level_items:
+                research_node_slug = level_items[0].get("research_node", "")
+            node_name = _format_node_name(research_node_slug)
+
+            if research_node_slug:
+                count = seen_research_nodes.get(research_node_slug, 0)
+                seen_research_nodes[research_node_slug] = count + 1
+                if count > 0:
+                    node_name += " II"
 
             node = {
                 "id": node_id,
-                "name": f"{cat_label} {level_name}",
+                "name": node_name,
                 "tech_level": level,
                 "cost_rp": rp_cost,
                 "items": sorted(level_items, key=lambda x: x.get("name", "")),
-                "y": idx * 180,  # vertical layout spacing
-                "x": 60,
+                "y": idx * 180,
+                "x": x_offset,
             }
             nodes.append(node)
 
             if idx > 0:
-                prev_node_id = f"{cat_id}_lvl_{levels_sorted[idx - 1]}"
+                prev_node_id = f"{id_prefix}_lvl_{_fmt_level(levels_sorted[idx - 1])}"
                 edges.append([prev_node_id, node_id])
 
-        categories.append({
-            "id": cat_id,
-            "label": cat_label,
-            "nodes": nodes,
-            "edges": edges,
-        })
+        return nodes, edges
+
+    # ── Build tech tree per category ────────────────────────────────────────
+    categories: List[Dict[str, Any]] = []
+    SUBTREE_COLUMN_WIDTH = 340  # horizontal spacing between subtree columns
+
+    for cat in RESEARCH_CATEGORIES:
+        cat_id = cat["id"]
+        cat_label = cat["label"]
+
+        # ── Check if this category has subtrees ─────────────────────────
+        if cat_id == "refineries":
+            # Build multiple subtrees for refinery branches
+            subtrees: List[Dict[str, Any]] = []
+            all_nodes: List[Dict[str, Any]] = []
+            all_edges: List[List[str]] = []
+
+            for col_idx, sub_id in enumerate(_REFINERY_SUBTREE_ORDER):
+                sub_items = all_items.get(sub_id, [])
+                x_offset = 60 + col_idx * SUBTREE_COLUMN_WIDTH
+                nodes, edges = _build_nodes_and_edges(sub_items, sub_id, x_offset)
+                subtrees.append({
+                    "id": sub_id,
+                    "label": _REFINERY_SUBTREE_LABELS.get(sub_id, sub_id),
+                    "nodes": nodes,
+                    "edges": edges,
+                    "x_offset": x_offset,
+                })
+                all_nodes.extend(nodes)
+                all_edges.extend(edges)
+
+            categories.append({
+                "id": cat_id,
+                "label": cat_label,
+                "nodes": all_nodes,
+                "edges": all_edges,
+                "subtrees": subtrees,
+            })
+        else:
+            # Single vertical path
+            items = all_items.get(cat_id, [])
+            nodes, edges = _build_nodes_and_edges(items, cat_id)
+            categories.append({
+                "id": cat_id,
+                "label": cat_label,
+                "nodes": nodes,
+                "edges": edges,
+            })
 
     return {
         "categories": categories,
@@ -1756,7 +1849,7 @@ def build_shipyard_catalog_payload(
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1773,7 +1866,7 @@ def build_shipyard_catalog_payload(
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
                 "family": str(item.get("thruster_family") or ""),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1790,7 +1883,7 @@ def build_shipyard_catalog_payload(
                 "conversion_efficiency": float(item.get("conversion_efficiency") or 0.0),
                 "waste_heat_mw": float(item.get("waste_heat_mw") or 0.0),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1805,7 +1898,7 @@ def build_shipyard_catalog_payload(
                 "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0.0),
                 "operating_temp_k": float(item.get("operating_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1823,7 +1916,7 @@ def build_shipyard_catalog_payload(
                 "melt_rate_t_per_hr": float(item.get("melt_rate_t_per_hr") or 0.0),
                 "emission_type": str(item.get("emission_type") or ""),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1842,7 +1935,7 @@ def build_shipyard_catalog_payload(
                 "operational_environment": str(item.get("operational_environment") or "surface_gravity"),
                 "min_surface_gravity_ms2": float(item.get("min_surface_gravity_ms2") or 0.0),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 
@@ -1861,7 +1954,7 @@ def build_shipyard_catalog_payload(
                 "max_concurrent_recipes": int(item.get("max_concurrent_recipes") or 1),
                 "specialization": str(item.get("specialization") or ""),
                 "branch": str(item.get("branch") or ""),
-                "research_unlock_level": int(item.get("research_unlock_level") or 1),
+                "tech_level": float(item.get("tech_level") or 1),
             }
         )
 

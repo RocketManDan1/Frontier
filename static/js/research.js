@@ -10,6 +10,7 @@
 
   const NODE_WIDTH = 280;
   const NODE_HEIGHT = 90;
+  const SUBTREE_COLUMN_WIDTH = 340;
 
   let techTree = null;
   let unlockedIds = new Set();
@@ -117,14 +118,37 @@
 
     var nodes = cat.nodes;
     var edges = cat.edges || [];
+    var subtrees = cat.subtrees || null;
 
+    // Calculate bounding box
     var maxY = 0;
+    var maxX = 0;
     for (var i = 0; i < nodes.length; i++) {
       if ((nodes[i].y || 0) > maxY) maxY = nodes[i].y || 0;
+      if ((nodes[i].x || 0) > maxX) maxX = nodes[i].x || 0;
     }
-    treeEl.style.width = (NODE_WIDTH + 160) + "px";
+    treeEl.style.width = (maxX + NODE_WIDTH + 100) + "px";
     treeEl.style.height = (maxY + NODE_HEIGHT + 80) + "px";
 
+    // Render subtree column headers if present
+    if (subtrees && subtrees.length > 1) {
+      for (var si = 0; si < subtrees.length; si++) {
+        var sub = subtrees[si];
+        var headerEl = document.createElement("div");
+        headerEl.className = "kspSubtreeHeader";
+        headerEl.textContent = sub.label;
+        headerEl.style.left = (sub.x_offset || (60 + si * SUBTREE_COLUMN_WIDTH)) + "px";
+        headerEl.style.top = "-30px";
+        headerEl.style.width = NODE_WIDTH + "px";
+        treeEl.appendChild(headerEl);
+      }
+      // Shift the tree container down to make room for headers
+      treeEl.style.paddingTop = "40px";
+    } else {
+      treeEl.style.paddingTop = "0";
+    }
+
+    // Draw edges
     for (var e = 0; e < edges.length; e++) {
       var fromId = edges[e][0], toId = edges[e][1];
       var fromNode = nodes.find(function (n) { return n.id === fromId; });
@@ -143,6 +167,7 @@
       treeEl.appendChild(edgeLine);
     }
 
+    // Draw nodes
     for (var ni = 0; ni < nodes.length; ni++) {
       var node = nodes[ni];
       var isUnlocked = unlockedIds.has(node.id);
@@ -207,6 +232,16 @@
     return true;
   }
 
+  function getSubtreeLabel(cat, node) {
+    if (!cat.subtrees || cat.subtrees.length <= 1) return "";
+    for (var s = 0; s < cat.subtrees.length; s++) {
+      for (var n = 0; n < cat.subtrees[s].nodes.length; n++) {
+        if (cat.subtrees[s].nodes[n].id === node.id) return cat.subtrees[s].label;
+      }
+    }
+    return "";
+  }
+
   function renderInfo() {
     var cat = getActiveCategory();
     if (!cat) {
@@ -236,7 +271,10 @@
     var prerequisitesMet = canUnlock(cat, node);
 
     infoTitleEl.textContent = node.name;
-    infoTreeEl.textContent = cat.label + " \u00b7 Tech Level " + node.tech_level;
+    var subLabel = getSubtreeLabel(cat, node);
+    var breadcrumb = cat.label;
+    if (subLabel) breadcrumb += " \u203a " + subLabel;
+    infoTreeEl.textContent = breadcrumb + " \u00b7 Tech Level " + node.tech_level;
 
     infoListEl.innerHTML = "";
     var infos = [

@@ -2,7 +2,7 @@
   "id": "cgn_2_prometheus",
   "name": "CGN-2 \"Prometheus\"",
   "research_node": "closed_gas_cycle_ntr",
-  "research_unlock_level": 4,
+  "tech_level": 3.5,
   "branch": "gas_core_closed",
   "mass_t": 55.0,
   "performance": {

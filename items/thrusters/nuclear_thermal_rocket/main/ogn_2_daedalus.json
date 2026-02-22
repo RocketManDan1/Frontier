@@ -2,7 +2,7 @@
   "id": "ogn_2_daedalus",
   "name": "OGN-2 \"Daedalus\"",
   "research_node": "open_gas_cycle_ntr",
-  "research_unlock_level": 4,
+  "tech_level": 4.5,
   "branch": "gas_core_open",
   "mass_t": 80.0,
   "performance": {

@@ -1490,7 +1490,7 @@
           subtitle: category,
           branch: partData.branch || "",
           family: partData.thruster_family || "",
-          techLevel: partData.research_unlock_level || "",
+          techLevel: partData.tech_level || "",
         });
         partGrid.appendChild(cell);
       });
@@ -2059,7 +2059,7 @@
         subtitle: category,
         branch: p.branch || "",
         family: p.thruster_family || "",
-        techLevel: p.research_unlock_level || "",
+        techLevel: p.tech_level || "",
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
       grid.appendChild(cell);

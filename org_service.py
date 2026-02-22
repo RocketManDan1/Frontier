@@ -37,6 +37,37 @@ BOOSTABLE_TECH_LEVELS = {1, 2}
 # LEO destination location — resolved at startup
 LEO_LOCATION_ID = "LEO"
 
+# Refinery branch → tech-tree subtree mapping (mirrors catalog_service)
+_REFINERY_BRANCH_TO_SUB = {
+    "lithic_processing": "refineries_lithic",
+    "metallurgy": "refineries_metallurgy",
+    "nuclear_exotic": "refineries_nuclear",
+    "volatiles_cryogenics": "refineries_volatiles",
+}
+
+
+def _tech_node_id_for_item(loader_name: str, tech_level: float, branch: str = "") -> Optional[str]:
+    """Compute the tech-tree node ID that gates a catalog item.
+
+    Items not on the tech tree (resources, storage) return None.
+    """
+    _LOADER_TO_TREE_PREFIX = {
+        "thruster": "thrusters",
+        "reactor": "reactors",
+        "generator": "generators",
+        "radiator": "radiators",
+        "constructor": "constructors",
+        "robonaut": "robonauts",
+        "refinery": None,  # handled via branch lookup
+    }
+    prefix = _LOADER_TO_TREE_PREFIX.get(loader_name)
+    if prefix is None and loader_name == "refinery":
+        prefix = _REFINERY_BRANCH_TO_SUB.get(branch, "refineries")
+    if prefix is None:
+        return None  # storage / resource — no tech gate
+    lvl_str = str(int(tech_level)) if tech_level == int(tech_level) else str(tech_level)
+    return f"{prefix}_lvl_{lvl_str}"
+
 # ── Org Creation / Lookup ─────────────────────────────────────────────────────
 
 
@@ -209,14 +240,21 @@ def fire_research_team(conn: sqlite3.Connection, org_id: str, team_id: str) -> D
 # ── LEO Boost ──────────────────────────────────────────────────────────────────
 
 
-def get_boostable_items(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str, Any]]:
     """
     Return catalog items eligible for Earth-to-LEO boost.
-    Only tech level 1-2 items + water resource.
+    Only tech level 1-2 items + water resource, filtered to items
+    whose tech-tree node the org has actually unlocked.
     """
+    # Fetch org's unlocked tech node IDs
+    unlocked_rows = conn.execute(
+        "SELECT tech_id FROM research_unlocks WHERE org_id = ?", (org_id,)
+    ).fetchall()
+    unlocked_ids = {str(r["tech_id"]) for r in unlocked_rows}
+
     boostable = []
 
-    # Resources: only water (for fuel)
+    # Resources: only water (for fuel) — no tech gate
     resources = catalog_service.load_resource_catalog()
     for rid, res in resources.items():
         name = str(res.get("name") or "").lower()
@@ -229,7 +267,7 @@ def get_boostable_items(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
                 "tech_level": 1,
             })
 
-    # Parts: tech level 1 and 2 only
+    # Parts: tech level 1 and 2 only, filtered by unlocked tech nodes
     for loader_name, loader_fn in [
         ("thruster", catalog_service.load_thruster_main_catalog),
         ("reactor", catalog_service.load_reactor_catalog),
@@ -242,16 +280,22 @@ def get_boostable_items(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     ]:
         catalog = loader_fn()
         for iid, item in catalog.items():
-            tech_lvl = int(item.get("research_unlock_level") or 1)
-            if tech_lvl in BOOSTABLE_TECH_LEVELS:
-                mass = float(item.get("mass_kg") or item.get("dry_mass_kg") or 0.0)
-                boostable.append({
-                    "item_id": iid,
-                    "name": item.get("name", iid),
-                    "type": loader_name,
-                    "mass_per_unit_kg": mass,
-                    "tech_level": tech_lvl,
-                })
+            tech_lvl = float(item.get("tech_level") or 1)
+            if tech_lvl not in BOOSTABLE_TECH_LEVELS:
+                continue
+            # Check whether the org has unlocked the required tech node
+            branch = str(item.get("branch") or "")
+            node_id = _tech_node_id_for_item(loader_name, tech_lvl, branch)
+            if node_id is not None and node_id not in unlocked_ids:
+                continue  # tech not yet unlocked — skip
+            mass = float(item.get("mass_kg") or item.get("dry_mass_kg") or 0.0)
+            boostable.append({
+                "item_id": iid,
+                "name": item.get("name", iid),
+                "type": loader_name,
+                "mass_per_unit_kg": mass,
+                "tech_level": tech_lvl,
+            })
 
     return boostable
 
@@ -272,8 +316,8 @@ def boost_to_leo(
     """
     settle_org(conn, org_id)
 
-    # Find the item in boostable catalog
-    boostable = get_boostable_items(conn)
+    # Find the item in boostable catalog (filtered by org's unlocked techs)
+    boostable = get_boostable_items(conn, org_id)
     item = None
     for b in boostable:
         if b["item_id"] == item_id:

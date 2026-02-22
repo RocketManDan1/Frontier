@@ -2,7 +2,7 @@
   "id": "ogn_1_icarus",
   "name": "OGN-1 \"Icarus\"",
   "research_node": "open_gas_cycle_ntr",
-  "research_unlock_level": 1,
+  "tech_level": 4,
   "branch": "gas_core_open",
   "mass_t": 60.0,
   "performance": {

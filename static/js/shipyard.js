@@ -340,7 +340,7 @@
           className: "shipyardItemCell",
           branch: part?.branch || "",
           family: part?.family || part?.thruster_family || "",
-          techLevel: part?.research_unlock_level || "",
+          techLevel: part?.tech_level || "",
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         })
       : (() => {

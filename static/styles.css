@@ -4846,6 +4846,20 @@ tr.bodyGroupHeader td {
   background: #40c860;
 }
 
+/* Subtree column header (for multi-tree tabs like Refineries) */
+.kspSubtreeHeader {
+  position: absolute;
+  text-align: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: #40c8ff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(64, 200, 255, 0.2);
+  z-index: 2;
+}
+
 /* Tech node card */
 .kspTechNode {
   position: absolute;

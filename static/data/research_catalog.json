@@ -9,53 +9,16 @@
           "label": "Nuclear Thermal",
           "description": "Generation path for high-performance NTR propulsion.",
           "nodes": [
-            {
-              "id": "early_solid_core_ntr",
-              "name": "Early Solid Core NTR",
-              "passive": { "stat": "ISP", "perLevel": 1, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "SCN-1 \"Pioneer\"", "massT": 20, "thrustKN": 250, "ispS": 850, "reactorLevelRequired": 2 },
-                "4": { "name": "SCN-2 \"Frontier\"", "massT": 28, "thrustKN": 400, "ispS": 900, "reactorLevelRequired": 3 }
-              }
-            },
-            {
-              "id": "advanced_solid_core_ntr",
-              "name": "Advanced Solid Core NTR",
-              "passive": { "stat": "Thrust", "perLevel": 2, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "ASCN-1 \"Venture\"", "massT": 24, "thrustKN": 350, "ispS": 950, "reactorLevelRequired": 4 },
-                "4": { "name": "ASCN-2 \"Atlas\"", "massT": 35, "thrustKN": 600, "ispS": 1000, "reactorLevelRequired": 5 }
-              }
-            },
-            {
-              "id": "closed_gas_cycle_ntr",
-              "name": "Closed Gas Cycle NTR",
-              "passive": { "stat": "Mass", "perLevel": 2, "unit": "%", "sign": "-" },
-              "unlocks": {
-                "1": { "name": "CGN-1 \"Helios\"", "massT": 40, "thrustKN": 500, "ispS": 1400, "reactorLevelRequired": 6 },
-                "4": { "name": "CGN-2 \"Prometheus\"", "massT": 55, "thrustKN": 900, "ispS": 1600, "reactorLevelRequired": 7 }
-              }
-            },
-            {
-              "id": "open_gas_cycle_ntr",
-              "name": "Open Gas Cycle NTR",
-              "passive": { "stat": "ISP", "perLevel": 1, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "OGN-1 \"Icarus\"", "massT": 60, "thrustKN": 800, "ispS": 2200, "reactorLevelRequired": 8 },
-                "4": { "name": "OGN-2 \"Daedalus\"", "massT": 80, "thrustKN": 1400, "ispS": 2500, "reactorLevelRequired": 9 }
-              }
-            }
-          ],
-          "edges": [
-            ["early_solid_core_ntr", "advanced_solid_core_ntr"],
-            ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
-            ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"]
+            { "id": "early_solid_core_ntr", "name": "Early Solid Core NTR", "tech_level": 1 },
+            { "id": "early_solid_core_ntr_ii", "name": "Early Solid Core NTR II", "tech_level": 1.5 },
+            { "id": "advanced_solid_core_ntr", "name": "Advanced Solid Core NTR", "tech_level": 2 },
+            { "id": "advanced_solid_core_ntr_ii", "name": "Advanced Solid Core NTR II", "tech_level": 2.5 },
+            { "id": "closed_gas_cycle_ntr", "name": "Closed Gas Cycle NTR", "tech_level": 3 },
+            { "id": "closed_gas_cycle_ntr_ii", "name": "Closed Gas Cycle NTR II", "tech_level": 3.5 },
+            { "id": "open_gas_cycle_ntr", "name": "Open Gas Cycle NTR", "tech_level": 4 },
+            { "id": "open_gas_cycle_ntr_ii", "name": "Open Gas Cycle NTR II", "tech_level": 4.5 }
           ]
-        },
-        { "id": "thrusters_cryo", "label": "Cryo", "template": true },
-        { "id": "thrusters_solar", "label": "Solar", "template": true },
-        { "id": "thrusters_nuclear_pulse", "label": "Nuclear Pulse", "template": true },
-        { "id": "thrusters_electric", "label": "Electric", "template": true }
+        }
       ]
     },
     {
@@ -65,102 +28,144 @@
         {
           "id": "reactors_fission",
           "label": "Fission",
-          "description": "Solid-core fission reactor progression supplying thermal power to NTR engines.",
+          "description": "Solid-core to gas-core fission reactor progression.",
           "nodes": [
-            {
-              "id": "early_solid_core_fission",
-              "name": "Early Solid-Core Fission",
-              "passive": { "stat": "Thermal Output", "perLevel": 1, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "RD-0410 \"Igrit\"",    "mass_t": 0.52,  "thermal_mw": 196  },
-                "4": { "name": "KIWI-B4E \"Bison\"",   "mass_t": 0.95,  "thermal_mw": 937  }
-              }
-            },
-            {
-              "id": "advanced_solid_core_fission",
-              "name": "Advanced Solid-Core Fission",
-              "passive": { "stat": "Thermal Output", "perLevel": 2, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "PEWEE-1 \"Sparrow\"",   "mass_t": 0.647, "thermal_mw": 503  },
-                "4": { "name": "Phoebus-1B \"Titan\"",  "mass_t": 1.02,  "thermal_mw": 1500 }
-              }
-            },
-            {
-              "id": "high_power_solid_core_fission",
-              "name": "High-Power Solid-Core Fission",
-              "passive": { "stat": "Thermal Output", "perLevel": 2, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "NERVA-2 \"Aegis\"",       "mass_t": 1.8,  "thermal_mw": 2400 },
-                "4": { "name": "Phoebus-2A \"Colossus\"", "mass_t": 2.27, "thermal_mw": 4000 }
-              }
-            },
-            {
-              "id": "gas_core_fission",
-              "name": "Gas-Core Fission",
-              "passive": { "stat": "Thermal Output", "perLevel": 3, "unit": "%", "sign": "+" },
-              "unlocks": {
-                "1": { "name": "GCNR-200 \"Alcyone\"",   "mass_t": 3.8, "thermal_mw": 5200  },
-                "4": { "name": "GCNR-4000 \"Hyperion\"", "mass_t": 7.5, "thermal_mw": 10000 }
-              }
-            }
-          ],
-          "edges": [
-            ["early_solid_core_fission", "advanced_solid_core_fission"],
-            ["advanced_solid_core_fission", "high_power_solid_core_fission"],
-            ["high_power_solid_core_fission", "gas_core_fission"]
+            { "id": "early_solid_core_fission", "name": "Early Solid-Core Fission", "tech_level": 1 },
+            { "id": "early_solid_core_fission_ii", "name": "Early Solid-Core Fission II", "tech_level": 1.5 },
+            { "id": "advanced_solid_core_fission", "name": "Advanced Solid-Core Fission", "tech_level": 2 },
+            { "id": "advanced_solid_core_fission_ii", "name": "Advanced Solid-Core Fission II", "tech_level": 2.5 },
+            { "id": "high_power_solid_core_fission", "name": "High-Power Solid-Core Fission", "tech_level": 3 },
+            { "id": "high_power_solid_core_fission_ii", "name": "High-Power Solid-Core Fission II", "tech_level": 3.5 },
+            { "id": "gas_core_fission", "name": "Gas-Core Fission", "tech_level": 4 },
+            { "id": "gas_core_fission_ii", "name": "Gas-Core Fission II", "tech_level": 4.5 }
           ]
-        },
-        { "id": "reactors_solar_concentrator", "label": "Solar Concentrator", "template": true },
-        { "id": "reactors_direct_plasma", "label": "Direct Plasma", "template": true },
-        { "id": "reactors_z_pinch", "label": "Z-Pinch", "template": true }
+        }
       ]
     },
     {
       "id": "generators",
       "label": "Generators",
       "trees": [
-        { "id": "generators_thermoelectric_advanced_solid_state_conversion", "label": "Thermoelectric to Advanced Solid-State Conversion", "template": true },
-        { "id": "generators_closed_brayton_cycle_turbine", "label": "Closed Brayton Cycle (Turbine)", "template": true },
-        { "id": "generators_thermionic_direct_emission", "label": "Thermionic (Direct Emission)", "template": true },
-        { "id": "generators_magnetohydrodynamic", "label": "Magnetohydrodynamic (MHD)", "template": true }
+        {
+          "id": "generators_thermoelectric",
+          "label": "Thermoelectric",
+          "description": "Thermoelectric conversion progression.",
+          "nodes": [
+            { "id": "early_thermoelectric", "name": "Early Thermoelectric", "tech_level": 1 },
+            { "id": "advanced_thermoelectric", "name": "Advanced Thermoelectric", "tech_level": 2 },
+            { "id": "advanced_solid_state_thermoelectric", "name": "Advanced Solid State Thermoelectric", "tech_level": 3 },
+            { "id": "advanced_solid_state_thermoelectric_ii", "name": "Advanced Solid State Thermoelectric II", "tech_level": 4 }
+          ]
+        }
       ]
     },
     {
       "id": "robonauts",
       "label": "Robonauts",
       "trees": [
-        { "id": "robonauts_raygun", "label": "Raygun", "template": true },
-        { "id": "robonauts_missile", "label": "Missile", "template": true },
-        { "id": "robonauts_rover", "label": "Rover", "template": true }
+        {
+          "id": "robonauts_raygun",
+          "label": "Raygun",
+          "description": "Prospecting and analysis laser/radar progression.",
+          "nodes": [
+            { "id": "early_radar_laser_prospecting", "name": "Early Radar Laser Prospecting", "tech_level": 1 },
+            { "id": "early_radar_laser_prospecting_ii", "name": "Early Radar Laser Prospecting II", "tech_level": 1.5 },
+            { "id": "uv_laser_xrf_prospecting", "name": "UV Laser XRF Prospecting", "tech_level": 2 },
+            { "id": "uv_laser_xrf_prospecting_ii", "name": "UV Laser XRF Prospecting II", "tech_level": 2.5 },
+            { "id": "free_electron_laser_prospecting", "name": "Free Electron Laser Prospecting", "tech_level": 3 },
+            { "id": "free_electron_laser_prospecting_ii", "name": "Free Electron Laser Prospecting II", "tech_level": 3.5 },
+            { "id": "coherent_gamma_prospecting", "name": "Coherent Gamma Prospecting", "tech_level": 4 },
+            { "id": "coherent_gamma_prospecting_ii", "name": "Coherent Gamma Prospecting II", "tech_level": 4.5 }
+          ]
+        }
       ]
     },
     {
       "id": "constructors",
       "label": "Constructors",
       "trees": [
-        { "id": "constructors_gravity", "label": "Gravity", "template": true },
-        { "id": "constructors_microgravity", "label": "Microgravity", "template": true },
-        { "id": "constructors_cryovolitile", "label": "Cryovolitile", "template": true }
+        {
+          "id": "constructors_gravity",
+          "label": "Gravity",
+          "description": "Gravity-well construction and mining module progression.",
+          "nodes": [
+            { "id": "early_gravity_construction", "name": "Early Gravity Construction", "tech_level": 1 },
+            { "id": "early_gravity_construction_ii", "name": "Early Gravity Construction II", "tech_level": 1.5 },
+            { "id": "vibrothermal_gravity_construction", "name": "Vibrothermal Gravity Construction", "tech_level": 2 },
+            { "id": "vibrothermal_gravity_construction_ii", "name": "Vibrothermal Gravity Construction II", "tech_level": 2.5 },
+            { "id": "laser_plasma_gravity_construction", "name": "Laser Plasma Gravity Construction", "tech_level": 3 },
+            { "id": "laser_plasma_gravity_construction_ii", "name": "Laser Plasma Gravity Construction II", "tech_level": 3.5 },
+            { "id": "industrial_plasma_gravity_construction", "name": "Industrial Plasma Gravity Construction", "tech_level": 4 },
+            { "id": "industrial_plasma_gravity_construction_ii", "name": "Industrial Plasma Gravity Construction II", "tech_level": 4.5 }
+          ]
+        }
       ]
     },
     {
       "id": "refineries",
       "label": "Refineries",
-      "trees": [
-        { "id": "refineries_lithic_processing", "label": "Lithic Processing", "template": true },
-        { "id": "refineries_metallurgy", "label": "Metallurgy", "template": true },
-        { "id": "refineries_volatiles_cryogenics", "label": "Volatiles & Cryogenics", "template": true },
-        { "id": "refineries_nuclear_exotic", "label": "Nuclear & Exotic", "template": true }
+      "subtrees": [
+        {
+          "id": "refineries_lithic",
+          "label": "Lithic",
+          "description": "Ceramic, glass and mineral processing progression.",
+          "nodes": [
+            { "id": "basic_material_processing", "name": "Basic Material Processing", "tech_level": 1 },
+            { "id": "advanced_ceramics_fabrication", "name": "Advanced Ceramics Fabrication", "tech_level": 2 },
+            { "id": "plasma_synthesis", "name": "Plasma Synthesis", "tech_level": 3 },
+            { "id": "molecular_deposition", "name": "Molecular Deposition", "tech_level": 4 }
+          ]
+        },
+        {
+          "id": "refineries_metallurgy",
+          "label": "Metallurgy",
+          "description": "Metal smelting and alloy fabrication progression.",
+          "nodes": [
+            { "id": "basic_metallurgy", "name": "Basic Metallurgy", "tech_level": 1 },
+            { "id": "vacuum_metallurgy", "name": "Vacuum Metallurgy", "tech_level": 2 },
+            { "id": "electron_beam_metallurgy", "name": "Electron Beam Metallurgy", "tech_level": 3 },
+            { "id": "plasma_metallurgy", "name": "Plasma Metallurgy", "tech_level": 4 }
+          ]
+        },
+        {
+          "id": "refineries_nuclear",
+          "label": "Nuclear",
+          "description": "Nuclear fuel enrichment and isotope separation progression.",
+          "nodes": [
+            { "id": "basic_nuclear_fuels", "name": "Basic Nuclear Fuels", "tech_level": 1 },
+            { "id": "isotope_separation", "name": "Isotope Separation", "tech_level": 2 },
+            { "id": "centrifuge_enrichment", "name": "Centrifuge Enrichment", "tech_level": 3 },
+            { "id": "plasma_isotope_separation", "name": "Plasma Isotope Separation", "tech_level": 4 }
+          ]
+        },
+        {
+          "id": "refineries_volatiles",
+          "label": "Volatiles",
+          "description": "Volatile gas and cryogenic fluid processing progression.",
+          "nodes": [
+            { "id": "basic_chemical_processing", "name": "Basic Chemical Processing", "tech_level": 1 },
+            { "id": "cryogenic_separation", "name": "Cryogenic Separation", "tech_level": 2 },
+            { "id": "catalytic_reforming", "name": "Catalytic Reforming", "tech_level": 3 },
+            { "id": "thermochemical_cracking", "name": "Thermochemical Cracking", "tech_level": 4 }
+          ]
+        }
       ]
     },
     {
       "id": "radiators",
       "label": "Radiators",
       "trees": [
-        { "id": "radiators_rigid_panels", "label": "Rigid Panels", "template": true },
-        { "id": "radiators_liquid_sheet", "label": "Liquid Sheet Radiators", "template": true },
-        { "id": "radiators_spinning_heat_sink", "label": "Spinning Heat Sink Radiators", "template": true },
-        { "id": "radiators_phase_change", "label": "Phase Change Radiator", "template": true }
+        {
+          "id": "radiators_rigid_panels",
+          "label": "Rigid Panels",
+          "description": "Fixed-geometry thermal radiator panel progression.",
+          "nodes": [
+            { "id": "early_rigid_panel_radiator", "name": "Early Rigid Panel Radiator", "tech_level": 1 },
+            { "id": "advanced_rigid_panel_radiator", "name": "Advanced Rigid Panel Radiator", "tech_level": 2 },
+            { "id": "high_temp_rigid_panel_radiator", "name": "High Temp Rigid Panel Radiator", "tech_level": 3 },
+            { "id": "high_temp_rigid_panel_radiator_ii", "name": "High Temp Rigid Panel Radiator II", "tech_level": 4 }
+          ]
+        }
       ]
     }
   ]

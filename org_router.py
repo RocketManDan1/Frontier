@@ -103,9 +103,10 @@ def api_fire_team(
 
 @router.get("/api/org/boostable-items")
 def api_boostable_items(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    """List items eligible for Earth-to-LEO boost."""
-    require_login(conn, request)
-    items = org_service.get_boostable_items(conn)
+    """List items eligible for Earth-to-LEO boost (filtered by org's unlocked techs)."""
+    user = require_login(conn, request)
+    org_id = org_service.ensure_org_for_user(conn, user["username"])
+    items = org_service.get_boostable_items(conn, org_id)
     return {
         "items": items,
         "base_cost_usd": org_service.LEO_BOOST_BASE_COST,
