@@ -4811,3 +4811,121 @@ tr.bodyGroupHeader td {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KSP TECH TREE (Research page)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.researchBadge {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
+.researchRpIndicator {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: #40c8ff;
+  padding: 4px 12px;
+  border: 1px solid rgba(64, 200, 255, 0.3);
+  border-radius: 3px;
+  background: rgba(64, 200, 255, 0.08);
+}
+
+/* Vertical connector between nodes */
+.kspTreeEdge {
+  position: absolute;
+  width: 2px;
+  background: #334;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kspTreeEdge.isUnlocked {
+  background: #40c860;
+}
+
+/* Tech node card */
+.kspTechNode {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 2px solid #334;
+  border-radius: 6px;
+  background: #181c28;
+  cursor: pointer;
+  text-align: left;
+  color: #c0c8d0;
+  font-size: 13px;
+  z-index: 1;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.kspTechNode:hover {
+  border-color: #556;
+}
+
+.kspTechNode.isSelected {
+  border-color: #40a0ff;
+  box-shadow: 0 0 12px rgba(64, 160, 255, 0.25);
+}
+
+.kspTechNode.isUnlocked {
+  border-color: #40c860;
+  background: #1a2820;
+}
+
+.kspTechNode.isAvailable {
+  border-color: #40a0ff;
+  background: #181e30;
+}
+
+.kspTechNode.isLocked {
+  opacity: 0.5;
+  border-color: #222;
+}
+
+.kspNodeName {
+  font-weight: 600;
+  font-size: 14px;
+  color: #e0e8f0;
+}
+
+.kspNodeCost {
+  font-size: 12px;
+  color: #40c8ff;
+}
+
+.kspNodeCost.unlocked {
+  color: #40c860;
+}
+
+.kspNodeItemCount {
+  font-size: 11px;
+  color: #667;
+}
+
+/* Unlock rows in sidebar */
+.kspUnlockRow {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-soft, #223);
+  opacity: 0.6;
+}
+
+.kspUnlockRow.isUnlocked {
+  opacity: 1.0;
+}
+
+.kspUnlockName {
+  font-weight: 500;
+  font-size: 13px;
+  color: #e0e8f0;
+  margin-bottom: 2px;
+}
+
+.kspUnlockStats {
+  font-size: 11px;
+}

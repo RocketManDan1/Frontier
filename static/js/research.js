@@ -7,607 +7,331 @@
   const infoListEl = document.getElementById("researchInfoList");
   const unlockSummaryEl = document.getElementById("researchUnlockSummary");
   const unlockRowsEl = document.getElementById("researchUnlockRows");
-  const CATALOG_URL = "/static/data/research_catalog.json?v=rc1";
-  const RESEARCH_NODE_WIDTH = 230;
-  const RESEARCH_NODE_HEIGHT = 158;
 
-  function slugify(value) {
-    return String(value || "")
-      .toLowerCase()
-      .replace(/&/g, " and ")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-  }
+  const NODE_WIDTH = 280;
+  const NODE_HEIGHT = 90;
 
-  function makeTemplateTree(typeId, label) {
-    const treeId = `${typeId}_${slugify(label)}`;
-    const nodeIds = [
-      `${treeId}_core`,
-      `${treeId}_systems`,
-      `${treeId}_integration`,
-      `${treeId}_mastery`,
-    ];
-
-    return {
-      id: treeId,
-      label,
-      description: `${label} research line. Placeholder template ready for detailed values.`,
-      nodes: [
-        {
-          id: nodeIds[0],
-          name: "Core Principles",
-          passive: { stat: "Research Speed", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: `${label} Mk I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-            4: { name: `${label} Mk II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-          },
-        },
-        {
-          id: nodeIds[1],
-          name: "Advanced Systems",
-          passive: { stat: "Efficiency", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: `${label} Variant I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-            4: { name: `${label} Variant II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-          },
-        },
-        {
-          id: nodeIds[2],
-          name: "Industrial Integration",
-          passive: { stat: "Output", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: `${label} Production I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-            4: { name: `${label} Production II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-          },
-        },
-        {
-          id: nodeIds[3],
-          name: "Field Mastery",
-          passive: { stat: "Reliability", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: `${label} Expert I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-            4: { name: `${label} Expert II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-          },
-        },
-      ],
-      edges: [
-        [nodeIds[0], nodeIds[1]],
-        [nodeIds[1], nodeIds[2]],
-        [nodeIds[2], nodeIds[3]],
-      ],
-      isTemplate: true,
-    };
-  }
-
-  function buildFallbackCatalog() {
-    const detailedNuclearThermal = {
-      id: "thrusters_nuclear_thermal",
-      label: "Nuclear Thermal",
-      description: "Generation path for high-performance NTR propulsion.",
-      nodes: [
-        {
-          id: "early_solid_core_ntr",
-          name: "Early Solid Core NTR",
-          passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: "SCN-1 \"Pioneer\"", massT: 20, thrustKN: 250, ispS: 850, reactorLevelRequired: 2 },
-            4: { name: "SCN-2 \"Frontier\"", massT: 28, thrustKN: 400, ispS: 900, reactorLevelRequired: 3 },
-          },
-        },
-        {
-          id: "advanced_solid_core_ntr",
-          name: "Advanced Solid Core NTR",
-          passive: { stat: "Thrust", perLevel: 2, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: "ASCN-1 \"Venture\"", massT: 24, thrustKN: 350, ispS: 950, reactorLevelRequired: 4 },
-            4: { name: "ASCN-2 \"Atlas\"", massT: 35, thrustKN: 600, ispS: 1000, reactorLevelRequired: 5 },
-          },
-        },
-        {
-          id: "closed_gas_cycle_ntr",
-          name: "Closed Gas Cycle NTR",
-          passive: { stat: "Mass", perLevel: 2, unit: "%", sign: "-" },
-          unlocks: {
-            1: { name: "CGN-1 \"Helios\"", massT: 40, thrustKN: 500, ispS: 1400, reactorLevelRequired: 6 },
-            4: { name: "CGN-2 \"Prometheus\"", massT: 55, thrustKN: 900, ispS: 1600, reactorLevelRequired: 7 },
-          },
-        },
-        {
-          id: "open_gas_cycle_ntr",
-          name: "Open Gas Cycle NTR",
-          passive: { stat: "ISP", perLevel: 1, unit: "%", sign: "+" },
-          unlocks: {
-            1: { name: "OGN-1 \"Icarus\"", massT: 60, thrustKN: 800, ispS: 2200, reactorLevelRequired: 8 },
-            4: { name: "OGN-2 \"Daedalus\"", massT: 80, thrustKN: 1400, ispS: 2500, reactorLevelRequired: 9 },
-          },
-        },
-      ],
-      edges: [
-        ["early_solid_core_ntr", "advanced_solid_core_ntr"],
-        ["advanced_solid_core_ntr", "closed_gas_cycle_ntr"],
-        ["closed_gas_cycle_ntr", "open_gas_cycle_ntr"],
-      ],
-      isTemplate: false,
-    };
-
-    return {
-      techTypes: [
-        {
-          id: "thrusters",
-          label: "Thrusters",
-          trees: [
-            detailedNuclearThermal,
-            makeTemplateTree("thrusters", "Cryo"),
-            makeTemplateTree("thrusters", "Solar"),
-            makeTemplateTree("thrusters", "Nuclear Pulse"),
-            makeTemplateTree("thrusters", "Electric"),
-          ],
-        },
-        {
-          id: "reactors",
-          label: "Reactors",
-          trees: [
-            {
-              id: "reactors_fission",
-              label: "Fission",
-              description: "Solid-core fission reactor progression supplying thermal power to NTR engines.",
-              nodes: [
-                {
-                  id: "early_solid_core_fission",
-                  name: "Early Solid-Core Fission",
-                  passive: { stat: "Thermal Output", perLevel: 1, unit: "%", sign: "+" },
-                  unlocks: {
-                    1: { name: 'RD-0410 "Igrit"',    mass_t: 0.52,  thermal_mw: 196  },
-                    4: { name: 'KIWI-B4E "Bison"',   mass_t: 0.95,  thermal_mw: 937  },
-                  },
-                },
-                {
-                  id: "advanced_solid_core_fission",
-                  name: "Advanced Solid-Core Fission",
-                  passive: { stat: "Thermal Output", perLevel: 2, unit: "%", sign: "+" },
-                  unlocks: {
-                    1: { name: 'PEWEE-1 "Sparrow"',   mass_t: 0.647, thermal_mw: 503  },
-                    4: { name: 'Phoebus-1B "Titan"',  mass_t: 1.02,  thermal_mw: 1500 },
-                  },
-                },
-                {
-                  id: "high_power_solid_core_fission",
-                  name: "High-Power Solid-Core Fission",
-                  passive: { stat: "Thermal Output", perLevel: 2, unit: "%", sign: "+" },
-                  unlocks: {
-                    1: { name: 'NERVA-2 "Aegis"',       mass_t: 1.8,  thermal_mw: 2400 },
-                    4: { name: 'Phoebus-2A "Colossus"', mass_t: 2.27, thermal_mw: 4000 },
-                  },
-                },
-                {
-                  id: "gas_core_fission",
-                  name: "Gas-Core Fission",
-                  passive: { stat: "Thermal Output", perLevel: 3, unit: "%", sign: "+" },
-                  unlocks: {
-                    1: { name: 'GCNR-200 "Alcyone"',   mass_t: 3.8, thermal_mw: 5200  },
-                    4: { name: 'GCNR-4000 "Hyperion"', mass_t: 7.5, thermal_mw: 10000 },
-                  },
-                },
-              ],
-              edges: [
-                ["early_solid_core_fission", "advanced_solid_core_fission"],
-                ["advanced_solid_core_fission", "high_power_solid_core_fission"],
-                ["high_power_solid_core_fission", "gas_core_fission"],
-              ],
-              isTemplate: false,
-            },
-            makeTemplateTree("reactors", "Solar Concentrator"),
-            makeTemplateTree("reactors", "Direct Plasma"),
-            makeTemplateTree("reactors", "Z-Pinch"),
-          ],
-        },
-        {
-          id: "generators",
-          label: "Generators",
-          trees: [
-            makeTemplateTree("generators", "Thermoelectric to Advanced Solid-State Conversion"),
-            makeTemplateTree("generators", "Closed Brayton Cycle (Turbine)"),
-            makeTemplateTree("generators", "Thermionic (Direct Emission)"),
-            makeTemplateTree("generators", "Magnetohydrodynamic (MHD)"),
-          ],
-        },
-        {
-          id: "robonauts",
-          label: "Robonauts",
-          trees: [
-            makeTemplateTree("robonauts", "Raygun"),
-            makeTemplateTree("robonauts", "Missile"),
-            makeTemplateTree("robonauts", "Rover"),
-          ],
-        },
-        {
-          id: "constructors",
-          label: "Constructors",
-          trees: [
-            makeTemplateTree("constructors", "Gravity"),
-            makeTemplateTree("constructors", "Microgravity"),
-            makeTemplateTree("constructors", "Cryovolitile"),
-          ],
-        },
-        {
-          id: "refineries",
-          label: "Refineries",
-          trees: [
-            makeTemplateTree("refineries", "Lithic Processing"),
-            makeTemplateTree("refineries", "Metallurgy"),
-            makeTemplateTree("refineries", "Volatiles & Cryogenics"),
-            makeTemplateTree("refineries", "Nuclear & Exotic"),
-          ],
-        },
-        {
-          id: "radiators",
-          label: "Radiators",
-          trees: [
-            makeTemplateTree("radiators", "Rigid Panels"),
-            makeTemplateTree("radiators", "Liquid Sheet Radiators"),
-            makeTemplateTree("radiators", "Spinning Heat Sink Radiators"),
-            makeTemplateTree("radiators", "Phase Change Radiator"),
-          ],
-        },
-      ],
-    };
-  }
-
-  let researchCatalog = { techTypes: [] };
-
-  const roman = ["I", "II", "III", "IV", "V"];
-  const levelsByNode = {};
-
-  let activeTypeId = null;
-  let activeTreeId = null;
+  let techTree = null;
+  let unlockedIds = new Set();
+  let activeCategoryId = null;
   let selectedNodeId = null;
+  let orgResearchPoints = 0;
 
-  function withDefaultUnlocks(label) {
-    return {
-      1: { name: `${label} Mk I`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-      4: { name: `${label} Mk II`, massT: "TBD", thrustKN: "TBD", ispS: "TBD", reactorLevelRequired: "TBD" },
-    };
+  function fmtMass(kg) {
+    if (kg == null || kg === 0) return "";
+    if (kg >= 1000) return (kg / 1000).toFixed(2) + " t";
+    return kg.toFixed(1) + " kg";
   }
 
-  function hydrateTree(typeId, tree) {
-    if (!tree || typeof tree !== "object") return null;
-    if (!tree.template && Array.isArray(tree.nodes) && tree.nodes.length) {
-      return {
-        ...tree,
-        isTemplate: false,
-      };
-    }
-
-    const generated = makeTemplateTree(typeId, tree.label || "Untitled Tree");
-    return {
-      ...generated,
-      ...tree,
-      id: tree.id || generated.id,
-      label: tree.label || generated.label,
-      description:
-        tree.description || `${tree.label || "This"} research line. Placeholder template ready for detailed values.`,
-      nodes: (tree.nodes || generated.nodes).map((node, index) => ({
-        ...generated.nodes[index],
-        ...node,
-        unlocks: {
-          ...withDefaultUnlocks(tree.label || "Tree"),
-          ...(node.unlocks || {}),
-        },
-      })),
-      edges: tree.edges || generated.edges,
-      isTemplate: tree.template !== false,
-    };
+  function fmtNum(n, unit) {
+    if (n == null || n === 0) return "";
+    return n.toLocaleString() + (unit ? " " + unit : "");
   }
 
-  function hydrateCatalog(rawCatalog) {
-    const techTypes = Array.isArray(rawCatalog?.techTypes) ? rawCatalog.techTypes : [];
-    return {
-      techTypes: techTypes
-        .map((type) => {
-          const trees = Array.isArray(type?.trees) ? type.trees : [];
-          const hydratedTrees = trees
-            .map((tree) => hydrateTree(type.id, tree))
-            .filter(Boolean);
-          if (!hydratedTrees.length) return null;
-          return {
-            id: type.id,
-            label: type.label,
-            trees: hydratedTrees,
-          };
-        })
-        .filter(Boolean),
-    };
-  }
-
-  async function loadCatalog() {
+  function redirectToLogin() {
     try {
-      const resp = await fetch(CATALOG_URL, { cache: "no-store" });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data?.detail || `Failed to load research catalog (${resp.status})`);
-      }
-      return hydrateCatalog(data);
-    } catch (err) {
-      console.warn("research catalog load failed, using fallback", err);
-      return buildFallbackCatalog();
+      if (window.top && window.top !== window) { window.top.location.href = "/login"; return; }
+    } catch { /* noop */ }
+    window.location.href = "/login";
+  }
+
+  async function loadTree() {
+    const resp = await fetch("/api/research/tree", { cache: "no-store" });
+    if (!resp.ok) {
+      if (resp.status === 401) { redirectToLogin(); return; }
+      treeEl.textContent = "Failed to load research tree.";
+      return;
     }
+    const data = await resp.json();
+    techTree = data;
+    unlockedIds = new Set(data.unlocked || []);
+
+    try {
+      const orgResp = await fetch("/api/org", { cache: "no-store" });
+      if (orgResp.ok) {
+        const orgData = await orgResp.json();
+        orgResearchPoints = (orgData.org && orgData.org.research_points) || 0;
+      }
+    } catch { /* ignore */ }
+
+    if (!activeCategoryId && data.categories && data.categories.length) {
+      activeCategoryId = data.categories[0].id;
+    }
+
+    renderCategoryTabs();
+    renderTree();
+    renderInfo();
   }
 
-  function setInitialStateFromCatalog() {
-    const firstType = researchCatalog.techTypes[0] || null;
-    activeTypeId = firstType?.id || null;
-    activeTreeId = firstType?.trees?.[0]?.id || null;
-    selectedNodeId = firstType?.trees?.[0]?.nodes?.[0]?.id || null;
-  }
-
-  function activeType() {
-    return researchCatalog.techTypes.find((type) => type.id === activeTypeId) || researchCatalog.techTypes[0] || null;
-  }
-
-  function activeTree() {
-    const type = activeType();
-    if (!type) return null;
-    return type.trees.find((tree) => tree.id === activeTreeId) || type.trees[0] || null;
-  }
-
-  function selectedNode() {
-    const tree = activeTree();
-    if (!tree) return null;
-    return tree.nodes.find((node) => node.id === selectedNodeId) || tree.nodes[0] || null;
-  }
-
-  function initLevels() {
-    researchCatalog.techTypes.forEach((type) => {
-      type.trees.forEach((tree) => {
-        tree.nodes.forEach((node) => {
-          if (typeof levelsByNode[node.id] !== "number") levelsByNode[node.id] = 0;
-        });
-      });
-    });
-  }
-
-  function formatPassive(passive, level) {
-    if (!passive) return "";
-    const value = Math.max(0, Number(passive.perLevel || 0) * Math.max(0, Number(level || 0)));
-    const sign = passive.sign === "-" ? "-" : "+";
-    return `${passive.stat} ${sign}${value}${passive.unit || ""}`;
-  }
-
-  function renderTypeTabs() {
+  function renderCategoryTabs() {
     typeTabsEl.innerHTML = "";
-    researchCatalog.techTypes.forEach((type) => {
-      const allTemplate = type.trees.every((t) => t.isTemplate);
+    treeTabsEl.innerHTML = "";
+    treeTabsEl.style.display = "none";
+
+    if (!techTree || !techTree.categories) return;
+
+    for (const cat of techTree.categories) {
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = `tab researchSubtab ${type.id === activeTypeId ? "active" : ""}${allTemplate ? " isTemplate" : ""}`;
-      tab.textContent = type.label;
+      tab.className = "tab researchSubtab" + (cat.id === activeCategoryId ? " active" : "");
+      tab.textContent = cat.label;
       tab.setAttribute("role", "tab");
-      tab.addEventListener("click", () => {
-        activeTypeId = type.id;
-        activeTreeId = type.trees[0]?.id || null;
-        selectedNodeId = type.trees[0]?.nodes?.[0]?.id || null;
-        renderTypeTabs();
-        renderTreeTabs();
+
+      const total = cat.nodes.length;
+      const unlocked = cat.nodes.filter(n => unlockedIds.has(n.id)).length;
+      if (total > 0) {
+        const badge = document.createElement("span");
+        badge.className = "researchBadge";
+        badge.textContent = " " + unlocked + "/" + total;
+        tab.appendChild(badge);
+      }
+
+      tab.addEventListener("click", function () {
+        activeCategoryId = cat.id;
+        selectedNodeId = null;
+        renderCategoryTabs();
         renderTree();
         renderInfo();
       });
       typeTabsEl.appendChild(tab);
-    });
+    }
+
+    var rpEl = document.createElement("div");
+    rpEl.className = "researchRpIndicator";
+    rpEl.textContent = orgResearchPoints.toFixed(1) + " RP available";
+    typeTabsEl.appendChild(rpEl);
   }
 
-  function renderTreeTabs() {
-    const type = activeType();
-    treeTabsEl.innerHTML = "";
-    (type?.trees || []).forEach((tree) => {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = `tab researchSubtab ${tree.id === activeTreeId ? "active" : ""}${tree.isTemplate ? " isTemplate" : ""}`;
-      tab.textContent = tree.label;
-      tab.setAttribute("role", "tab");
-      tab.addEventListener("click", () => {
-        activeTreeId = tree.id;
-        selectedNodeId = tree.nodes[0]?.id || null;
-        renderTreeTabs();
-        renderTree();
-        renderInfo();
-      });
-      treeTabsEl.appendChild(tab);
-    });
-  }
-
-  function renderEdges(tree, nodeById) {
-    (tree.edges || []).forEach(([fromId, toId]) => {
-      const fromNode = nodeById.get(fromId);
-      const toNode = nodeById.get(toId);
-      if (!fromNode || !toNode) return;
-
-      const edgeEl = document.createElement("div");
-      edgeEl.className = "researchSkillEdge";
-
-      const x1 = Number(fromNode.x) + RESEARCH_NODE_WIDTH;
-      const y1 = Number(fromNode.y) + Math.round(RESEARCH_NODE_HEIGHT * 0.5);
-      const x2 = Number(toNode.x);
-      const y2 = Number(toNode.y) + Math.round(RESEARCH_NODE_HEIGHT * 0.5);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const width = Math.max(1, Math.hypot(dx, dy));
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-      edgeEl.style.left = `${x1}px`;
-      edgeEl.style.top = `${y1}px`;
-      edgeEl.style.width = `${width}px`;
-      edgeEl.style.transform = `rotate(${angle}deg)`;
-      treeEl.appendChild(edgeEl);
-    });
-  }
-
-  function renderLevelButtons(node, nodeCardEl) {
-    const row = document.createElement("div");
-    row.className = "researchLevelRow";
-
-    roman.forEach((label, index) => {
-      const targetLevel = index + 1;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `researchLevelBtn ${levelsByNode[node.id] >= targetLevel ? "isReached" : ""}`;
-      btn.textContent = label;
-      btn.title = `Set ${node.name} to Level ${label}`;
-      btn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        levelsByNode[node.id] = targetLevel;
-        selectedNodeId = node.id;
-        renderTree();
-        renderInfo();
-      });
-      row.appendChild(btn);
-    });
-
-    nodeCardEl.appendChild(row);
-  }
-
-  function layoutTree(tree) {
-    return tree.nodes.map((node, index) => ({
-      ...node,
-      x: 40 + index * 270,
-      y: 84 + (index % 2 === 0 ? 0 : 152),
-    }));
+  function getActiveCategory() {
+    if (!techTree) return null;
+    return techTree.categories.find(function (c) { return c.id === activeCategoryId; }) || techTree.categories[0] || null;
   }
 
   function renderTree() {
-    const tree = activeTree();
-    if (!tree) {
-      treeEl.innerHTML = "";
+    treeEl.innerHTML = "";
+    var cat = getActiveCategory();
+    if (!cat || !cat.nodes || !cat.nodes.length) {
+      treeEl.innerHTML = '<div class="muted" style="padding:20px;">No tech nodes defined for this category yet.</div>';
       return;
     }
 
-    treeEl.innerHTML = "";
-    const layoutNodes = layoutTree(tree);
-    const nodeById = new Map(layoutNodes.map((node) => [node.id, node]));
+    var nodes = cat.nodes;
+    var edges = cat.edges || [];
 
-    const maxX = Math.max(0, ...layoutNodes.map((node) => Number(node.x || 0)));
-    const maxY = Math.max(0, ...layoutNodes.map((node) => Number(node.y || 0)));
-    treeEl.style.width = `${Math.max(980, maxX + RESEARCH_NODE_WIDTH + 80)}px`;
-    treeEl.style.height = `${Math.max(520, maxY + RESEARCH_NODE_HEIGHT + 80)}px`;
+    var maxY = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      if ((nodes[i].y || 0) > maxY) maxY = nodes[i].y || 0;
+    }
+    treeEl.style.width = (NODE_WIDTH + 160) + "px";
+    treeEl.style.height = (maxY + NODE_HEIGHT + 80) + "px";
 
-    renderEdges(tree, nodeById);
+    for (var e = 0; e < edges.length; e++) {
+      var fromId = edges[e][0], toId = edges[e][1];
+      var fromNode = nodes.find(function (n) { return n.id === fromId; });
+      var toNode = nodes.find(function (n) { return n.id === toId; });
+      if (!fromNode || !toNode) continue;
 
-    layoutNodes.forEach((node) => {
-      const nodeLevel = levelsByNode[node.id] || 0;
+      var edgeLine = document.createElement("div");
+      edgeLine.className = "kspTreeEdge";
+      var x = (fromNode.x || 60) + NODE_WIDTH / 2;
+      var y1 = (fromNode.y || 0) + NODE_HEIGHT;
+      var y2 = (toNode.y || 0);
+      if (unlockedIds.has(fromId)) edgeLine.classList.add("isUnlocked");
+      edgeLine.style.left = (x - 1) + "px";
+      edgeLine.style.top = y1 + "px";
+      edgeLine.style.height = Math.max(0, y2 - y1) + "px";
+      treeEl.appendChild(edgeLine);
+    }
 
-      const card = document.createElement("button");
+    for (var ni = 0; ni < nodes.length; ni++) {
+      var node = nodes[ni];
+      var isUnlocked = unlockedIds.has(node.id);
+      var prerequisitesMet = canUnlock(cat, node);
+      var isSelected = selectedNodeId === node.id;
+
+      var card = document.createElement("button");
       card.type = "button";
-      card.className = `researchSkillNode ${selectedNodeId === node.id ? "isSelected" : ""}`;
-      card.style.left = `${node.x}px`;
-      card.style.top = `${node.y}px`;
-      card.addEventListener("click", () => {
-        selectedNodeId = node.id;
-        renderTree();
-        renderInfo();
-      });
+      card.className = "kspTechNode";
+      if (isUnlocked) card.classList.add("isUnlocked");
+      if (isSelected) card.classList.add("isSelected");
+      if (!isUnlocked && prerequisitesMet) card.classList.add("isAvailable");
+      if (!isUnlocked && !prerequisitesMet) card.classList.add("isLocked");
 
-      const name = document.createElement("div");
-      name.className = "researchSkillNodeName";
-      name.textContent = node.name;
-      card.appendChild(name);
+      card.style.left = (node.x || 60) + "px";
+      card.style.top = (node.y || 0) + "px";
+      card.style.width = NODE_WIDTH + "px";
 
-      const level = document.createElement("div");
-      level.className = "researchSkillNodeLevel";
-      level.textContent = `Level ${nodeLevel}/5`;
-      card.appendChild(level);
+      (function (n) {
+        card.addEventListener("click", function () {
+          selectedNodeId = n.id;
+          renderTree();
+          renderInfo();
+        });
+      })(node);
 
-      const passive = document.createElement("div");
-      passive.className = "researchSkillPassive";
-      passive.textContent = `Org Bonus: ${formatPassive(node.passive, nodeLevel) || "None"}`;
-      card.appendChild(passive);
+      var nameEl = document.createElement("div");
+      nameEl.className = "kspNodeName";
+      nameEl.textContent = node.name;
+      card.appendChild(nameEl);
 
-      renderLevelButtons(node, card);
+      var costLine = document.createElement("div");
+      costLine.className = "kspNodeCost";
+      if (isUnlocked) {
+        costLine.textContent = "\u2713 Unlocked";
+        costLine.classList.add("unlocked");
+      } else {
+        costLine.textContent = node.cost_rp + " RP";
+      }
+      card.appendChild(costLine);
+
+      var itemCount = document.createElement("div");
+      itemCount.className = "kspNodeItemCount";
+      var ic = (node.items || []).length;
+      itemCount.textContent = ic > 0 ? ic + " item" + (ic !== 1 ? "s" : "") : "No items yet";
+      card.appendChild(itemCount);
+
       treeEl.appendChild(card);
-    });
+    }
   }
 
-  function renderUnlockRows(node, nodeLevel) {
-    unlockRowsEl.innerHTML = "";
-
-    [1, 4].forEach((unlockLevel) => {
-      const unlock = node.unlocks?.[unlockLevel];
-      if (!unlock) return;
-
-      const row = document.createElement("div");
-      row.className = `researchUnlockRow ${nodeLevel >= unlockLevel ? "isUnlocked" : ""}`;
-
-      const title = document.createElement("div");
-      title.className = "researchUnlockName";
-      title.textContent = `Level ${roman[unlockLevel - 1]}: ${unlock.name}`;
-      row.appendChild(title);
-
-      const stats = document.createElement("div");
-      stats.className = "researchUnlockStats";
-      // Support both thruster fields (massT/thrustKN/ispS) and reactor fields (mass_t/thermal_mw)
-      if (unlock.thermal_mw !== undefined) {
-        stats.textContent = `Mass ${unlock.mass_t} t · Thermal ${unlock.thermal_mw} MWth`;
-      } else {
-        stats.textContent = `Mass ${unlock.massT} t · Thrust ${unlock.thrustKN} kN · ISP ${unlock.ispS} s`;
-      }
-      row.appendChild(stats);
-
-      unlockRowsEl.appendChild(row);
-    });
+  function canUnlock(cat, node) {
+    var edges = cat.edges || [];
+    var prereqs = [];
+    for (var i = 0; i < edges.length; i++) {
+      if (edges[i][1] === node.id) prereqs.push(edges[i][0]);
+    }
+    if (prereqs.length === 0) return true;
+    for (var j = 0; j < prereqs.length; j++) {
+      if (!unlockedIds.has(prereqs[j])) return false;
+    }
+    return true;
   }
 
   function renderInfo() {
-    const tree = activeTree();
-    const node = selectedNode();
-
-    if (!tree || !node) {
-      infoTitleEl.textContent = "No research data loaded";
+    var cat = getActiveCategory();
+    if (!cat) {
+      infoTitleEl.textContent = "Select a category";
       infoTreeEl.textContent = "";
+      infoListEl.innerHTML = "";
+      unlockRowsEl.innerHTML = "";
+      unlockSummaryEl.textContent = "";
+      return;
+    }
+
+    var node = null;
+    if (selectedNodeId) {
+      node = cat.nodes.find(function (n) { return n.id === selectedNodeId; });
+    }
+    if (!node && cat.nodes.length) node = cat.nodes[0];
+    if (!node) {
+      infoTitleEl.textContent = "No node selected";
+      infoTreeEl.textContent = cat.label;
       infoListEl.innerHTML = "";
       unlockRowsEl.innerHTML = "";
       return;
     }
 
-    const type = activeType();
-    const nodeLevel = levelsByNode[node.id] || 0;
-    const passivePerLevel = `${node.passive.sign}${node.passive.perLevel}${node.passive.unit} ${node.passive.stat}`;
+    selectedNodeId = node.id;
+    var isUnlocked = unlockedIds.has(node.id);
+    var prerequisitesMet = canUnlock(cat, node);
 
     infoTitleEl.textContent = node.name;
-    infoTreeEl.textContent = `${type?.label || "Research"} · ${tree.label}`;
-    unlockSummaryEl.textContent = `Current Level ${nodeLevel}/5 · Unlocks at Level I and IV`;
+    infoTreeEl.textContent = cat.label + " \u00b7 Tech Level " + node.tech_level;
+
     infoListEl.innerHTML = "";
-
-    [
-      `Passive per level: ${passivePerLevel}`,
-      `Total organization bonus: ${formatPassive(node.passive, nodeLevel)}`,
-      "Each node has five levels and grants cumulative bonuses.",
-      tree.isTemplate ? "Template tree: replace TBD values as you define this line." : "Configured tree: values are live for this line.",
-      "Set node level directly from the level chips on each node card.",
-    ].forEach((text) => {
-      const li = document.createElement("li");
-      li.textContent = text;
+    var infos = [
+      "Cost: " + node.cost_rp + " Research Points",
+      "Status: " + (isUnlocked ? "Unlocked \u2713" : prerequisitesMet ? "Available" : "Locked (prerequisites needed)"),
+      "Your RP: " + orgResearchPoints.toFixed(1),
+    ];
+    for (var ii = 0; ii < infos.length; ii++) {
+      var li = document.createElement("li");
+      li.textContent = infos[ii];
       infoListEl.appendChild(li);
-    });
+    }
 
-    renderUnlockRows(node, nodeLevel);
+    unlockSummaryEl.innerHTML = "";
+    if (!isUnlocked) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btnPrimary";
+      var canAfford = orgResearchPoints >= node.cost_rp;
+      btn.disabled = !prerequisitesMet || !canAfford;
+      if (canAfford && prerequisitesMet) {
+        btn.textContent = "Unlock for " + node.cost_rp + " RP";
+      } else if (!prerequisitesMet) {
+        btn.textContent = "Prerequisites not met";
+      } else {
+        btn.textContent = "Need " + node.cost_rp + " RP (have " + orgResearchPoints.toFixed(1) + ")";
+      }
+      (function (c, n) {
+        btn.addEventListener("click", function () { doUnlock(c, n); });
+      })(cat, node);
+      unlockSummaryEl.appendChild(btn);
+    } else {
+      unlockSummaryEl.textContent = "Technology unlocked \u2713";
+    }
+
+    unlockRowsEl.innerHTML = "";
+    var items = node.items || [];
+    if (items.length === 0) {
+      unlockRowsEl.innerHTML = '<div class="muted small">No items at this tier yet (placeholder).</div>';
+      return;
+    }
+
+    for (var ix = 0; ix < items.length; ix++) {
+      var item = items[ix];
+      var row = document.createElement("div");
+      row.className = "kspUnlockRow" + (isUnlocked ? " isUnlocked" : "");
+
+      var nameSpan = document.createElement("div");
+      nameSpan.className = "kspUnlockName";
+      nameSpan.textContent = item.name;
+      row.appendChild(nameSpan);
+
+      var statsSpan = document.createElement("div");
+      statsSpan.className = "kspUnlockStats muted small";
+      var stats = [];
+      if (item.mass_kg) stats.push(fmtMass(item.mass_kg));
+      if (item.thrust_kn) stats.push(fmtNum(item.thrust_kn, "kN"));
+      if (item.isp_s) stats.push(fmtNum(item.isp_s, "s ISP"));
+      if (item.thermal_mw) stats.push(fmtNum(item.thermal_mw, "MWth"));
+      if (item.electric_mw) stats.push(fmtNum(item.electric_mw, "MWe"));
+      if (item.heat_rejection_mw) stats.push(fmtNum(item.heat_rejection_mw, "MW reject"));
+      statsSpan.textContent = stats.join(" \u00b7 ") || "\u2014";
+      row.appendChild(statsSpan);
+
+      unlockRowsEl.appendChild(row);
+    }
   }
 
-  loadCatalog()
-    .then((catalog) => {
-      researchCatalog = catalog;
-      setInitialStateFromCatalog();
-      initLevels();
-      renderTypeTabs();
-      renderTreeTabs();
-      renderTree();
-      renderInfo();
-    })
-    .catch((error) => {
-      infoTitleEl.textContent = "Research catalog error";
-      infoTreeEl.textContent = error?.message || "Failed to load catalog data.";
-      infoListEl.innerHTML = "";
-      unlockSummaryEl.textContent = "";
-      unlockRowsEl.innerHTML = "";
-      treeEl.innerHTML = "";
-      typeTabsEl.innerHTML = "";
-      treeTabsEl.innerHTML = "";
-    });
+  async function doUnlock(cat, node) {
+    var edges = cat.edges || [];
+    var prereqs = [];
+    for (var i = 0; i < edges.length; i++) {
+      if (edges[i][1] === node.id) prereqs.push(edges[i][0]);
+    }
+
+    try {
+      var resp = await fetch("/api/org/research/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tech_id: node.id,
+          cost: node.cost_rp,
+          prerequisites: prereqs,
+        }),
+      });
+      var data = await resp.json();
+      if (!resp.ok) {
+        alert(data.detail || "Failed to unlock tech.");
+        return;
+      }
+      await loadTree();
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
+  loadTree();
 })();

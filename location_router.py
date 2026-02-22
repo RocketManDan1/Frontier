@@ -91,8 +91,21 @@ def api_locations_tree(request: Request, conn: sqlite3.Connection = Depends(get_
 
 @router.get("/api/surface_sites")
 def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    """List all surface sites with their resource distributions."""
-    require_login(conn, request)
+    """List all surface sites. Resource distributions are hidden until prospected by the user's org."""
+    user = require_login(conn, request)
+
+    # Get org for prospecting visibility
+    import org_service
+    org_id = org_service.get_org_id_for_user(conn, user["username"])
+
+    # Get prospected site IDs for this org
+    prospected_sites: set = set()
+    if org_id:
+        for r in conn.execute(
+            "SELECT DISTINCT site_location_id FROM prospecting_results WHERE org_id = ?",
+            (org_id,),
+        ).fetchall():
+            prospected_sites.add(str(r["site_location_id"]))
 
     sites = conn.execute(
         """
@@ -125,13 +138,15 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
     result = []
     for s in sites:
         site_id = s["location_id"]
+        is_prospected = site_id in prospected_sites
         result.append({
             "location_id": site_id,
             "name": s["site_name"],
             "body_id": s["body_id"],
             "orbit_node_id": s["orbit_node_id"],
             "gravity_m_s2": float(s["gravity_m_s2"]),
-            "resource_distribution": resources_by_site.get(site_id, []),
+            "is_prospected": is_prospected,
+            "resource_distribution": resources_by_site.get(site_id, []) if is_prospected else [],
         })
 
     return {"surface_sites": result}
@@ -139,8 +154,11 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
 
 @router.get("/api/surface_sites/{site_id}")
 def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
-    """Get detailed info for a single surface site."""
-    require_login(conn, request)
+    """Get detailed info for a single surface site. Resources hidden until prospected."""
+    user = require_login(conn, request)
+
+    import org_service
+    org_id = org_service.get_org_id_for_user(conn, user["username"])
 
     site = conn.execute(
         """
@@ -156,15 +174,28 @@ def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connec
     if not site:
         raise HTTPException(status_code=404, detail="Surface site not found")
 
-    resources = conn.execute(
-        """
-        SELECT resource_id, mass_fraction
-        FROM surface_site_resources
-        WHERE site_location_id = ?
-        ORDER BY mass_fraction DESC
-        """,
-        (site_id,),
-    ).fetchall()
+    is_prospected = False
+    if org_id:
+        is_prospected = org_service.is_site_prospected(conn, org_id, site_id)
+
+    resources = []
+    if is_prospected:
+        rows = conn.execute(
+            """
+            SELECT resource_id, mass_fraction
+            FROM surface_site_resources
+            WHERE site_location_id = ?
+            ORDER BY mass_fraction DESC
+            """,
+            (site_id,),
+        ).fetchall()
+        resources = [
+            {
+                "resource_id": r["resource_id"],
+                "mass_fraction": float(r["mass_fraction"]),
+            }
+            for r in rows
+        ]
 
     return {
         "location_id": site["location_id"],
@@ -172,11 +203,6 @@ def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connec
         "body_id": site["body_id"],
         "orbit_node_id": site["orbit_node_id"],
         "gravity_m_s2": float(site["gravity_m_s2"]),
-        "resource_distribution": [
-            {
-                "resource_id": r["resource_id"],
-                "mass_fraction": float(r["mass_fraction"]),
-            }
-            for r in resources
-        ],
+        "is_prospected": is_prospected,
+        "resource_distribution": resources,
     }
