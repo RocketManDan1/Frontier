@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Frontier: Sol 2000 GitHub mirror hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=frontier-sol-2000-github-mirror.service
+
+[Install]
+WantedBy=timers.target

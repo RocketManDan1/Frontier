@@ -1,2 +1,7 @@
-fastapi
-uvicorn[standard]
+# Runtime
+fastapi~=0.133.0
+uvicorn[standard]~=0.41.0
+
+# Test (also installed in container for now)
+pytest~=9.0.2
+httpx~=0.28.1

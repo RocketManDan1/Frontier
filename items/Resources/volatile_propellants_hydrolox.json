@@ -5,5 +5,6 @@
   "category_id": "finished_material",
   "mass_per_m3_kg": 360,
   "description": "LOX/LH2-class volatile propellant blend. 1 t output uses ~1.46 t water-ice feed including processing losses/boiloff.",
-  "phase": "liquid"
+  "phase": "liquid",
+  "price_per_kg": 120
 }

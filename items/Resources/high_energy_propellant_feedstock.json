@@ -5,5 +5,6 @@
   "category_id": "finished_material",
   "mass_per_m3_kg": 500,
   "description": "Advanced cryogenic propellant mix feedstock with electrolysis and boiloff losses. Total feed ~1.95 t per 1 t output.",
-  "phase": "liquid"
+  "phase": "liquid",
+  "price_per_kg": 280
 }

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Organization</title>
+    <title>Frontier: Sol 2000 — Organization</title>
     <link rel="stylesheet" href="/static/styles.css?v=layout36" />
   </head>
 
@@ -29,6 +29,13 @@
       </div>
 
       <div class="orgLayout">
+        <div class="panel orgSubTabs" role="tablist" aria-label="Organization sections">
+          <button id="orgTabBtnOverview" class="orgSubTabBtn active" type="button" role="tab" aria-selected="true" data-org-tab="overview">Overview</button>
+          <button id="orgTabBtnFinances" class="orgSubTabBtn" type="button" role="tab" aria-selected="false" data-org-tab="finances">Finances</button>
+          <button id="orgTabBtnMarketplace" class="orgSubTabBtn" type="button" role="tab" aria-selected="false" data-org-tab="marketplace">Marketplace</button>
+        </div>
+
+        <div id="orgTabOverview" class="orgTabPane">
         <!-- ═══ Left Column: Org Overview ═══ -->
         <div class="orgLeftCol">
           <div class="panel orgOverviewPanel">
@@ -84,14 +91,9 @@
 
             <div class="orgBoostControls">
               <div class="orgBoostField">
-                <label for="boostItemSelect">Item</label>
-                <select id="boostItemSelect" class="orgSelect">
-                  <option value="">Select item…</option>
-                </select>
-              </div>
-              <div class="orgBoostField">
-                <label for="boostQuantity">Quantity</label>
-                <input type="number" id="boostQuantity" class="orgInput" value="1" min="1" step="1" />
+                <label>Payload Items</label>
+                <div id="boostItemsContainer" class="orgBoostItems"></div>
+                <button id="boostAddItemBtn" class="btnSecondary btnSmall orgBoostAddBtn" type="button" aria-label="Add payload item">+</button>
               </div>
               <div class="orgBoostField">
                 <label>Mass</label>
@@ -112,11 +114,57 @@
             <div id="boostHistory" class="orgBoostHistory muted small">No launches yet.</div>
           </div>
         </div>
+        </div>
+
+        <div id="orgTabFinances" class="orgTabPane" style="display:none;">
+          <div class="orgFinancesCol">
+            <div class="panel orgFinancesPanel">
+              <div class="titleSmall">Finances</div>
+              <div class="muted small">Select a loan package. Active loans auto-charge monthly payments and cannot be reactivated until paid off.</div>
+              <div id="loanStatus" class="muted small"></div>
+              <div id="loanOffers" class="orgLoanOffers"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="orgTabMarketplace" class="orgTabPane" style="display:none;">
+          <div class="orgMarketplaceCol">
+            <div class="panel orgMarketPricesPanel">
+              <div class="titleSmall">Marketplace Prices</div>
+              <div class="muted small">Price updates monthly, all goods are to be sold from LEO</div>
+              <div id="marketPriceMeta" class="muted small"></div>
+              <div class="orgTableWrap">
+                <table class="orgMarketTable">
+                  <thead>
+                    <tr>
+                      <th>Resource</th>
+                      <th>Base $/kg</th>
+                      <th>Modifier</th>
+                      <th>Market $/kg</th>
+                    </tr>
+                  </thead>
+                  <tbody id="marketPriceRows">
+                    <tr><td colspan="4" class="muted small">Loading prices…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel orgMarketSellPanel">
+              <div class="titleSmall">Sell Resources in LEO</div>
+              <div class="muted small">You can sell resources in your organization inventory at LEO or in your ships currently docked in LEO.</div>
+              <div id="marketSellStatus" class="muted small"></div>
+              <div id="marketSellRows" class="orgMarketSellRows">
+                <div class="muted small">Loading sellable resources…</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <script src="/static/js/auth.js?v=au2"></script>
     <script src="/static/js/clock.js?v=ti3"></script>
-    <script src="/static/js/organization.js?v=org1"></script>
+    <script src="/static/js/organization.js?v=org7"></script>
   </body>
 </html>

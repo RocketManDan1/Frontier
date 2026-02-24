@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://earthmoon-db.local/celestial_config.schema.json",
-  "title": "EarthMoon Celestial Config",
+  "$id": "https://frontier-sol-2000.local/celestial_config.schema.json",
+  "title": "Frontier: Sol 2000 Celestial Config",
   "type": "object",
   "required": ["version", "bodies", "groups", "orbit_nodes", "lagrange_systems", "markers", "transfer_edges"],
   "properties": {

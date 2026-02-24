@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${MIRROR_BRANCH:-main}"
 REMOTE_NAME="${MIRROR_REMOTE_NAME:-origin}"
-GIT_USER_NAME="${GIT_USER_NAME:-Earthmoon Mirror Bot}"
+GIT_USER_NAME="${GIT_USER_NAME:-Frontier: Sol 2000 Mirror Bot}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-mirror-bot@localhost}"
 GITHUB_REMOTE_URL="${GITHUB_REMOTE_URL:-}"
 

@@ -317,29 +317,65 @@
       return;
     }
 
-    for (var ix = 0; ix < items.length; ix++) {
-      var item = items[ix];
-      var row = document.createElement("div");
-      row.className = "kspUnlockRow" + (isUnlocked ? " isUnlocked" : "");
+    // Render as item grid cells if ItemDisplay is available
+    if (window.ItemDisplay) {
+      var grid = document.createElement("div");
+      grid.className = "researchUnlockGrid";
+      for (var ix = 0; ix < items.length; ix++) {
+        var item = items[ix];
+        var catName = item.category || "";
+        // Map research category to item display category
+        if (catName.startsWith("refineries_")) catName = "refinery";
 
-      var nameSpan = document.createElement("div");
-      nameSpan.className = "kspUnlockName";
-      nameSpan.textContent = item.name;
-      row.appendChild(nameSpan);
+        var tooltipLines = [];
+        if (item.thrust_kn) tooltipLines.push(["Thrust", fmtNum(item.thrust_kn, "kN")]);
+        if (item.isp_s) tooltipLines.push(["ISP", fmtNum(item.isp_s, "s")]);
+        if (item.thermal_mw) tooltipLines.push(["Thermal", fmtNum(item.thermal_mw, "MW")]);
+        if (item.electric_mw) tooltipLines.push(["Electric", fmtNum(item.electric_mw, "MW")]);
+        if (item.heat_rejection_mw) tooltipLines.push(["Heat Reject", fmtNum(item.heat_rejection_mw, "MW")]);
 
-      var statsSpan = document.createElement("div");
-      statsSpan.className = "kspUnlockStats muted small";
-      var stats = [];
-      if (item.mass_kg) stats.push(fmtMass(item.mass_kg));
-      if (item.thrust_kn) stats.push(fmtNum(item.thrust_kn, "kN"));
-      if (item.isp_s) stats.push(fmtNum(item.isp_s, "s ISP"));
-      if (item.thermal_mw) stats.push(fmtNum(item.thermal_mw, "MWth"));
-      if (item.electric_mw) stats.push(fmtNum(item.electric_mw, "MWe"));
-      if (item.heat_rejection_mw) stats.push(fmtNum(item.heat_rejection_mw, "MW reject"));
-      statsSpan.textContent = stats.join(" \u00b7 ") || "\u2014";
-      row.appendChild(statsSpan);
+        var cell = window.ItemDisplay.createGridCell({
+          label: item.name,
+          iconSeed: item.item_id || item.name,
+          itemId: item.item_id,
+          category: catName,
+          mass_kg: item.mass_kg || 0,
+          subtitle: catName,
+          branch: item.branch || "",
+          techLevel: String(item.tech_level || ""),
+          tooltipLines: tooltipLines,
+        });
 
-      unlockRowsEl.appendChild(row);
+        if (!isUnlocked) cell.classList.add("isLocked");
+        grid.appendChild(cell);
+      }
+      unlockRowsEl.appendChild(grid);
+    } else {
+      // Fallback: plain text rows
+      for (var ix = 0; ix < items.length; ix++) {
+        var item = items[ix];
+        var row = document.createElement("div");
+        row.className = "kspUnlockRow" + (isUnlocked ? " isUnlocked" : "");
+
+        var nameSpan = document.createElement("div");
+        nameSpan.className = "kspUnlockName";
+        nameSpan.textContent = item.name;
+        row.appendChild(nameSpan);
+
+        var statsSpan = document.createElement("div");
+        statsSpan.className = "kspUnlockStats muted small";
+        var stats = [];
+        if (item.mass_kg) stats.push(fmtMass(item.mass_kg));
+        if (item.thrust_kn) stats.push(fmtNum(item.thrust_kn, "kN"));
+        if (item.isp_s) stats.push(fmtNum(item.isp_s, "s ISP"));
+        if (item.thermal_mw) stats.push(fmtNum(item.thermal_mw, "MWth"));
+        if (item.electric_mw) stats.push(fmtNum(item.electric_mw, "MWe"));
+        if (item.heat_rejection_mw) stats.push(fmtNum(item.heat_rejection_mw, "MW reject"));
+        statsSpan.textContent = stats.join(" \u00b7 ") || "\u2014";
+        row.appendChild(statsSpan);
+
+        unlockRowsEl.appendChild(row);
+      }
     }
   }
 

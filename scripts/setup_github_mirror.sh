@@ -14,17 +14,17 @@ if [[ ! -f "$REPO_DIR/.mirror.env" ]]; then
 # Optional overrides:
 MIRROR_BRANCH=main
 MIRROR_REMOTE_NAME=origin
-GIT_USER_NAME=Earthmoon Mirror Bot
+GIT_USER_NAME=Frontier: Sol 2000 Mirror Bot
 GIT_USER_EMAIL=mirror-bot@localhost
 EOF
   echo "Created $REPO_DIR/.mirror.env"
 fi
 
 echo "Install and enable hourly timer with:"
-echo "  sudo cp $SYSTEMD_DIR/earthmoon-github-mirror.service /etc/systemd/system/"
-echo "  sudo cp $SYSTEMD_DIR/earthmoon-github-mirror.timer /etc/systemd/system/"
+echo "  sudo cp $SYSTEMD_DIR/frontier-sol-2000-github-mirror.service /etc/systemd/system/"
+echo "  sudo cp $SYSTEMD_DIR/frontier-sol-2000-github-mirror.timer /etc/systemd/system/"
 echo "  sudo systemctl daemon-reload"
-echo "  sudo systemctl enable --now earthmoon-github-mirror.timer"
+echo "  sudo systemctl enable --now frontier-sol-2000-github-mirror.timer"
 echo ""
 echo "Edit .mirror.env before first run if needed, then test with:"
 echo "  set -a && source $REPO_DIR/.mirror.env && set +a && $REPO_DIR/scripts/github_mirror_hourly.sh"

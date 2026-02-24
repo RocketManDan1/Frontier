@@ -11,6 +11,7 @@
   ],
   "build_time_s": 120,
   "facility_type": "refinery",
+  "refinery_category": "all_refineries",
   "min_tech_tier": 1,
   "power_kw": 25,
   "byproducts": []

@@ -33,9 +33,21 @@ def _main():
     return main
 
 
+def _safe_get(user, key, default=""):
+    """Safely read *key* from user regardless of whether it's a dict, sqlite3.Row, or _CorpRow."""
+    if user is None:
+        return default
+    if hasattr(user, "get"):
+        return user.get(key, default)
+    try:
+        return user[key]
+    except (KeyError, IndexError):
+        return default
+
+
 def _get_corp_id(user) -> str:
     """Extract corp_id from user session, or empty string for admin."""
-    return str(user.get("corp_id") or "") if user else ""
+    return str(_safe_get(user, "corp_id") or "")
 
 
 def _get_org_id(conn, user) -> str:
@@ -44,6 +56,20 @@ def _get_org_id(conn, user) -> str:
     if corp_id:
         return org_service.get_org_id_for_corp(conn, corp_id) or ""
     return org_service.ensure_org_for_user(conn, user["username"])
+
+
+def _get_actor_name(user) -> str:
+    """Stable actor string for audit fields across admin and corp sessions."""
+    username = str(_safe_get(user, "username") or "").strip()
+    if username:
+        return username
+    corp_name = str(_safe_get(user, "corp_name") or "").strip()
+    if corp_name:
+        return f"corp:{corp_name}"
+    corp_id = str(_safe_get(user, "corp_id") or "").strip()
+    if corp_id:
+        return f"corp:{corp_id}"
+    return "system"
 
 
 # ── Request Models ─────────────────────────────────────────────────────────────
@@ -312,7 +338,18 @@ def api_industry_overview(
     equipment = industry_service.get_deployed_equipment(conn, location_id)
     active_jobs = industry_service.get_active_jobs(conn, location_id)
     history = industry_service.get_job_history(conn, location_id)
-    available_recipes = industry_service.get_available_recipes_for_location(conn, location_id, corp_id=corp_id)
+    org_id = _get_org_id(conn, user)
+    unlocked_tech_ids = {
+        str(unlock.get("tech_id") or "")
+        for unlock in org_service.get_unlocked_techs(conn, org_id)
+        if str(unlock.get("tech_id") or "").strip()
+    }
+    available_recipes = industry_service.get_available_recipes_for_location(
+        conn,
+        location_id,
+        corp_id=corp_id,
+        unlocked_tech_ids=unlocked_tech_ids,
+    )
     inv = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
 
     # Surface site info for mining
@@ -321,15 +358,14 @@ def api_industry_overview(
         (location_id,),
     ).fetchone()
     # Only show minable resources if the user's org has prospected this site
-    org_id = _get_org_id(conn, user)
     site_prospected = site and org_id and org_service.is_site_prospected(conn, org_id, location_id)
     minable = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
 
-    # Idle constructors for mining
+    # Idle mining-capable equipment
     idle_constructors = [
         {"id": e["id"], "name": e["name"], "config": e["config"]}
         for e in equipment
-        if e["category"] == "constructor" and e["status"] == "idle"
+        if e["category"] in ("constructor", "robonaut") and e["status"] == "idle"
     ]
 
     # Power & thermal balance
@@ -362,9 +398,10 @@ def api_deploy_equipment(
     """Deploy a refinery or constructor from location inventory."""
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     try:
         result = industry_service.deploy_equipment(
-            conn, body.location_id, body.item_id, user["username"], corp_id=corp_id
+            conn, body.location_id, body.item_id, actor_name, corp_id=corp_id
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -379,8 +416,10 @@ def api_undeploy_equipment(
 ) -> Dict[str, Any]:
     """Undeploy equipment back to location inventory."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     try:
-        result = industry_service.undeploy_equipment(conn, body.equipment_id, user["username"])
+        result = industry_service.undeploy_equipment(conn, body.equipment_id, actor_name, corp_id=corp_id)
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -398,10 +437,11 @@ def api_start_job(
     """Start a refinery production job."""
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     industry_service.settle_industry(conn)
     try:
         result = industry_service.start_production_job(
-            conn, body.equipment_id, body.recipe_id, user["username"],
+            conn, body.equipment_id, body.recipe_id, actor_name,
             batch_count=body.batch_count, corp_id=corp_id,
         )
         return {"ok": True, **result}
@@ -417,8 +457,10 @@ def api_cancel_job(
 ) -> Dict[str, Any]:
     """Cancel an active production job. Returns partial refund."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     try:
-        result = industry_service.cancel_production_job(conn, body.job_id, user["username"])
+        result = industry_service.cancel_production_job(conn, body.job_id, actor_name, corp_id=corp_id)
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -436,10 +478,11 @@ def api_start_mining(
     """Start mining a resource at a surface site."""
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     industry_service.settle_industry(conn)
     try:
         result = industry_service.start_mining_job(
-            conn, body.equipment_id, body.resource_id, user["username"], corp_id=corp_id
+            conn, body.equipment_id, body.resource_id, actor_name, corp_id=corp_id
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -454,8 +497,10 @@ def api_stop_mining(
 ) -> Dict[str, Any]:
     """Stop an active mining job."""
     user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
     try:
-        result = industry_service.stop_mining_job(conn, body.job_id, user["username"])
+        result = industry_service.stop_mining_job(conn, body.job_id, actor_name, corp_id=corp_id)
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

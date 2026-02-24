@@ -1,4 +1,4 @@
-# Copilot Instructions — earthmoon-db
+# Copilot Instructions — Frontier: Sol 2000
 
 ## Project Context
 

@@ -14,3 +14,11 @@ venv/
 # OS/editor noise
 .DS_Store
 .vscode/
+
+# Runtime data
+data/game.db
+data/game.db-journal
+data/game.db-wal
+
+# Session artifacts
+cookies.txt

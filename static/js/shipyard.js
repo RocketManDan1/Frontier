@@ -9,6 +9,16 @@
   const sourceHintEl = document.getElementById("shipyardSourceHint");
   const itemDisplay = window.ItemDisplay || null;
 
+  // Fuel loading elements
+  const fuelSectionEl = document.getElementById("shipyardFuelSection");
+  const fuelSliderEl = document.getElementById("shipyardFuelSlider");
+  const fuelInputEl = document.getElementById("shipyardFuelInput");
+  const fuelAvailEl = document.getElementById("shipyardFuelAvail");
+  const fuelBarFillEl = document.getElementById("shipyardFuelBarFill");
+  const fuelLabelEl = document.getElementById("shipyardFuelLabel");
+  const fuelFillBtn = document.getElementById("shipyardFuelFillBtn");
+  const fuelEmptyBtn = document.getElementById("shipyardFuelEmptyBtn");
+
   const SHIPYARD_DRAG_MIME = "application/x-earthmoon-shipyard-item";
 
   let buildLocationId = "";
@@ -19,15 +29,20 @@
   let sourceRefreshTimer = null;
   let lastCatalogHash = "";
 
+  // Fuel loading state
+  let fuelCapacityKg = 0;
+  let availableFuelKg = 0;
+  let requestedFuelKg = 0;
+
   const GARAGE_FOLDERS = [
-    { id: "reactors", label: "Reactors" },
-    { id: "thrusters", label: "Thrusters" },
-    { id: "generators", label: "Generators" },
-    { id: "radiators", label: "Radiators" },
-    { id: "constructors", label: "Constructors" },
-    { id: "refineries", label: "Refineries" },
-    { id: "robonauts", label: "Robonauts" },
-    { id: "storage", label: "Storage" },
+    { id: "reactors", label: "Reactors", tooltip: "Uses reactions between fundamental forces to create MWth." },
+    { id: "thrusters", label: "Thrusters", tooltip: "Converts onboard energy and propellant into thrust and delta-v." },
+    { id: "generators", label: "Generators", tooltip: "Converts MWth into electrical output (MWe) through various means." },
+    { id: "radiators", label: "Radiators", tooltip: "Rejects excess waste heat so the ship can run at sustained power." },
+    { id: "constructors", label: "Constructors", tooltip: "Mines celestial sites and constructs modules from refined goods." },
+    { id: "refineries", label: "Refineries", tooltip: "Processes raw feedstock into refined industrial resources." },
+    { id: "robonauts", label: "Robonauts", tooltip: "Automated systems that prospect celestial sites and enable refueling operations." },
+    { id: "storage", label: "Storage", tooltip: "Adds cargo and propellant capacity for logistics and mission endurance." },
   ];
 
   const collapsedFolders = new Set();
@@ -324,6 +339,7 @@
           label,
           subtitle: String(options.subtitle || partSubtitle(part)),
           iconSeed: part?.item_id || part?.name || label,
+          itemId: part?.item_id || "",
           category: category,
           mass_kg: Number(part?.mass_kg) || 0,
           volume_m3: partVolumeM3(part),
@@ -461,11 +477,30 @@
 
       const folderObj = GARAGE_FOLDERS.find((f) => f.label === groupName);
       const fId = folderObj ? folderObj.id : groupName;
+      const folderTooltip = String(folderObj?.tooltip || "");
       const isCollapsed = collapsedFolders.has(fId);
 
       const heading = document.createElement("div");
       heading.className = "shipyardGarageHeading";
-      heading.innerHTML = `<span class="garageChevron${isCollapsed ? "" : " isOpen"}">&#9656;</span> ${groupName} <span class="garageCount">${parts.length}</span>`;
+      heading.innerHTML = `<span class="garageChevron${isCollapsed ? "" : " isOpen"}">&#9656;</span>`;
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "garageFolderLabel";
+      nameEl.textContent = groupName;
+      heading.appendChild(nameEl);
+
+      if (folderTooltip) {
+        const hintEl = document.createElement("span");
+        hintEl.className = "garageFolderHint";
+        hintEl.textContent = folderTooltip;
+        heading.appendChild(hintEl);
+      }
+
+      const countEl = document.createElement("span");
+      countEl.className = "garageCount";
+      countEl.textContent = String(parts.length);
+      heading.appendChild(countEl);
+
       heading.style.cursor = "pointer";
       heading.addEventListener("click", () => {
         if (collapsedFolders.has(fId)) collapsedFolders.delete(fId);
@@ -712,6 +747,39 @@
     statsEl.innerHTML = renderDeltaVPanel(stats) + renderPowerBalance(powerBalance);
   }
 
+  function updateFuelUI() {
+    const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+    const hasFuelCapacity = fuelCapacityKg > 0;
+
+    if (fuelSectionEl) {
+      fuelSectionEl.style.display = hasFuelCapacity ? "" : "none";
+    }
+    if (!hasFuelCapacity) return;
+
+    // Clamp requested fuel
+    requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
+
+    if (fuelSliderEl) {
+      fuelSliderEl.max = String(Math.floor(maxFuel));
+      fuelSliderEl.value = String(Math.floor(requestedFuelKg));
+    }
+    if (fuelInputEl) {
+      fuelInputEl.max = String(Math.floor(maxFuel));
+      fuelInputEl.value = String(Math.floor(requestedFuelKg));
+    }
+    if (fuelAvailEl) {
+      fuelAvailEl.textContent = `${fmtMassKg(availableFuelKg)} water at site`;
+    }
+    if (fuelBarFillEl) {
+      const pct = fuelCapacityKg > 0 ? Math.min(100, (requestedFuelKg / fuelCapacityKg) * 100) : 0;
+      fuelBarFillEl.style.width = `${pct.toFixed(1)}%`;
+    }
+    if (fuelLabelEl) {
+      const pct = fuelCapacityKg > 0 ? (requestedFuelKg / fuelCapacityKg) * 100 : 0;
+      fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} / ${fmtMassKg(fuelCapacityKg)} (${pct.toFixed(0)}%)`;
+    }
+  }
+
   let previewTimer = null;
   async function refreshPreview() {
     if (previewTimer) clearTimeout(previewTimer);
@@ -723,9 +791,23 @@
       const data = await fetchJson("/api/shipyard/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parts: selectedItemIds, source_location_id: buildLocationId }),
+        body: JSON.stringify({
+          parts: selectedItemIds,
+          source_location_id: buildLocationId,
+          fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
+        }),
       });
-      renderStats(data.stats || {}, data.power_balance || null);
+
+      // Update fuel state from server response
+      const stats = data.stats || {};
+      fuelCapacityKg = Number(stats.fuel_capacity_kg || 0);
+      availableFuelKg = Number(data.available_fuel_kg || 0);
+      // Clamp requested fuel to new limits
+      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+      requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
+
+      updateFuelUI();
+      renderStats(stats, data.power_balance || null);
     } catch (err) {
       renderStats({}, null);
       setMsg(err?.message || "Failed to refresh preview", true);
@@ -748,12 +830,22 @@
       const data = await fetchJson("/api/shipyard/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, parts: selectedItemIds, source_location_id: buildLocationId }),
+        body: JSON.stringify({
+          name,
+          parts: selectedItemIds,
+          source_location_id: buildLocationId,
+          fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
+        }),
       });
       const ship = data.ship || {};
-      setMsg(`Built ${ship.name || "ship"} at ${ship.location_id || buildLocationId}.`, false);
+      const fuelNote = (Number(ship.fuel_kg) || 0) > 0 ? ` with ${fmtMassKg(ship.fuel_kg)} fuel` : "";
+      setMsg(`Built ${ship.name || "ship"} at ${ship.location_id || buildLocationId}${fuelNote}.`, false);
       selectedItemIds = [];
+      requestedFuelKg = 0;
+      fuelCapacityKg = 0;
+      availableFuelKg = 0;
       shipNameEl.value = "";
+      updateFuelUI();
       await loadGarageForCurrentSource();
       renderGarage();
       renderSlots();
@@ -791,11 +883,40 @@
   sourceLocationEl?.addEventListener("change", async () => {
     buildLocationId = String(sourceLocationEl.value || "");
     selectedItemIds = [];
+    requestedFuelKg = 0;
+    fuelCapacityKg = 0;
+    availableFuelKg = 0;
     updateSourceHint();
     await loadGarageForCurrentSource();
     renderGarage();
     renderSlots();
     await refreshPreview();
+  });
+
+  // Fuel slider / input listeners
+  fuelSliderEl?.addEventListener("input", () => {
+    requestedFuelKg = Number(fuelSliderEl.value || 0);
+    updateFuelUI();
+    refreshPreview();
+  });
+
+  fuelInputEl?.addEventListener("change", () => {
+    const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+    requestedFuelKg = Math.max(0, Math.min(Number(fuelInputEl.value || 0), maxFuel));
+    updateFuelUI();
+    refreshPreview();
+  });
+
+  fuelFillBtn?.addEventListener("click", () => {
+    requestedFuelKg = Math.min(fuelCapacityKg, availableFuelKg);
+    updateFuelUI();
+    refreshPreview();
+  });
+
+  fuelEmptyBtn?.addEventListener("click", () => {
+    requestedFuelKg = 0;
+    updateFuelUI();
+    refreshPreview();
   });
 
   buildBtn?.addEventListener("click", buildShip);

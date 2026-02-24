@@ -15,7 +15,7 @@ Extracted from main.py — handles:
 import json
 import math
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -411,9 +411,16 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
         is_own = (my_corp_id is not None and ship_corp_id == my_corp_id) or (my_corp_id is None and is_admin)
 
         parts = m.normalize_parts(json.loads(r["parts_json"] or "[]"))
+        fuel_kg = max(0.0, float(r["fuel_kg"] or 0.0))
+        parts, hardened_changed = m._harden_ship_parts(parts, fuel_kg)
+        if hardened_changed:
+            conn.execute(
+                "UPDATE ships SET parts_json=? WHERE id=?",
+                (json.dumps(parts), r["id"]),
+            )
         stats = m.derive_ship_stats_from_parts(
             parts,
-            current_fuel_kg=float(r["fuel_kg"] or 0.0),
+            current_fuel_kg=fuel_kg,
         )
 
         ship_data = {
@@ -687,11 +694,16 @@ def api_ship_inventory_jettison(ship_id: str, req: InventoryContainerReq, reques
         raise HTTPException(status_code=404, detail="Container not found")
 
     target_idx = int(target["container_index"])
-    target_resource = str(target.get("resource_id") or "").lower()
-    target_cargo_mass = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
 
-    if target_resource == "water":
-        current_fuel_kg = max(0.0, current_fuel_kg - target_cargo_mass)
+    # Determine water mass from cargo_manifest (container rows don't have top-level resource_id)
+    manifest = target.get("cargo_manifest") or []
+    water_mass_in_container = sum(
+        max(0.0, float(e.get("mass_kg") or 0.0))
+        for e in manifest
+        if str(e.get("resource_id") or "").lower() == "water"
+    )
+    if water_mass_in_container > 0:
+        current_fuel_kg = max(0.0, current_fuel_kg - water_mass_in_container)
 
     if 0 <= target_idx < len(parts):
         part = dict(parts[target_idx] or {})
@@ -710,23 +722,15 @@ def api_ship_inventory_jettison(ship_id: str, req: InventoryContainerReq, reques
         ):
             if key in part:
                 part[key] = 0.0
+        # Clear the cargo manifest on the part itself
+        part["cargo_manifest"] = []
         parts[target_idx] = part
 
-    stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=current_fuel_kg)
-    conn.execute(
-        """
-        UPDATE ships
-        SET parts_json=?, fuel_kg=?, fuel_capacity_kg=?, dry_mass_kg=?, isp_s=?
-        WHERE id=?
-        """,
-        (
-            json.dumps(parts),
-            stats["fuel_kg"],
-            stats["fuel_capacity_kg"],
-            stats["dry_mass_kg"],
-            stats["isp_s"],
-            sid,
-        ),
+    m._persist_ship_inventory_state(
+        conn,
+        ship_id=sid,
+        parts=parts,
+        fuel_kg=current_fuel_kg,
     )
     conn.commit()
 
@@ -777,12 +781,15 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
         clean_part = dict(part)
         cargo = by_index.get(idx)
         if cargo:
-            resource_id = str(cargo.get("resource_id") or "").strip()
-            cargo_mass_kg = max(0.0, float(cargo.get("cargo_mass_kg") or 0.0))
-            if resource_id and cargo_mass_kg > 0.0:
-                m.add_resource_to_location_inventory(conn, location_id, resource_id, cargo_mass_kg, corp_id=corp_id)
-                if resource_id.lower() == "water":
-                    transferred_fuel_like_kg += cargo_mass_kg
+            # Transfer ALL cargo manifest entries to location inventory
+            manifest = cargo.get("cargo_manifest") or []
+            for entry in manifest:
+                resource_id = str(entry.get("resource_id") or "").strip()
+                mass_kg = max(0.0, float(entry.get("mass_kg") or 0.0))
+                if resource_id and mass_kg > 0.0:
+                    m.add_resource_to_location_inventory(conn, location_id, resource_id, mass_kg, corp_id=corp_id)
+                    if resource_id.lower() == "water":
+                        transferred_fuel_like_kg += mass_kg
             for key in (
                 "cargo_used_m3",
                 "used_m3",
@@ -797,6 +804,8 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
                 "fuel_kg",
             ):
                 clean_part.pop(key, None)
+            # Clear manifest on the part
+            clean_part.pop("cargo_manifest", None)
 
         m.add_part_to_location_inventory(conn, location_id, clean_part, corp_id=corp_id)
 
@@ -863,38 +872,40 @@ def api_ship_inventory_deploy(ship_id: str, req: InventoryContainerReq, request:
         raise HTTPException(status_code=404, detail="Container not found")
 
     target_idx = int(target["container_index"])
-    target_resource = str(target.get("resource_id") or "").lower()
-    target_cargo_mass = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
 
-    if target_resource == "water":
-        current_fuel_kg = max(0.0, current_fuel_kg - target_cargo_mass)
+    # Determine water mass from cargo_manifest (container rows don't have top-level resource_id)
+    manifest = target.get("cargo_manifest") or []
+    water_mass_in_container = sum(
+        max(0.0, float(e.get("mass_kg") or 0.0))
+        for e in manifest
+        if str(e.get("resource_id") or "").lower() == "water"
+    )
+    if water_mass_in_container > 0:
+        current_fuel_kg = max(0.0, current_fuel_kg - water_mass_in_container)
 
     if not (0 <= target_idx < len(parts)):
         raise HTTPException(status_code=404, detail="Container not found")
 
     deployed_part = dict(parts.pop(target_idx) or {})
-    if max(0.0, float(target.get("cargo_mass_kg") or 0.0)) > 0.0:
-        deployed_part["resource_id"] = str(target.get("resource_id") or deployed_part.get("resource_id") or "")
-        deployed_part["cargo_mass_kg"] = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
-        deployed_part["cargo_used_m3"] = max(0.0, float(target.get("used_m3") or 0.0))
+    # Preserve cargo manifest data on the deployed part for location inventory
+    total_cargo_mass = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
+    total_used_m3 = max(0.0, float(target.get("used_m3") or 0.0))
+    if total_cargo_mass > 0.0:
+        deployed_part["cargo_mass_kg"] = total_cargo_mass
+        deployed_part["cargo_used_m3"] = total_used_m3
+        # Set resource_id from first manifest entry for backward compatibility
+        if manifest:
+            deployed_part["resource_id"] = str(manifest[0].get("resource_id") or deployed_part.get("resource_id") or "")
+        # Preserve the manifest itself
+        deployed_part["cargo_manifest"] = manifest
 
     m.add_part_to_location_inventory(conn, location_id, deployed_part, corp_id=corp_id)
 
-    stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=current_fuel_kg)
-    conn.execute(
-        """
-        UPDATE ships
-        SET parts_json=?, fuel_kg=?, fuel_capacity_kg=?, dry_mass_kg=?, isp_s=?
-        WHERE id=?
-        """,
-        (
-            json.dumps(parts),
-            stats["fuel_kg"],
-            stats["fuel_capacity_kg"],
-            stats["dry_mass_kg"],
-            stats["isp_s"],
-            sid,
-        ),
+    m._persist_ship_inventory_state(
+        conn,
+        ship_id=sid,
+        parts=parts,
+        fuel_kg=current_fuel_kg,
     )
     conn.commit()
 

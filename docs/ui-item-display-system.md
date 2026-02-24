@@ -4,7 +4,7 @@
 > category-specific icons, item names, quantity badges, and rich hover tooltips.
 
 This document describes the unified item display system used throughout
-earthmoon-db. Every place that shows an item — ship parts, cargo resources,
+Frontier: Sol 2000. Every place that shows an item — ship parts, cargo resources,
 shipyard catalogs, location inventories — uses the same shared component library,
 CSS classes, backend data contract, and interaction patterns. Follow this spec
 when adding any new item-bearing UI.

@@ -11,10 +11,23 @@ Handles:
 import json
 import sqlite3
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import catalog_service
 from sim_service import game_now_s
+
+
+GLOBAL_REFINERY_RECIPE_CATEGORIES = {"all_refineries"}
+
+_SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY = {
+    "thruster": "thrusters",
+    "reactor": "reactors",
+    "generator": "generators",
+    "radiator": "radiators",
+    "robonaut": "robonauts",
+    "constructor": "constructors",
+    "refinery": "refineries",
+}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -28,6 +41,14 @@ def _load_resource_name(resource_id: str) -> str:
     resources = catalog_service.load_resource_catalog()
     res = resources.get(resource_id)
     return str(res.get("name") or resource_id) if res else resource_id
+
+
+def _is_recipe_compatible_with_refinery_specialization(recipe_category: str, specialization: str) -> bool:
+    category = str(recipe_category or "").strip()
+    spec = str(specialization or "").strip()
+    if not category or category in GLOBAL_REFINERY_RECIPE_CATEGORIES:
+        return True
+    return bool(spec) and spec == category
 
 
 # ── Settle Jobs (on-access pattern) ───────────────────────────────────────────
@@ -149,11 +170,11 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
     for row in rows:
         job_id = row["id"]
         loc_id = row["location_id"]
-        resource_id = row["resource_id"]
+        source_resource_id = row["resource_id"]
         equip_id = row["equipment_id"]
         job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
 
-        if not resource_id:
+        if not source_resource_id:
             continue
 
         # Get mining rate from equipment config
@@ -172,12 +193,16 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
         # Scale mining rate by the resource's mass fraction at this site
         site_res = conn.execute(
             "SELECT mass_fraction FROM surface_site_resources WHERE site_location_id = ? AND resource_id = ?",
-            (loc_id, resource_id),
+            (loc_id, source_resource_id),
         ).fetchone()
         mass_fraction = float(site_res["mass_fraction"]) if site_res else 0.0
         effective_rate = rate_kg_hr * mass_fraction
         if effective_rate <= 0:
             continue
+
+        outputs = json.loads(row["outputs_json"] or "[]")
+        output_info = outputs[0] if outputs else {}
+        output_resource_id = str(output_info.get("item_id") or source_resource_id).strip() or source_resource_id
 
         # Calculate elapsed time since last settle
         inputs = json.loads(row["inputs_json"] or "{}")
@@ -187,7 +212,7 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
         mined_kg = effective_rate * elapsed_hr
 
         if mined_kg > 0.01:  # threshold to avoid tiny writes
-            _main.add_resource_to_location_inventory(conn, loc_id, resource_id, mined_kg, corp_id=job_corp_id)
+            _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, mined_kg, corp_id=job_corp_id)
 
             # Update last_settled
             inputs["last_settled"] = now
@@ -204,7 +229,7 @@ def _settle_mining_jobs(conn: sqlite3.Connection, now: float, location_id: Optio
 # ── Deploy / Undeploy ──────────────────────────────────────────────────────────
 
 
-DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "reactor", "generator", "radiator")
+DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "robonaut", "reactor", "generator", "radiator")
 
 
 def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
@@ -212,6 +237,7 @@ def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
     for loader in (
         catalog_service.load_refinery_catalog,
         catalog_service.load_constructor_catalog,
+        catalog_service.load_robonaut_catalog,
         catalog_service.load_reactor_catalog,
         catalog_service.load_generator_catalog,
         catalog_service.load_radiator_catalog,
@@ -234,6 +260,11 @@ def deploy_equipment(
     Supports refineries, constructors, reactors, generators, and radiators.
     Consumes the part from inventory and creates a deployed_equipment row.
     """
+    # Validate location exists before checking inventory
+    loc = conn.execute("SELECT id FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not loc:
+        raise ValueError(f"Location '{location_id}' not found")
+
     catalog_entry = _resolve_deployable_catalog_entry(item_id)
     if not catalog_entry:
         raise ValueError(f"Item '{item_id}' is not deployable equipment")
@@ -242,20 +273,23 @@ def deploy_equipment(
     if category not in DEPLOYABLE_CATEGORIES:
         raise ValueError(f"Item '{item_id}' is not deployable (category: {category})")
 
-    # Constructors require surface gravity — check if location is a surface site
-    if category == "constructor":
+    # Constructors and robonauts require surface deployment.
+    if category in ("constructor", "robonaut"):
         site = conn.execute(
             "SELECT gravity_m_s2 FROM surface_sites WHERE location_id = ?",
             (location_id,),
         ).fetchone()
         if not site:
-            raise ValueError("Constructors can only be deployed at surface sites")
-        min_grav = float(catalog_entry.get("min_surface_gravity_ms2") or 0.0)
-        site_grav = float(site["gravity_m_s2"])
-        if site_grav < min_grav:
-            raise ValueError(
-                f"Surface gravity {site_grav:.2f} m/s² is below minimum {min_grav:.2f} m/s²"
-            )
+            if category == "constructor":
+                raise ValueError("Constructors can only be deployed at surface sites")
+            raise ValueError("Robonauts can only be deployed at surface sites")
+        if category == "constructor":
+            min_grav = float(catalog_entry.get("min_surface_gravity_ms2") or 0.0)
+            site_grav = float(site["gravity_m_s2"])
+            if site_grav < min_grav:
+                raise ValueError(
+                    f"Surface gravity {site_grav:.2f} m/s² is below minimum {min_grav:.2f} m/s²"
+                )
 
     # Consume part from location inventory
     import main as _main
@@ -282,6 +316,12 @@ def deploy_equipment(
             "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
             "construction_rate_kg_per_hr": catalog_entry.get("construction_rate_kg_per_hr", 0),
             "excavation_type": catalog_entry.get("excavation_type", ""),
+        })
+    elif category == "robonaut":
+        config.update({
+            "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
+            "allowed_mining_resources": ["water_ice"],
+            "mining_output_resource_id": "water",
         })
     elif category == "reactor":
         config.update({
@@ -329,6 +369,8 @@ def undeploy_equipment(
     conn: sqlite3.Connection,
     equipment_id: str,
     username: str,
+    *,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Undeploy equipment — returns it to location inventory as a part.
@@ -340,6 +382,11 @@ def undeploy_equipment(
     ).fetchone()
     if not equip:
         raise ValueError("Equipment not found")
+
+    # Verify corp ownership — non-admin callers can only undeploy their own equipment
+    equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
+    if corp_id and equip_corp_id and corp_id != equip_corp_id:
+        raise ValueError("You do not own this equipment")
 
     # Check for active jobs
     active_jobs = conn.execute(
@@ -436,7 +483,7 @@ def compute_site_power_balance(equipment: List[Dict[str, Any]]) -> Dict[str, Any
                 "name": eq["name"], "heat_rejection_mw": rejection,
             })
 
-        elif cat in ("refinery", "constructor"):
+        elif cat in ("refinery", "constructor", "robonaut"):
             demand = float(cfg.get("electric_mw") or 0)
             is_active = eq.get("status") == "active"
             if is_active:
@@ -511,6 +558,11 @@ def start_production_job(
     if equip["category"] not in ("refinery", "constructor"):
         raise ValueError("Production jobs require a refinery or constructor")
 
+    # Verify corp ownership — non-admin callers can only use their own equipment
+    equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
+    if corp_id and equip_corp_id and corp_id != equip_corp_id:
+        raise ValueError("You do not own this equipment")
+
     config = json.loads(equip["config_json"] or "{}")
     location_id = equip["location_id"]
 
@@ -547,7 +599,7 @@ def start_production_job(
         # Check specialization match (refineries only)
         specialization = str(config.get("specialization") or "")
         recipe_category = str(recipe.get("refinery_category") or "")
-        if specialization and recipe_category and specialization != recipe_category:
+        if not _is_recipe_compatible_with_refinery_specialization(recipe_category, specialization):
             raise ValueError(
                 f"Refinery specialization '{specialization}' does not match recipe category '{recipe_category}'"
             )
@@ -665,6 +717,8 @@ def cancel_production_job(
     conn: sqlite3.Connection,
     job_id: str,
     username: str,
+    *,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """
     Cancel an active production job. Returns partial inputs based on progress.
@@ -676,6 +730,11 @@ def cancel_production_job(
     ).fetchone()
     if not job:
         raise ValueError("Active job not found")
+
+    # Verify corp ownership — non-admin callers can only cancel their own jobs
+    job_corp_id = str(job["corp_id"] or "") if "corp_id" in job.keys() else ""
+    if corp_id and job_corp_id and corp_id != job_corp_id:
+        raise ValueError("You do not own this job")
 
     now = game_now_s()
     started_at = float(job["started_at"])
@@ -730,8 +789,8 @@ def start_mining_job(
     corp_id: str = "",
 ) -> Dict[str, Any]:
     """
-    Start a continuous mining job on a deployed constructor at a surface site.
-    Constructor produces resource_id at its mining_rate_kg_per_hr.
+    Start a continuous mining job on a deployed constructor or robonaut at a surface site.
+    Constructor mines selected resources; robonauts mine water ice and output water.
     """
     equip = conn.execute(
         "SELECT * FROM deployed_equipment WHERE id = ?",
@@ -741,8 +800,14 @@ def start_mining_job(
         raise ValueError("Equipment not found")
     if equip["status"] != "idle":
         raise ValueError(f"Equipment is currently {equip['status']}, not idle")
-    if equip["category"] != "constructor":
-        raise ValueError("Mining requires a constructor")
+    equip_category = str(equip["category"] or "")
+    if equip_category not in ("constructor", "robonaut"):
+        raise ValueError("Mining requires a constructor or robonaut")
+
+    # Verify corp ownership — non-admin callers can only use their own equipment
+    equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
+    if corp_id and equip_corp_id and corp_id != equip_corp_id:
+        raise ValueError("You do not own this equipment")
 
     location_id = equip["location_id"]
     config = json.loads(equip["config_json"] or "{}")
@@ -778,6 +843,14 @@ def start_mining_job(
     if not site_resource:
         raise ValueError(f"Resource '{resource_id}' not available at this site")
 
+    output_resource_id = resource_id
+    if equip_category == "robonaut":
+        allowed_resources = config.get("allowed_mining_resources") or []
+        allowed_resources = [str(v) for v in allowed_resources if str(v).strip()]
+        if allowed_resources and resource_id not in allowed_resources:
+            raise ValueError("Robonaut ISRU can only mine water ice")
+        output_resource_id = str(config.get("mining_output_resource_id") or "water").strip() or "water"
+
     base_rate = float(config.get("mining_rate_kg_per_hr") or 0.0)
     if base_rate <= 0:
         raise ValueError("Constructor has no mining capability")
@@ -801,7 +874,11 @@ def start_mining_job(
         """,
         (job_id, location_id, equipment_id, resource_id, now, far_future,
          _json_dumps({"last_settled": now, "total_mined_kg": 0}),
-         _json_dumps([{"item_id": resource_id, "rate_kg_per_hr": effective_rate}]),
+         _json_dumps([{
+             "item_id": output_resource_id,
+             "source_resource_id": resource_id,
+             "rate_kg_per_hr": effective_rate,
+         }]),
          username, corp_id),
     )
 
@@ -811,8 +888,10 @@ def start_mining_job(
     return {
         "job_id": job_id,
         "equipment_id": equipment_id,
-        "resource_id": resource_id,
-        "resource_name": _load_resource_name(resource_id),
+        "resource_id": output_resource_id,
+        "resource_name": _load_resource_name(output_resource_id),
+        "source_resource_id": resource_id,
+        "source_resource_name": _load_resource_name(resource_id),
         "rate_kg_per_hr": effective_rate,
         "started_at": now,
     }
@@ -822,6 +901,8 @@ def stop_mining_job(
     conn: sqlite3.Connection,
     job_id: str,
     username: str,
+    *,
+    corp_id: str = "",
 ) -> Dict[str, Any]:
     """Stop a running mining job. Settles any un-collected mined resources first."""
     job = conn.execute(
@@ -830,6 +911,11 @@ def stop_mining_job(
     ).fetchone()
     if not job:
         raise ValueError("Active mining job not found")
+
+    # Verify corp ownership — non-admin callers can only stop their own jobs
+    job_corp_id = str(job["corp_id"] or "") if "corp_id" in job.keys() else ""
+    if corp_id and job_corp_id and corp_id != job_corp_id:
+        raise ValueError("You do not own this job")
 
     # Settle any pending mined resources before stopping
     _settle_mining_jobs(conn, game_now_s(), job["location_id"])
@@ -941,8 +1027,12 @@ def get_active_jobs(conn: sqlite3.Connection, location_id: str) -> List[Dict[str
             inputs = json.loads(r["inputs_json"] or "{}")
             outputs = json.loads(r["outputs_json"] or "[]")
             rate_info = outputs[0] if outputs else {}
-            entry["resource_id"] = r["resource_id"]
-            entry["resource_name"] = _load_resource_name(r["resource_id"] or "")
+            output_resource_id = str(rate_info.get("item_id") or r["resource_id"] or "")
+            source_resource_id = str(rate_info.get("source_resource_id") or r["resource_id"] or "")
+            entry["resource_id"] = output_resource_id
+            entry["resource_name"] = _load_resource_name(output_resource_id)
+            entry["source_resource_id"] = source_resource_id
+            entry["source_resource_name"] = _load_resource_name(source_resource_id)
             entry["rate_kg_per_hr"] = float(rate_info.get("rate_kg_per_hr") or 0)
             entry["total_mined_kg"] = float(inputs.get("total_mined_kg") or 0)
             entry["progress"] = None  # Mining has no end
@@ -990,6 +1080,7 @@ def get_available_recipes_for_location(
     conn: sqlite3.Connection,
     location_id: str,
     corp_id: str = "",
+    unlocked_tech_ids: Optional[set[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get all recipes that could be run at a location, based on deployed equipment.
@@ -1048,11 +1139,23 @@ def get_available_recipes_for_location(
             for ref in refineries:
                 cfg = ref.get("config") or {}
                 spec = str(cfg.get("specialization") or "")
-                if spec == recipe_cat:
+                if _is_recipe_compatible_with_refinery_specialization(recipe_cat, spec):
                     compatible_refineries.append(ref)
 
         if not compatible_refineries and not compatible_constructors:
             continue
+
+        # Shipyard recipes are visible only when researched for the org.
+        if facility_type == "shipyard" and unlocked_tech_ids is not None:
+            required_tier = max(0, int(recipe.get("min_tech_tier") or 0))
+            if required_tier > 0:
+                out_id = str(recipe.get("output_item_id") or "")
+                output_category = _output_category_map.get(out_id, "other")
+                research_category = _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY.get(output_category)
+                if research_category:
+                    required_node_id = f"{research_category}_lvl_{required_tier}"
+                    if required_node_id not in unlocked_tech_ids:
+                        continue
 
         # Check input availability and compute max_batches
         inputs_status = []

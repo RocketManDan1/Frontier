@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -343,6 +345,250 @@ def _migration_0008_corp_session_heartbeat(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE corp_sessions SET last_seen = created_at WHERE last_seen IS NULL")
 
 
+def _migration_0009_industry_actor_identity(conn: sqlite3.Connection) -> None:
+    """Decouple industry actor identity from users(username) for corp sessions."""
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.executescript(
+            """
+            ALTER TABLE deployed_equipment RENAME TO deployed_equipment_old;
+
+            CREATE TABLE deployed_equipment (
+              id TEXT PRIMARY KEY,
+              location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+              item_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              category TEXT NOT NULL,
+              deployed_at REAL NOT NULL,
+              deployed_by TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'idle',
+              config_json TEXT NOT NULL DEFAULT '{}',
+              corp_id TEXT
+            );
+
+            INSERT INTO deployed_equipment
+              (id, location_id, item_id, name, category, deployed_at, deployed_by, status, config_json, corp_id)
+            SELECT
+              id, location_id, item_id, name, category, deployed_at,
+              COALESCE(NULLIF(deployed_by, ''), 'system'),
+              status, config_json, corp_id
+            FROM deployed_equipment_old;
+
+            DROP TABLE deployed_equipment_old;
+
+            CREATE INDEX IF NOT EXISTS idx_deployed_equip_location
+              ON deployed_equipment(location_id);
+            CREATE INDEX IF NOT EXISTS idx_deployed_equip_category
+              ON deployed_equipment(location_id, category);
+
+            ALTER TABLE production_jobs RENAME TO production_jobs_old;
+
+            CREATE TABLE production_jobs (
+              id TEXT PRIMARY KEY,
+              location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+              equipment_id TEXT NOT NULL REFERENCES deployed_equipment(id) ON DELETE CASCADE,
+              job_type TEXT NOT NULL,
+              recipe_id TEXT,
+              resource_id TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              started_at REAL NOT NULL,
+              completes_at REAL NOT NULL,
+              inputs_json TEXT NOT NULL DEFAULT '[]',
+              outputs_json TEXT NOT NULL DEFAULT '[]',
+              created_by TEXT NOT NULL,
+              completed_at REAL,
+              corp_id TEXT
+            );
+
+            INSERT INTO production_jobs
+              (id, location_id, equipment_id, job_type, recipe_id, resource_id, status, started_at, completes_at, inputs_json, outputs_json, created_by, completed_at, corp_id)
+            SELECT
+              id, location_id, equipment_id, job_type, recipe_id, resource_id, status, started_at, completes_at, inputs_json, outputs_json,
+              COALESCE(NULLIF(created_by, ''), 'system'),
+              completed_at, corp_id
+            FROM production_jobs_old;
+
+            DROP TABLE production_jobs_old;
+
+            CREATE INDEX IF NOT EXISTS idx_production_jobs_location
+              ON production_jobs(location_id, status);
+            CREATE INDEX IF NOT EXISTS idx_production_jobs_equipment
+              ON production_jobs(equipment_id, status);
+            """
+        )
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
+def _migration_0010_org_loans(conn: sqlite3.Connection) -> None:
+    """Add per-organization loan ledger and repayment tracking."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS org_loans (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          loan_code TEXT NOT NULL,
+          principal_usd REAL NOT NULL,
+          annual_interest_rate REAL NOT NULL,
+          term_months INTEGER NOT NULL,
+          total_payable_usd REAL NOT NULL,
+          monthly_payment_usd REAL NOT NULL,
+          remaining_balance_usd REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          started_at REAL NOT NULL,
+          paid_off_at REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_org_loans_org ON org_loans(org_id);
+        CREATE INDEX IF NOT EXISTS idx_org_loans_org_code_status ON org_loans(org_id, loan_code, status);
+        """
+    )
+
+
+def _migration_0011_rekey_inventory_stacks(conn: sqlite3.Connection) -> None:
+    """Re-key legacy part stacks that used item_id as the stack_key.
+
+    Some code paths (org_service LEO boosts, older admin tools) stored
+    parts with ``stack_key = item_id`` and minimal/empty ``payload_json``.
+    The canonical path uses a SHA1 hash of the normalized part payload.
+    This migration regenerates stack keys for all 'part' stacks so they
+    are consistent and stack correctly regardless of provenance.
+    """
+    import catalog_service
+
+    # Gather all part catalog loaders
+    part_catalogs = {}
+    for loader in (
+        catalog_service.load_thruster_main_catalog,
+        catalog_service.load_reactor_catalog,
+        catalog_service.load_generator_catalog,
+        catalog_service.load_radiator_catalog,
+        catalog_service.load_constructor_catalog,
+        catalog_service.load_refinery_catalog,
+        catalog_service.load_robonaut_catalog,
+        catalog_service.load_storage_catalog,
+    ):
+        part_catalogs.update(loader())
+
+    rows = conn.execute(
+        """
+        SELECT rowid, location_id, corp_id, stack_type, stack_key, item_id, name,
+               quantity, mass_kg, volume_m3, payload_json, updated_at
+        FROM location_inventory_stacks
+        WHERE stack_type = 'part'
+        """
+    ).fetchall()
+
+    if not rows:
+        return
+
+    def _json_dumps_stable(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+    # Container runtime keys to strip before hashing
+    container_runtime_keys = frozenset({
+        "cargo_manifest", "container_uid",
+        "cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3",
+        "cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg",
+        "water_kg", "fuel_kg", "resource_id",
+    })
+
+    # Group rows that will merge into the same new stack_key
+    merge_groups = {}  # (location_id, corp_id, new_stack_key) -> [rows]
+
+    for r in rows:
+        payload = json.loads(r["payload_json"] or "{}")
+        part = payload.get("part") if isinstance(payload, dict) else None
+        item_id = str(r["item_id"] or "").strip()
+
+        # Resolve the part dict from catalog if the payload doesn't have it
+        if not isinstance(part, dict) or not part:
+            catalog_entry = part_catalogs.get(item_id)
+            if catalog_entry:
+                part = dict(catalog_entry)
+                part.setdefault("item_id", item_id)
+                part.setdefault("name", str(r["name"] or item_id))
+            else:
+                qty = max(0.0, float(r["quantity"] or 0.0))
+                per_unit_mass = max(0.0, float(r["mass_kg"] or 0.0)) / qty if qty > 0 else 0.0
+                part = {
+                    "item_id": item_id,
+                    "name": str(r["name"] or item_id),
+                    "type": "generic",
+                    "category_id": "generic",
+                    "mass_kg": per_unit_mass,
+                }
+
+        # Strip container runtime keys
+        clean_part = {k: v for k, v in part.items() if k not in container_runtime_keys}
+
+        new_payload_json = _json_dumps_stable({"part": clean_part})
+        new_stack_key = hashlib.sha1(new_payload_json.encode("utf-8")).hexdigest()
+
+        group_key = (str(r["location_id"]), str(r["corp_id"] or ""), new_stack_key)
+        merge_groups.setdefault(group_key, []).append({
+            "rowid": r["rowid"],
+            "old_stack_key": str(r["stack_key"]),
+            "item_id": item_id,
+            "name": str(r["name"] or item_id),
+            "quantity": float(r["quantity"] or 0.0),
+            "mass_kg": float(r["mass_kg"] or 0.0),
+            "volume_m3": float(r["volume_m3"] or 0.0),
+            "payload_json": new_payload_json,
+            "updated_at": float(r["updated_at"] or 0.0),
+        })
+
+    now = time.time()
+    for (loc_id, corp_id, new_key), group in merge_groups.items():
+        # Delete all old rows in this group
+        rowids = [g["rowid"] for g in group]
+        placeholders = ",".join("?" * len(rowids))
+        conn.execute(f"DELETE FROM location_inventory_stacks WHERE rowid IN ({placeholders})", rowids)
+
+        # Merge quantities
+        total_qty = sum(g["quantity"] for g in group)
+        total_mass = sum(g["mass_kg"] for g in group)
+        total_vol = sum(g["volume_m3"] for g in group)
+        if total_qty <= 0 and total_mass <= 0:
+            continue
+
+        # Use the first row's metadata
+        first = group[0]
+
+        # Check if a row with this new_key already exists (from a previous correct insert)
+        existing = conn.execute(
+            """
+            SELECT quantity, mass_kg, volume_m3 FROM location_inventory_stacks
+            WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
+            """,
+            (loc_id, corp_id, new_key),
+        ).fetchone()
+
+        if existing:
+            conn.execute(
+                """
+                UPDATE location_inventory_stacks
+                SET quantity = quantity + ?, mass_kg = mass_kg + ?,
+                    volume_m3 = volume_m3 + ?, payload_json = ?, updated_at = ?
+                WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
+                """,
+                (total_qty, total_mass, total_vol, first["payload_json"], now,
+                 loc_id, corp_id, new_key),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO location_inventory_stacks
+                  (location_id, corp_id, stack_type, stack_key, item_id, name,
+                   quantity, mass_kg, volume_m3, payload_json, updated_at)
+                VALUES (?, ?, 'part', ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (loc_id, corp_id, new_key, first["item_id"], first["name"],
+                 total_qty, total_mass, total_vol, first["payload_json"], now),
+            )
+
+    conn.commit()
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -353,6 +599,9 @@ def _migrations() -> List[Migration]:
     Migration("0006_organizations", "Organizations, research, LEO boosts, prospecting", _migration_0006_organizations),
     Migration("0007_corporations", "Corporation auth, ownership columns, data wipe", _migration_0007_corporations),
     Migration("0008_corp_session_heartbeat", "Add last_seen heartbeat column to corp_sessions", _migration_0008_corp_session_heartbeat),
+    Migration("0009_industry_actor_identity", "Decouple industry actor identity from users table", _migration_0009_industry_actor_identity),
+    Migration("0010_org_loans", "Add organization loans and repayment tracking", _migration_0010_org_loans),
+    Migration("0011_rekey_inventory_stacks", "Re-key legacy inventory stacks to SHA1-based stack keys", _migration_0011_rekey_inventory_stacks),
     ]
 
 

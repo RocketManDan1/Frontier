@@ -5,8 +5,8 @@
   if (!root || !dock || !layer) return;
 
   const STORAGE_KEY = "earthmoon.appWindows.v1";
-  const MIN_WIDTH = 380;
-  const MIN_HEIGHT = 300;
+  const MIN_WIDTH = 440;
+  const MIN_HEIGHT = 360;
   const TOP_OFFSET = 12;
   const HANGAR_WINDOW_EVENT = "earthmoon:open-hangar-window";
 
@@ -281,6 +281,7 @@
           subtitle: String(item?.subtitle || item?.item_kind || ""),
           stats: statsText,
           iconSeed: item?.icon_seed || item?.item_uid || item?.item_id,
+          itemId: item?.item_id || "",
           category: category,
           phase: phase,
           mass_kg: item?.mass_kg,
@@ -1379,6 +1380,38 @@
     return { left, top, width, height };
   }
 
+  /**
+   * Direction-aware clamping for resize operations.
+   * Keeps the opposite edge anchored when clamping size to minimums.
+   * @param {object} rect - {left, top, width, height}
+   * @param {string} dir  - resize direction, e.g. "se", "nw", "n", "w"
+   * @param {object} origin - original {left, top, width, height} before resize started
+   */
+  function clampResizeRect(rect, dir, origin) {
+    const limits = contentLimits();
+    let width = clamp(rect.width, MIN_WIDTH, limits.maxWidth);
+    let height = clamp(rect.height, MIN_HEIGHT, limits.maxHeight);
+    let left = rect.left;
+    let top = rect.top;
+
+    // When resizing from west, anchor the right edge
+    if (dir.includes("w")) {
+      const rightEdge = origin.left + origin.width;
+      left = rightEdge - width;
+    }
+    // When resizing from north, anchor the bottom edge
+    if (dir.includes("n")) {
+      const bottomEdge = origin.top + origin.height;
+      top = bottomEdge - height;
+    }
+
+    // Final boundary clamp
+    left = clamp(left, limits.minLeft, limits.maxLeft - width);
+    top = clamp(top, limits.minTop, limits.maxTop - height);
+
+    return { left, top, width, height };
+  }
+
   function applyRect(el, rect) {
     el.style.left = `${Math.round(rect.left)}px`;
     el.style.top = `${Math.round(rect.top)}px`;
@@ -1471,8 +1504,8 @@
     const baseRect = {
       left: Number.isFinite(saved.left) ? saved.left : 208 + windows.size * 24,
       top: Number.isFinite(saved.top) ? saved.top : 24 + windows.size * 20,
-      width: Number.isFinite(saved.width) ? saved.width : 760,
-      height: Number.isFinite(saved.height) ? saved.height : 520,
+      width: Number.isFinite(saved.width) ? saved.width : 920,
+      height: Number.isFinite(saved.height) ? saved.height : 620,
     };
     const initial = clampRect(baseRect);
 
@@ -1591,12 +1624,12 @@
           nextHeight = origin.height - dy;
         }
 
-        const next = clampRect({
+        const next = clampResizeRect({
           left: nextLeft,
           top: nextTop,
           width: nextWidth,
           height: nextHeight,
-        });
+        }, dir, origin);
         applyRect(panel, next);
       };
 
@@ -1677,8 +1710,8 @@
     const baseRect = {
       left: Number.isFinite(saved.left) ? saved.left : 244 + windows.size * 18,
       top: Number.isFinite(saved.top) ? saved.top : 42 + windows.size * 14,
-      width: Number.isFinite(saved.width) ? saved.width : 680,
-      height: Number.isFinite(saved.height) ? saved.height : 480,
+      width: Number.isFinite(saved.width) ? saved.width : 780,
+      height: Number.isFinite(saved.height) ? saved.height : 540,
     };
     const initial = clampRect(baseRect);
 
@@ -1792,12 +1825,12 @@
           nextHeight = origin.height - dy;
         }
 
-        const next = clampRect({
+        const next = clampResizeRect({
           left: nextLeft,
           top: nextTop,
           width: nextWidth,
           height: nextHeight,
-        });
+        }, dir, origin);
         applyRect(panel, next);
       };
 

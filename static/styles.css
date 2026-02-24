@@ -144,6 +144,35 @@ body.embedMode .pagePanel {
   font-weight: 600;
 }
 
+.mapPage .mapBrandMark {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  z-index: 5;
+  pointer-events: none;
+  user-select: none;
+  text-align: right;
+}
+
+.mapPage .mapBrandTitle {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(220, 236, 252, 0.34);
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.mapPage .mapBrandStage {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(208, 226, 244, 0.24);
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
 @media (max-width: 900px) {
   .mapPage .mapOrgSummary {
     gap: 12px;
@@ -155,6 +184,21 @@ body.embedMode .pagePanel {
 
   .mapPage .mapOrgLabel {
     display: none;
+  }
+
+  .mapPage .mapBrandMark {
+    top: 10px;
+    right: 12px;
+  }
+
+  .mapPage .mapBrandTitle {
+    font-size: 14px;
+    letter-spacing: 0.05em;
+  }
+
+  .mapPage .mapBrandStage {
+    font-size: 10px;
+    letter-spacing: 0.06em;
   }
 }
 
@@ -301,10 +345,10 @@ body.embedMode .pagePanel {
 .mapPage .appWindow {
   position: absolute;
   pointer-events: auto;
-  min-width: 340px;
-  min-height: 260px;
-  width: 680px;
-  height: 440px;
+  min-width: 440px;
+  min-height: 360px;
+  width: 780px;
+  height: 540px;
   padding: 0;
   overflow: hidden;
 }
@@ -356,8 +400,8 @@ body.embedMode .pagePanel {
 }
 
 .mapPage .inventoryWindow {
-  min-width: 460px;
-  min-height: 320px;
+  min-width: 480px;
+  min-height: 360px;
 }
 
 .mapPage .inventoryWindowBody {
@@ -930,6 +974,51 @@ body.embedMode .pagePanel {
   pointer-events: none;
 }
 
+/* ── Info button (top-right "i" on each cell) ───────────── */
+
+.invCellInfoBtn {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: rgba(140, 195, 255, 0.95);
+  font-size: 11px;
+  font-weight: 600;
+  font-style: normal;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.12s, text-shadow 0.12s;
+  pointer-events: auto;
+}
+
+.invCell:hover .invCellInfoBtn {
+  opacity: 1;
+}
+
+.invCellInfoBtn:hover {
+  color: #fff;
+  text-shadow: 0 0 6px rgba(130, 200, 255, 0.8);
+}
+
+/* When both qty badge and info button exist, shift qty badge left */
+.invCell .invCellQty ~ .invCellInfoBtn,
+.invCell .invCellInfoBtn ~ .invCellQty {
+  /* info button stays top-right; qty badge shifts below */
+}
+.invCell:has(.invCellInfoBtn) .invCellQty {
+  top: 20px;
+}
+
 /* ── Tooltip ────────────────────────────────────────────── */
 
 .invTooltip {
@@ -1010,6 +1099,307 @@ body.embedMode .pagePanel {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Item Info Modal (Eve Online-style) ─────────────────── */
+
+.iiOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.iiModal {
+  width: 440px;
+  max-width: 94vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(109, 182, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(8, 14, 26, 0.97);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(109, 182, 255, 0.08);
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  color: rgba(210, 228, 244, 0.92);
+  overflow: hidden;
+}
+
+/* Header */
+.iiHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(109, 182, 255, 0.15);
+  background: rgba(12, 22, 38, 0.6);
+}
+
+.iiHeaderIcon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.iiHeaderInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.iiHeaderTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(235, 245, 252, 0.96);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.iiHeaderSub {
+  font-size: 10px;
+  color: rgba(140, 175, 210, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+
+.iiCloseBtn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(109, 182, 255, 0.2);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(180, 210, 240, 0.7);
+  font-size: 18px;
+  line-height: 26px;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.iiCloseBtn:hover {
+  background: rgba(220, 60, 60, 0.25);
+  color: rgba(255, 120, 120, 0.95);
+  border-color: rgba(255, 100, 100, 0.4);
+}
+
+/* Tab bar */
+.iiTabBar {
+  display: flex;
+  border-bottom: 1px solid rgba(109, 182, 255, 0.15);
+  background: rgba(10, 18, 30, 0.5);
+  padding: 0 6px;
+}
+
+.iiTab {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(160, 190, 220, 0.65);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.iiTab:hover {
+  color: rgba(200, 225, 250, 0.88);
+}
+
+.iiTab.active {
+  color: rgba(130, 200, 255, 0.95);
+  border-bottom-color: rgba(100, 185, 255, 0.7);
+}
+
+/* Body (tab panels) */
+.iiBody {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.iiPanel {
+  display: none;
+  padding: 14px;
+}
+
+.iiPanel.active {
+  display: block;
+}
+
+/* Description tab */
+.iiDescText {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(200, 220, 240, 0.88);
+}
+
+.iiTagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.iiTag {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(50, 90, 140, 0.35);
+  border: 1px solid rgba(109, 182, 255, 0.2);
+  font-size: 10px;
+  color: rgba(150, 200, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Attributes tab */
+.iiAttrTable {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.iiAttrRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 5px 4px;
+  font-size: 11.5px;
+  border-bottom: 1px solid rgba(109, 182, 255, 0.06);
+}
+
+.iiAttrRow:last-child {
+  border-bottom: none;
+}
+
+.iiAttrLabel {
+  color: rgba(150, 180, 210, 0.75);
+}
+
+.iiAttrValue {
+  color: rgba(220, 240, 255, 0.92);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recipe tab */
+.iiRecipeCard {
+  border: 1px solid rgba(109, 182, 255, 0.14);
+  border-radius: 5px;
+  background: rgba(14, 24, 40, 0.5);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.iiRecipeCard:last-child {
+  margin-bottom: 0;
+}
+
+.iiRecipeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.iiRecipeName {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(220, 238, 255, 0.92);
+}
+
+.iiRecipeBadge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+
+.iiRecipeBadge.iiProduces {
+  background: rgba(40, 140, 80, 0.35);
+  border: 1px solid rgba(80, 200, 120, 0.35);
+  color: rgba(120, 230, 160, 0.95);
+}
+
+.iiRecipeBadge.iiConsumes {
+  background: rgba(140, 100, 40, 0.3);
+  border: 1px solid rgba(200, 160, 80, 0.3);
+  color: rgba(230, 200, 120, 0.9);
+}
+
+.iiRecipeSection {
+  margin-bottom: 6px;
+}
+
+.iiRecipeSectionLabel {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(140, 175, 210, 0.55);
+  margin-bottom: 3px;
+}
+
+.iiRecipeItem {
+  font-size: 11.5px;
+  color: rgba(200, 222, 244, 0.88);
+  padding: 1px 0 1px 8px;
+}
+
+.iiItemLink {
+  color: rgba(100, 190, 255, 0.92);
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px dotted rgba(100, 190, 255, 0.3);
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.iiItemLink:hover {
+  color: rgba(160, 220, 255, 1);
+  border-bottom-color: rgba(160, 220, 255, 0.6);
+}
+
+.iiRecipeMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(109, 182, 255, 0.08);
+  font-size: 10px;
+  color: rgba(150, 180, 210, 0.65);
+}
+
+.iiMetaSep {
+  color: rgba(109, 182, 255, 0.25);
+}
+
+/* Utility states */
+.iiLoading {
+  text-align: center;
+  padding: 30px 0;
+  color: rgba(150, 190, 230, 0.6);
+  font-size: 12px;
+}
+
+.iiEmpty {
+  text-align: center;
+  padding: 24px 0;
+  color: rgba(150, 180, 210, 0.5);
+  font-size: 12px;
+  font-style: italic;
+}
+
 .mapPage .overview,
 .mapPage .info {
   position: absolute;
@@ -1027,6 +1417,18 @@ body.embedMode .pagePanel {
   box-shadow:
     0 22px 52px rgba(0, 0, 0, 0.56),
     inset 0 0 0 1px rgba(220, 238, 255, 0.05);
+}
+
+/* Block child elements from capturing pointer events during drag/resize */
+.mapPage .mapWindow.isDragging .appWindowBody,
+.mapPage .mapWindow.isDragging .appWindowFrame,
+.mapPage .mapWindow.isDragging .inventoryWindowBody,
+.mapPage .mapWindow.isDragging .mapWindowBody,
+.mapPage .mapWindow.isResizing .appWindowBody,
+.mapPage .mapWindow.isResizing .appWindowFrame,
+.mapPage .mapWindow.isResizing .inventoryWindowBody,
+.mapPage .mapWindow.isResizing .mapWindowBody {
+  pointer-events: none;
 }
 
 .mapPage .mapWindow.isSelected::before {
@@ -1114,7 +1516,7 @@ body.embedMode .pagePanel {
 .mapPage .mapWindowResize--s {
   left: 10px;
   right: 10px;
-  height: 8px;
+  height: 10px;
 }
 
 .mapPage .mapWindowResize--n {
@@ -1131,7 +1533,7 @@ body.embedMode .pagePanel {
 .mapPage .mapWindowResize--w {
   top: 10px;
   bottom: 10px;
-  width: 8px;
+  width: 10px;
 }
 
 .mapPage .mapWindowResize--e {
@@ -1148,8 +1550,8 @@ body.embedMode .pagePanel {
 .mapPage .mapWindowResize--nw,
 .mapPage .mapWindowResize--se,
 .mapPage .mapWindowResize--sw {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .mapPage .mapWindowResize--ne {
@@ -2810,6 +3212,18 @@ body.fleetPage {
   gap: 8px;
 }
 
+.researchUnlockGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 76px);
+  gap: 4px;
+  justify-content: start;
+}
+
+.researchUnlockGrid .invCell.isLocked {
+  opacity: 0.55;
+  filter: saturate(0.4);
+}
+
 .researchUnlockRow {
   border: 1px solid rgba(94, 124, 156, 0.52);
   border-radius: 1px;
@@ -2872,6 +3286,87 @@ body.fleetPage {
 .shipyardSlots {
   min-height: 360px;
   align-content: start;
+}
+
+/* ── Fuel Loading Section ────────────────────────────────── */
+
+.shipyardFuelSection {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.shipyardFuelHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.shipyardFuelControls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shipyardFuelSlider {
+  width: 100%;
+  cursor: pointer;
+  accent-color: #4fc3f7;
+}
+
+.shipyardFuelInputRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shipyardFuelInput {
+  width: 90px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: rgba(9, 16, 25, 0.76);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.shipyardFuelUnit {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.shipyardFuelBar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.shipyardFuelBarFill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a6dd4, #4fc3f7);
+  transition: width 150ms ease;
+  width: 0%;
+}
+
+.btnSmall {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: rgba(9, 16, 25, 0.76);
+  color: var(--muted);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.btnSmall:hover {
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--text);
+  border-color: #4fc3f7;
 }
 
 .shipyardCardStrip {
@@ -2938,6 +3433,17 @@ body.fleetPage {
 
 .shipyardGarageHeading:hover {
   color: var(--text);
+}
+
+.garageFolderHint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .garageChevron {
@@ -4224,9 +4730,109 @@ tr.bodyGroupHeader td {
 
 .deployModalBody, .startJobModalBody, .miningModalBody {
   display: block;
-  max-width: 500px;
-  max-height: 70vh;
+  max-width: 560px;
+  max-height: 75vh;
   overflow-y: auto;
+}
+
+/* Power summary banner at top of deploy modal */
+.deployPowerSummary {
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.deployPowerSummary:empty { display: none; }
+.deployPwrStat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.deployPwrLabel { color: var(--muted); }
+.deployPwrVal { color: var(--text); font-weight: 600; }
+.deployPwrVal.pwrOk { color: var(--accent); }
+.deployPwrVal.pwrWarn { color: #e8a22e; }
+.deployPwrVal.pwrBad { color: #e05252; }
+
+/* Category group sections */
+.deployCatGroup { margin-bottom: 10px; }
+.deployCatHeader {
+  padding: 6px 10px;
+  background: var(--panel-solid);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+/* Individual deploy item rows */
+.deployItemsList { display: flex; flex-direction: column; gap: 2px; }
+.deployItemRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.deployItemRow:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+.deployItemInfo { min-width: 0; }
+.deployItemName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deployItemDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+.deployItemDetail {
+  font-size: 11px;
+  color: var(--muted);
+}
+.deployItemDetail b {
+  color: var(--text);
+  font-weight: 600;
+}
+.deployItemMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+.deployItemQty {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-solid);
+  padding: 1px 8px;
+  border-radius: 3px;
+}
+.deployItemSource {
+  font-size: 10px;
+  color: var(--muted);
 }
 
 /* ── History table ──────────────────────────────────────── */
@@ -4983,12 +5589,74 @@ tr.bodyGroupHeader td {
 }
 
 .orgLayout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 12px;
   max-width: 1400px;
   margin: 0 auto;
+}
+
+.orgSubTabs {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.orgSubTabBtn {
+  border: 1px solid var(--border-soft);
+  background: rgba(12, 18, 30, 0.75);
+  color: var(--muted);
+  border-radius: 3px;
+  padding: 6px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.orgSubTabBtn:hover,
+.orgSubTabBtn.active {
+  color: var(--text);
+  border-color: var(--border);
+  background: rgba(32, 58, 86, 0.4);
+}
+
+.orgTabPane {
+  display: block;
+}
+
+#orgTabOverview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#orgTabFinances {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#orgTabMarketplace {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+body.embedMode #orgTabFinances {
+  max-height: calc(100vh - 96px);
+}
+
+body.embedMode #orgTabMarketplace {
+  max-height: calc(100vh - 96px);
+}
+
+body.embedMode #orgTabOverview {
+  max-height: calc(100vh - 96px);
 }
 
 .orgLeftCol,
@@ -4996,6 +5664,157 @@ tr.bodyGroupHeader td {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.orgFinancesCol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.orgMarketplaceCol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.orgTableWrap {
+  margin-top: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.orgMarketTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.orgMarketTable th,
+.orgMarketTable td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+.orgMarketTable th {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(8, 13, 22, 0.62);
+}
+
+.orgMarketTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.orgMarketSellRows {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.orgMarketSellRow {
+  border: 1px solid var(--border-soft);
+  background: rgba(12, 18, 30, 0.7);
+  border-radius: 4px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.orgMarketSellHead {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.orgMarketSellLeft {
+  display: grid;
+  gap: 2px;
+}
+
+.orgMarketSellTitle {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.orgMarketSellControls {
+  display: grid;
+  gap: 6px;
+}
+
+.orgMarketSellSlider {
+  width: 100%;
+}
+
+.orgLoanOffers {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.orgLoanCard {
+  border: 1px solid var(--border-soft);
+  background: rgba(12, 18, 30, 0.7);
+  border-radius: 4px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.orgLoanTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.orgLoanMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.orgLoanMetaItem {
+  border: 1px solid var(--border-soft);
+  background: rgba(8, 13, 22, 0.58);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+
+.orgLoanMetaLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.orgLoanMetaValue {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.orgLoanTracker {
+  display: grid;
+  gap: 4px;
+}
+
+.orgLoanProgress {
+  height: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(7, 12, 20, 0.75);
+  overflow: hidden;
+}
+
+.orgLoanProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(72, 209, 243, 0.85), rgba(89, 185, 230, 0.45));
 }
 
 /* Stat grid */
@@ -5083,10 +5902,30 @@ tr.bodyGroupHeader td {
 /* Boost controls */
 .orgBoostControls {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 10px;
   margin: 12px 0;
   align-items: end;
+}
+
+.orgBoostItems {
+  display: grid;
+  gap: 8px;
+}
+
+.orgBoostLine {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.orgBoostRemoveBtn {
+  min-width: 28px;
+}
+
+.orgBoostAddBtn {
+  margin-top: 8px;
 }
 
 .orgBoostField label {
@@ -5120,11 +5959,17 @@ tr.bodyGroupHeader td {
 }
 
 @media (max-width: 800px) {
-  .orgLayout {
+  #orgTabOverview {
     grid-template-columns: 1fr;
   }
   .orgBoostControls {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+  .orgBoostLine {
+    grid-template-columns: 1fr;
+  }
+  .orgLoanMeta {
+    grid-template-columns: 1fr;
   }
 }
 

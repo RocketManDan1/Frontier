@@ -7,7 +7,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from db import APP_DIR
 from constants import (
-    ITEM_CATEGORIES,
     ITEM_CATEGORY_ALIASES,
     ITEM_CATEGORY_BY_ID,
     RESEARCH_CATEGORIES,
@@ -544,6 +543,9 @@ def load_resource_catalog() -> Dict[str, Dict[str, Any]]:
                 "type": str(entry.get("type") or "resource"),
                 "category_id": str(entry.get("category_id") or "fuel"),
                 "mass_per_m3_kg": float(entry.get("mass_per_m3_kg") or 0.0),
+                "phase": str(entry.get("phase") or ""),
+                "description": str(entry.get("description") or ""),
+                "price_per_kg": max(0.0, float(entry.get("price_per_kg") or 0.0)),
             }
     return catalog
 
@@ -567,6 +569,7 @@ def load_storage_catalog() -> Dict[str, Dict[str, Any]]:
                 "mass_kg": max(0.0, float(entry.get("mass_kg") or 0.0)),
                 "capacity_m3": max(0.0, float(entry.get("capacity_m3") or 0.0)),
                 "resource_id": str(entry.get("resource_id") or ""),
+                "tech_level": int(entry.get("tech_level") or 1),
             }
     return catalog
 
@@ -743,6 +746,9 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
                 continue
             perf = entry.get("performance") or {}
             power_req = entry.get("power_requirements") or {}
+            tech_level = max(1.0, float(entry.get("tech_level") or 1))
+            # ISRU mining baseline: 50 kg/hr at tech level 1, +10% per tech level.
+            mining_rate_kg_per_hr = 50.0 * (1.1 ** (tech_level - 1.0))
             catalog[item_id] = {
                 "item_id": item_id,
                 "name": str(entry.get("name") or item_id),
@@ -753,9 +759,10 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
                 "prospect_range_km": max(0.0, float(perf.get("prospect_range_km") or 0.0)),
                 "scan_rate_km2_per_hr": max(0.0, float(perf.get("scan_rate_km2_per_hr") or 0.0)),
                 "melt_rate_t_per_hr": max(0.0, float(perf.get("melt_rate_t_per_hr") or 0.0)),
+                "mining_rate_kg_per_hr": round(max(0.0, mining_rate_kg_per_hr), 4),
                 "emission_type": str(perf.get("emission_type") or ""),
                 "branch": str(entry.get("branch") or ""),
-                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "tech_level": tech_level,
                 "research_node": str(entry.get("research_node") or ""),
             }
     return catalog
@@ -1066,6 +1073,156 @@ def build_recipe_categories_payload(recipe_catalog: Dict[str, Dict[str, Any]]) -
     return {
         "categories": categories,
     }
+
+
+def get_item_info(item_id: str) -> Optional[Dict[str, Any]]:
+    """Unified item lookup across all catalogs.
+
+    Returns a dict with:
+      - All catalog fields for the item
+      - description (read from raw JSON if the catalog stripped it)
+      - related_recipes: recipes that produce or consume this item
+      - category (normalized)
+    """
+    if not item_id or not str(item_id).strip():
+        return None
+    item_id = str(item_id).strip()
+
+    # ── Search all catalogs for the item ──────────────────────────────────
+    catalog_searches: List[tuple] = [
+        ("thruster",    load_thruster_main_catalog),
+        ("reactor",     load_reactor_catalog),
+        ("generator",   load_generator_catalog),
+        ("radiator",    load_radiator_catalog),
+        ("storage",     load_storage_catalog),
+        ("robonaut",    load_robonaut_catalog),
+        ("constructor", load_constructor_catalog),
+        ("refinery",    load_refinery_catalog),
+        ("resource",    load_resource_catalog),
+    ]
+
+    found: Optional[Dict[str, Any]] = None
+    found_category: str = ""
+    for cat_name, loader in catalog_searches:
+        catalog = loader()
+        if item_id in catalog:
+            found = dict(catalog[item_id])
+            found_category = cat_name
+            break
+
+    if found is None:
+        return None
+
+    # Normalize the item_id field
+    found["item_id"] = item_id
+    if "id" not in found:
+        found["id"] = item_id
+
+    # ── Try to read description from raw JSON if not already present ──────
+    description = str(found.get("description") or "").strip()
+    ui_tags: List[str] = []
+    raw_json: Dict[str, Any] = {}
+
+    raw_json = _find_raw_item_json(item_id, found_category)
+    if raw_json:
+        if not description:
+            description = str(raw_json.get("description") or "").strip()
+        ui_tags = [str(t) for t in (raw_json.get("ui_tags") or []) if str(t).strip()]
+
+    found["description"] = description
+    found["ui_tags"] = ui_tags
+    found["category"] = found.get("category_id") or found.get("type") or found_category
+
+    # ── Find related recipes ──────────────────────────────────────────────
+    recipe_catalog = load_recipe_catalog()
+    related_recipes: List[Dict[str, Any]] = []
+    for recipe in recipe_catalog.values():
+        # Recipe produces this item
+        if str(recipe.get("output_item_id") or "") == item_id:
+            related_recipes.append(dict(recipe))
+            continue
+        # Recipe consumes this item
+        for inp in (recipe.get("inputs") or []):
+            if str(inp.get("item_id") or "") == item_id:
+                related_recipes.append(dict(recipe))
+                break
+        else:
+            # Check byproducts
+            for bp in (recipe.get("byproducts") or []):
+                if str(bp.get("item_id") or "") == item_id:
+                    related_recipes.append(dict(recipe))
+                    break
+
+    found["related_recipes"] = sorted(related_recipes, key=lambda r: str(r.get("name") or "").lower())
+
+    # ── Resolve names for recipe item references ──────────────────────────
+    all_item_names = _build_item_name_map()
+    for recipe in found["related_recipes"]:
+        output_id = str(recipe.get("output_item_id") or "")
+        recipe["output_item_name"] = all_item_names.get(output_id, output_id.replace("_", " ").title())
+        for inp in (recipe.get("inputs") or []):
+            inp_id = str(inp.get("item_id") or "")
+            inp["name"] = all_item_names.get(inp_id, inp_id.replace("_", " ").title())
+        for bp in (recipe.get("byproducts") or []):
+            bp_id = str(bp.get("item_id") or "")
+            bp["name"] = all_item_names.get(bp_id, bp_id.replace("_", " ").title())
+
+    return found
+
+
+def _find_raw_item_json(item_id: str, category: str) -> Dict[str, Any]:
+    """Try to find and load the raw JSON file for an item."""
+    # Map categories to directory search paths
+    search_paths: Dict[str, List[str]] = {
+        "thruster":    ["thrusters"],
+        "reactor":     ["reactors"],
+        "generator":   ["generators"],
+        "radiator":    ["radiators"],
+        "storage":     ["Storage"],
+        "robonaut":    ["robonauts"],
+        "constructor": ["constructors"],
+        "refinery":    ["refineries"],
+        "resource":    ["Resources"],
+    }
+
+    dirs_to_search = search_paths.get(category, [])
+    items_root = APP_DIR / "items"
+
+    for dir_name in dirs_to_search:
+        search_root = items_root / dir_name
+        if not search_root.exists():
+            continue
+        # Search recursively for a JSON file with matching id
+        for json_path in search_root.rglob("*.json"):
+            if json_path.name in ("family.json", "index.json", "README.md", "recipe_template.json"):
+                continue
+            try:
+                data = _load_json_file(json_path)
+                if str(data.get("id") or "").strip() == item_id:
+                    return data
+            except (ValueError, Exception):
+                continue
+
+    return {}
+
+
+def _build_item_name_map() -> Dict[str, str]:
+    """Build a map of item_id -> display name across all catalogs."""
+    names: Dict[str, str] = {}
+    for loader in [
+        load_thruster_main_catalog,
+        load_reactor_catalog,
+        load_generator_catalog,
+        load_radiator_catalog,
+        load_storage_catalog,
+        load_robonaut_catalog,
+        load_constructor_catalog,
+        load_refinery_catalog,
+        load_resource_catalog,
+    ]:
+        for item_id, item in loader().items():
+            names[item_id] = str(item.get("name") or item_id)
+    return names
 
 
 def build_thruster_tree_from_spec(
@@ -1706,16 +1863,25 @@ def derive_ship_stats_from_parts(
     for part in parts:
         part_type = str(part.get("type") or "").lower()
         dry_mass_kg += max(0.0, float(part.get("mass_kg") or 0.0))
-        part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
-        if part_water_kg <= 0.0:
-            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-            resource_id = str(part.get("resource_id") or "").strip()
-            if capacity_m3 > 0.0 and resource_id:
-                resource = resource_catalog.get(resource_id) or {}
-                density = max(0.0, float(resource.get("mass_per_m3_kg") or 0.0))
-                if density > 0.0 and resource_id == "water":
-                    part_water_kg = capacity_m3 * density
-        water_mass_kg += part_water_kg
+
+        # Fuel capacity: for water tanks with known capacity_m3 always
+        # use volume * density.  Legacy cargo fields (water_kg, fuel_kg)
+        # represent *fill level*, not tank capacity, and may be stale.
+        capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+        resource_id = str(part.get("resource_id") or "").strip()
+        if capacity_m3 > 0.0 and resource_id == "water":
+            resource = resource_catalog.get(resource_id) or {}
+            density = max(0.0, float(resource.get("mass_per_m3_kg") or 0.0))
+            if density > 0.0:
+                water_mass_kg += capacity_m3 * density
+            else:
+                # No density info — fall back to legacy fields
+                part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
+                water_mass_kg += part_water_kg
+        else:
+            # Non-water-tank parts (legacy propellant fields)
+            part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
+            water_mass_kg += part_water_kg
 
         part_isp = float(part.get("isp_s") or 0.0)
         if part_isp > 0.0 and (part_type == "thruster" or "thruster" in str(part.get("name", "")).lower()):

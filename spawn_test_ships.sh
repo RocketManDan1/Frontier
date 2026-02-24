@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVICE="${SERVICE:-earthmoon-db}"
+SERVICE="${SERVICE:-frontier-sol-2000}"
 DB_PATH="${DB_PATH:-/app/data.db}"
 
 COUNT="${1:-5}"              # how many

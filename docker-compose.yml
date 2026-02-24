@@ -1,10 +1,37 @@
 services:
-  earthmoon-db:
-    build: .
+  # ── TEST server (stable / player-facing) ──────────────────────────
+  # Source: /home/user/docker/frontier-sol-2000-test  (frozen copy)
+  # To promote dev → test:  ./promote-to-test.sh
+  frontier-test:
+    build:
+      context: /home/user/docker/frontier-sol-2000-test
+    container_name: frontier-test
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/data
+      - type: bind
+        source: /home/user/docker/frontier-sol-2000-data
+        target: /data
     environment:
       - DEV_SKIP_AUTH=false
+      - ENV_LABEL=TEST
     restart: unless-stopped
+
+  # ── DEV server (breaking changes, experiments) ────────────────────
+  # Source: this directory (your working copy)
+  frontier-dev:
+    build:
+      context: .
+    container_name: frontier-dev
+    ports:
+      - "8001:8000"
+    volumes:
+      - type: bind
+        source: /home/user/docker/frontier-sol-2000-data-dev
+        target: /data
+    environment:
+      - DEV_SKIP_AUTH=true
+      - ENV_LABEL=DEV
+      - EARTHMOON_PURGE_TEST_SHIPS_ON_STARTUP=false
+    restart: unless-stopped
+

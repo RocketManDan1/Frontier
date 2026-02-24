@@ -1,0 +1,22 @@
+{
+  "recipe_id": "water_tank_100_m3",
+  "name": "Produce Water Tank 100 M3",
+  "output_item_id": "water_tank_100_m3",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 10.0
+    },
+    {
+      "item_id": "cryo_polymers",
+      "qty": 2.0
+    }
+  ],
+  "build_time_s": 1000,
+  "facility_type": "shipyard",
+  "refinery_category": "unassigned",
+  "min_tech_tier": 1,
+  "power_kw": 50,
+  "byproducts": []
+}

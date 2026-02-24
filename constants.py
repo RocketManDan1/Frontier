@@ -1,5 +1,5 @@
 """
-Canonical shared constants for the earthmoon-db game server.
+Canonical shared constants for the Frontier: Sol 2000 game server.
 
 Both catalog_service.py and main.py previously held their own copies;
 this module is the single source of truth.

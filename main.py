@@ -4,20 +4,18 @@ import math
 import os
 import re
 import sqlite3
-import time
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 
 from admin_game_router import router as admin_game_router
 from auth_router import router as auth_router
-from auth_service import ensure_default_admin_account, get_current_user, require_admin, require_login
+from auth_service import ensure_default_admin_account, get_current_user
 from catalog_router import router as catalog_router
 import catalog_service
 from industry_router import router as industry_router
@@ -26,24 +24,13 @@ from location_router import router as location_router
 from org_router import router as org_router
 from shipyard_router import router as shipyard_router
 import celestial_config
-from constants import (
-    ITEM_CATEGORIES,
-    ITEM_CATEGORY_ALIASES,
-    ITEM_CATEGORY_BY_ID,
-    RESEARCH_CATEGORIES,
-    THRUSTER_RESERVED_LANES,
-)
 from db import APP_DIR, connect_db
 from db_migrations import apply_migrations
 from fleet_router import router as fleet_router
 from sim_service import (
-    effective_time_scale,
     export_simulation_state,
     game_now_s,
     import_simulation_state,
-    reset_simulation_clock,
-    set_simulation_paused,
-    simulation_paused,
 )
 
 app = FastAPI()
@@ -57,6 +44,17 @@ def _html_no_cache(path: str) -> FileResponse:
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
     return resp
+
+
+def _serve_authenticated_page(request: Request, filename: str):
+    """Auth-gate a static HTML page: redirect to /login if not logged in."""
+    conn = connect_db()
+    try:
+        if not get_current_user(conn, request):
+            return RedirectResponse(url="/login", status_code=302)
+    finally:
+        conn.close()
+    return _html_no_cache(str(APP_DIR / "static" / filename))
 app.include_router(admin_game_router)
 app.include_router(auth_router)
 app.include_router(catalog_router)
@@ -823,21 +821,56 @@ def seed_locations_and_edges_if_empty(conn: sqlite3.Connection) -> None:
 
 
 def upsert_locations(conn: sqlite3.Connection, rows: List[Tuple[str, str, Optional[str], int, int, float, float]]) -> None:
-    for row in rows:
-        conn.execute(
-            """
-            INSERT INTO locations (id,name,parent_id,is_group,sort_order,x,y)
-            VALUES (?,?,?,?,?,?,?)
-            ON CONFLICT(id) DO UPDATE SET
-              name=excluded.name,
-              parent_id=excluded.parent_id,
-              is_group=excluded.is_group,
-              sort_order=excluded.sort_order,
-              x=excluded.x,
-              y=excluded.y
-            """,
-            row,
-        )
+    # Sort rows so parents are inserted before children (topological order).
+    # Each row is (id, name, parent_id, is_group, sort_order, x, y).
+    inserted: set = set()
+    existing = {r["id"] for r in conn.execute("SELECT id FROM locations").fetchall()}
+    inserted.update(existing)
+
+    remaining = list(rows)
+    while remaining:
+        progress = False
+        next_remaining = []
+        for row in remaining:
+            parent_id = row[2]
+            if parent_id is None or parent_id in inserted:
+                conn.execute(
+                    """
+                    INSERT INTO locations (id,name,parent_id,is_group,sort_order,x,y)
+                    VALUES (?,?,?,?,?,?,?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      name=excluded.name,
+                      parent_id=excluded.parent_id,
+                      is_group=excluded.is_group,
+                      sort_order=excluded.sort_order,
+                      x=excluded.x,
+                      y=excluded.y
+                    """,
+                    row,
+                )
+                inserted.add(row[0])
+                progress = True
+            else:
+                next_remaining.append(row)
+        remaining = next_remaining
+        if not progress:
+            # Fall back to inserting remaining rows without FK check
+            for row in remaining:
+                conn.execute(
+                    """
+                    INSERT INTO locations (id,name,parent_id,is_group,sort_order,x,y)
+                    VALUES (?,?,?,?,?,?,?)
+                    ON CONFLICT(id) DO UPDATE SET
+                      name=excluded.name,
+                      parent_id=excluded.parent_id,
+                      is_group=excluded.is_group,
+                      sort_order=excluded.sort_order,
+                      x=excluded.x,
+                      y=excluded.y
+                    """,
+                    row,
+                )
+            break
 
 
 def upsert_transfer_edges(conn: sqlite3.Connection, rows: List[Tuple[str, str, float, float]]) -> None:
@@ -1086,7 +1119,10 @@ def purge_test_ships(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         DELETE FROM ships
-        WHERE id LIKE 'test_%' OR lower(name) LIKE 'test[%'
+        WHERE id LIKE 'test_%'
+           OR id LIKE 'stack_test_%'
+           OR lower(name) LIKE 'test[%'
+           OR lower(name) LIKE 'stack test%'
         """
     )
 
@@ -1248,10 +1284,28 @@ def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[Lis
                         str(old_meta.get("name") or old_rid),
                         max(0.0, float(old_meta.get("mass_per_m3_kg") or old_density or 0.0)),
                     )
-                # Clear legacy single-resource lock
-                if old_mass <= 1e-9:
-                    part.pop("resource_id", None)
+                # Keep resource_id as a tank property — the cargo_manifest
+                # gate prevents re-migration, and other functions
+                # (derive_ship_stats, compute_ship_inventory_containers) rely
+                # on resource_id to identify water/fuel tanks.
                 changed = True
+
+            # ── Sync legacy mass fields to match cargo_manifest ──
+            # Parts that already have a cargo_manifest may still carry
+            # stale water_kg / fuel_kg values from earlier code paths.
+            # Syncing here prevents derive_ship_stats and other readers
+            # from using the wrong numbers.
+            if "cargo_manifest" in part:
+                manifest_mass = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in (part.get("cargo_manifest") or []))
+                manifest_vol = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in (part.get("cargo_manifest") or []))
+                for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
+                    if key in part and abs(float(part.get(key) or 0.0) - manifest_mass) > 0.01:
+                        part[key] = manifest_mass
+                        changed = True
+                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
+                    if key in part and abs(float(part.get(key) or 0.0) - manifest_vol) > 0.01:
+                        part[key] = manifest_vol
+                        changed = True
 
             resource_id = str(part.get("resource_id") or "").strip().lower()
             capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
@@ -1305,12 +1359,75 @@ def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[Lis
                 part["cargo_manifest"] = []
             changed = True
 
+    # ── Sync water‑tank manifests to authoritative fuel_kg ──────────
+    # Manifests can become stale when fuel is burned (only fuel_kg is
+    # decremented) or from old migration artefacts.  Redistribute
+    # fuel_kg across all water tanks proportionally to their capacity.
+    water_density_ref = max(
+        0.0,
+        float((resources.get("water") or {}).get("mass_per_m3_kg") or 0.0),
+    )
+    if water_density_ref > 0.0:
+        all_water_parts: List[Dict[str, Any]] = []
+        total_water_cap_m3 = 0.0
+        total_water_manifest_kg = 0.0
+
+        for part in hardened:
+            if not _is_storage_part(part):
+                continue
+            rid = str(part.get("resource_id") or "").strip().lower()
+            cap = max(0.0, float(part.get("capacity_m3") or 0.0))
+            if rid != "water" or cap <= 0.0:
+                continue
+            all_water_parts.append(part)
+            total_water_cap_m3 += cap
+            # Sum water mass in this part's manifest
+            for entry in (part.get("cargo_manifest") or []):
+                if str(entry.get("resource_id") or "").strip().lower() == "water":
+                    total_water_manifest_kg += max(0.0, float(entry.get("mass_kg") or 0.0))
+
+        resolved_fuel = max(0.0, float(fuel_kg or 0.0))
+        total_water_cap_kg = total_water_cap_m3 * water_density_ref
+
+        if all_water_parts and total_water_cap_kg > 0.0 and abs(total_water_manifest_kg - resolved_fuel) > 0.5:
+            ratio = min(1.0, resolved_fuel / total_water_cap_kg)
+            for part in all_water_parts:
+                cap = max(0.0, float(part.get("capacity_m3") or 0.0))
+                fill_m3 = cap * ratio
+                fill_kg = fill_m3 * water_density_ref
+
+                # Rebuild manifest: keep non-water entries, replace water entry
+                non_water = [e for e in (part.get("cargo_manifest") or [])
+                             if str(e.get("resource_id") or "").strip().lower() != "water"]
+                manifest = list(non_water)
+                if fill_kg > 1e-9:
+                    manifest.append({
+                        "resource_id": "water",
+                        "mass_kg": fill_kg,
+                        "volume_m3": fill_m3,
+                        "density_kg_m3": water_density_ref,
+                    })
+                part["cargo_manifest"] = manifest
+
+                total_mass = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in manifest)
+                total_vol = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in manifest)
+                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
+                    if key in part:
+                        part[key] = total_vol
+                for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
+                    if key in part:
+                        part[key] = total_mass
+            changed = True
+
     return hardened, changed
 
 
 def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_kg: float) -> List[Dict[str, Any]]:
     resources = load_resource_catalog()
     rows: List[Dict[str, Any]] = []
+    water_tank_rows: List[Dict[str, Any]] = []
+    water_meta = resources.get("water") or {}
+    water_density = max(0.0, float(water_meta.get("mass_per_m3_kg") or 0.0))
 
     for idx, part in enumerate(parts):
         capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
@@ -1389,6 +1506,72 @@ def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_
         }
 
         rows.append(row)
+
+        # Track water-capable tanks for fuel distribution
+        part_resource_id = str(part.get("resource_id") or "").strip().lower()
+        if part_resource_id == "water" and capacity_m3 > 0.0:
+            water_tank_rows.append(row)
+
+    # ── Distribute current_fuel_kg across water tanks ──
+    # fuel_kg is the authoritative source for water propellant.  Container
+    # manifests may be stale (e.g. after a burn only fuel_kg is decremented).
+    # However, when manifests already match fuel_kg (e.g. right after a
+    # targeted container transfer), skip redistribution to preserve the
+    # per-tank fill the player intended.
+    if water_tank_rows and water_density > 0.0:
+        total_water_cap_m3 = sum(max(0.0, float(r.get("capacity_m3") or 0.0)) for r in water_tank_rows)
+        total_water_cap_kg = total_water_cap_m3 * water_density
+        fuel_to_show = max(0.0, min(float(current_fuel_kg or 0.0), total_water_cap_kg))
+
+        # Sum water mass already present in manifests
+        total_manifest_water_kg = 0.0
+        for r in water_tank_rows:
+            for entry in (r.get("cargo_manifest") or []):
+                if str(entry.get("resource_id") or "").strip().lower() == "water":
+                    total_manifest_water_kg += max(0.0, float(entry.get("mass_kg") or 0.0))
+
+        # Only redistribute when manifests are stale (mismatch > 0.5 kg)
+        needs_redistribution = abs(total_manifest_water_kg - fuel_to_show) > 0.5
+
+        if not needs_redistribution:
+            # Manifests are authoritative — just ensure row totals are correct
+            for row in water_tank_rows:
+                manifest = list(row.get("cargo_manifest") or [])
+                total_m = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in manifest)
+                total_v = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in manifest)
+                row["used_m3"] = total_v
+                row["cargo_mass_kg"] = total_m
+                row["total_mass_kg"] = row["dry_mass_kg"] + total_m
+        else:
+            ratio = fuel_to_show / total_water_cap_kg if total_water_cap_kg > 1e-9 else 0.0
+
+            for row in water_tank_rows:
+                cap_m3 = max(0.0, float(row.get("capacity_m3") or 0.0))
+                fill_m3 = cap_m3 * ratio
+                fill_kg = fill_m3 * water_density
+
+                # Preserve non-water entries in manifest
+                non_water = [e for e in (row.get("cargo_manifest") or [])
+                             if str(e.get("resource_id") or "").strip().lower() != "water"]
+                non_water_m3 = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in non_water)
+                non_water_kg = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in non_water)
+
+                manifest = list(non_water)
+                if fill_kg > 1e-9:
+                    manifest.append({
+                        "resource_id": "water",
+                        "mass_kg": fill_kg,
+                        "volume_m3": fill_m3,
+                        "density_kg_m3": water_density,
+                    })
+
+                total_used_m3 = non_water_m3 + fill_m3
+                total_cargo_kg = non_water_kg + fill_kg
+
+                row["cargo_manifest"] = manifest
+                row["used_m3"] = total_used_m3
+                row["cargo_mass_kg"] = total_cargo_kg
+                row["total_mass_kg"] = row["dry_mass_kg"] + total_cargo_kg
 
     return rows
 
@@ -1505,8 +1688,9 @@ def _json_dumps_stable(value: Any) -> str:
 
 
 def _part_stack_identity(part: Dict[str, Any]) -> Tuple[str, str, str, str]:
-    normalized = normalize_parts([part])
-    payload_part = normalized[0] if normalized else dict(part)
+    clean = dict(part or {})
+    normalized = normalize_parts([clean])
+    payload_part = normalized[0] if normalized else dict(clean)
     payload_json = _json_dumps_stable({"part": payload_part})
     stack_key = hashlib.sha1(payload_json.encode("utf-8")).hexdigest()
     item_id = str(payload_part.get("item_id") or payload_part.get("id") or payload_part.get("name") or payload_part.get("type") or "part").strip() or "part"
@@ -1652,6 +1836,8 @@ def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *
 
     resources: List[Dict[str, Any]] = []
     parts: List[Dict[str, Any]] = []
+    part_catalog_ids = _part_catalog_item_ids()
+    resource_ids = set(str(k) for k in load_resource_catalog().keys())
     for r in rows:
         stack_type = str(r["stack_type"] or "")
         base = {
@@ -1664,11 +1850,11 @@ def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *
             "updated_at": float(r["updated_at"] or 0.0),
         }
         payload = json.loads(r["payload_json"] or "{}")
-        if stack_type == "resource":
+        if stack_type == "resource" and not _is_part_like_stack(r, payload, part_catalog_ids, resource_ids):
             base["resource_id"] = str(payload.get("resource_id") or base["item_id"])
             resources.append(base)
             continue
-        if stack_type == "part":
+        if stack_type in ("part", "resource"):
             part = payload.get("part") if isinstance(payload, dict) else None
             if not isinstance(part, dict) or not part:
                 part = _resolve_inventory_part_fallback(base["item_id"], base["name"], base["mass_kg"], base["quantity"])
@@ -1717,6 +1903,47 @@ def _resolve_inventory_part_fallback(item_id: str, name: str, stack_mass_kg: flo
     }
 
 
+def _part_catalog_item_ids() -> set[str]:
+    item_ids: set[str] = set()
+    for loader in (
+        load_thruster_main_catalog,
+        load_reactor_catalog,
+        load_generator_catalog,
+        load_radiator_catalog,
+        load_constructor_catalog,
+        load_refinery_catalog,
+        load_robonaut_catalog,
+        load_storage_catalog,
+    ):
+        item_ids.update(str(k) for k in loader().keys())
+    return item_ids
+
+
+def _is_part_like_stack(
+    row: sqlite3.Row,
+    payload: Dict[str, Any],
+    part_catalog_ids: set[str],
+    resource_ids: set[str],
+) -> bool:
+    stack_type = str(row["stack_type"] or "").strip().lower()
+    if stack_type == "part":
+        return True
+    if stack_type != "resource":
+        return False
+
+    item_id = str(row["item_id"] or "").strip()
+    if item_id and item_id in part_catalog_ids and item_id not in resource_ids:
+        return True
+
+    part_payload = payload.get("part") if isinstance(payload, dict) else None
+    if isinstance(part_payload, dict):
+        part_item_id = str(part_payload.get("item_id") or part_payload.get("id") or "").strip()
+        if part_item_id and part_item_id in part_catalog_ids:
+            return True
+
+    return False
+
+
 def consume_parts_from_location_inventory(
     conn: sqlite3.Connection,
     location_id: str,
@@ -1733,7 +1960,7 @@ def consume_parts_from_location_inventory(
             """
             SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
-            WHERE location_id=? AND corp_id=? AND stack_type='part'
+            WHERE location_id=? AND corp_id=?
             ORDER BY item_id, updated_at, stack_key
             """,
             (location_id, corp_id),
@@ -1743,14 +1970,20 @@ def consume_parts_from_location_inventory(
             """
             SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
-            WHERE location_id=? AND stack_type='part'
+            WHERE location_id=?
             ORDER BY item_id, updated_at, stack_key
             """,
             (location_id,),
         ).fetchall()
 
+    part_catalog_ids = _part_catalog_item_ids()
+    resource_ids = set(str(k) for k in load_resource_catalog().keys())
+
     by_item: Dict[str, List[sqlite3.Row]] = {}
     for row in available_rows:
+        payload = json.loads(row["payload_json"] or "{}")
+        if not _is_part_like_stack(row, payload, part_catalog_ids, resource_ids):
+            continue
         item_id = str(row["item_id"] or "")
         by_item.setdefault(item_id, []).append(row)
 
@@ -1780,24 +2013,32 @@ def consume_parts_from_location_inventory(
         payload = json.loads(chosen["payload_json"] or "{}")
         part = payload.get("part") if isinstance(payload, dict) else None
         if not isinstance(part, dict):
-            part = {"item_id": item_id}
+            part = _resolve_inventory_part_fallback(
+                item_id,
+                str(chosen["name"] or item_id),
+                float(chosen["mass_kg"] or 0.0),
+                float(chosen["quantity"] or 0.0),
+            )
         consumed_parts.append(part)
 
         qty_before = max(0.0, float(chosen["quantity"] or 0.0))
         mass_before = max(0.0, float(chosen["mass_kg"] or 0.0))
         mass_per = mass_before / qty_before if qty_before > 0 else max(0.0, float(part.get("mass_kg") or 0.0))
+        volume_before = max(0.0, float(chosen["volume_m3"] or 0.0))
+        volume_per = volume_before / qty_before if qty_before > 0 else 0.0
+        chosen_stack_type = str(chosen["stack_type"] or "part")
 
         row_corp_id = str(chosen["corp_id"]) if "corp_id" in chosen.keys() else corp_id
         _upsert_inventory_stack(
             conn,
             location_id=location_id,
-            stack_type="part",
+            stack_type=chosen_stack_type,
             stack_key=str(chosen["stack_key"]),
             item_id=str(chosen["item_id"]),
             name=str(chosen["name"]),
             quantity_delta=-1.0,
             mass_delta_kg=-mass_per,
-            volume_delta_m3=0.0,
+            volume_delta_m3=-volume_per,
             payload_json=str(chosen["payload_json"] or "{}"),
             corp_id=row_corp_id,
         )
@@ -1806,9 +2047,9 @@ def consume_parts_from_location_inventory(
             """
             SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
-            WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
+            WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
             """,
-            (location_id, row_corp_id, str(chosen["stack_key"])),
+            (location_id, row_corp_id, chosen_stack_type, str(chosen["stack_key"])),
         ).fetchone()
 
         if updated_row is None:
@@ -1957,6 +2198,9 @@ def _persist_ship_inventory_state(
     fuel_kg: float,
 ) -> None:
     stats = derive_ship_stats_from_parts(parts, current_fuel_kg=max(0.0, float(fuel_kg or 0.0)))
+    if len(parts) == 0 and max(0.0, float(stats.get("fuel_kg") or 0.0)) <= 1e-9:
+        conn.execute("DELETE FROM ships WHERE id=?", (ship_id,))
+        return
     conn.execute(
         """
         UPDATE ships
@@ -2271,27 +2515,79 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         power_mw = float(part_payload.get("thermal_mw") or part_payload.get("power_mw") or 0)
         cap_m3_val = float(part_payload.get("capacity_m3") or 0)
 
-        rows.append(
-            {
-                "item_uid": f"ship:{ship_id}:part:{idx}",
-                "item_kind": "part",
-                "part_index": idx,
-                "item_id": item_id,
-                "label": label,
-                "subtitle": subtitle,
-                "category": part_category,
-                "resource_id": "",
-                "mass_kg": mass_kg,
-                "volume_m3": volume_m3,
-                "quantity": 1.0,
-                "thrust_kn": thrust_kn if thrust_kn > 0 else None,
-                "isp_s": isp_s if isp_s > 0 else None,
-                "power_mw": power_mw if power_mw > 0 else None,
-                "capacity_m3": cap_m3_val if cap_m3_val > 0 else None,
-                "icon_seed": f"ship_part::{item_id}::{idx}",
-                "transfer": transfer,
-            }
-        )
+        # Equipment-specific fields for deploy modal
+        ship_electric_mw = float(part_payload.get("electric_mw") or 0)
+        ship_thermal_mw = float(part_payload.get("thermal_mw") or 0)
+        ship_thermal_mw_input = float(part_payload.get("thermal_mw_input") or 0)
+        ship_waste_heat_mw = float(part_payload.get("waste_heat_mw") or 0)
+        ship_heat_rejection_mw = float(part_payload.get("heat_rejection_mw") or 0)
+        ship_mining_rate = float(part_payload.get("mining_rate_kg_per_hr") or 0)
+        ship_construction_rate = float(part_payload.get("construction_rate_kg_per_hr") or 0)
+        ship_conversion_eff = float(part_payload.get("conversion_efficiency") or 0)
+        ship_excavation_type = str(part_payload.get("excavation_type") or "")
+        ship_specialization = str(part_payload.get("specialization") or "")
+        ship_max_recipe_tier = int(part_payload.get("max_recipe_tier") or 0)
+        ship_throughput_mult = float(part_payload.get("throughput_mult") or 0)
+        ship_min_gravity = float(part_payload.get("min_surface_gravity_ms2") or 0)
+        ship_operating_temp_k = float(part_payload.get("operating_temp_k") or 0)
+        ship_branch = str(part_payload.get("branch") or "")
+        ship_tech_level = float(part_payload.get("tech_level") or 0)
+
+        ship_row: Dict[str, Any] = {
+            "item_uid": f"ship:{ship_id}:part:{idx}",
+            "item_kind": "part",
+            "part_index": idx,
+            "item_id": item_id,
+            "label": label,
+            "subtitle": subtitle,
+            "category": part_category,
+            "category_id": part_category,
+            "type": part_category,
+            "resource_id": "",
+            "mass_kg": mass_kg,
+            "volume_m3": volume_m3,
+            "quantity": 1.0,
+            "thrust_kn": thrust_kn if thrust_kn > 0 else None,
+            "isp_s": isp_s if isp_s > 0 else None,
+            "power_mw": power_mw if power_mw > 0 else None,
+            "capacity_m3": cap_m3_val if cap_m3_val > 0 else None,
+            "icon_seed": f"ship_part::{item_id}::{idx}",
+            "transfer": transfer,
+        }
+        if ship_electric_mw > 0:
+            ship_row["electric_mw"] = ship_electric_mw
+        if ship_thermal_mw > 0:
+            ship_row["thermal_mw"] = ship_thermal_mw
+        if ship_thermal_mw_input > 0:
+            ship_row["thermal_mw_input"] = ship_thermal_mw_input
+        if ship_waste_heat_mw > 0:
+            ship_row["waste_heat_mw"] = ship_waste_heat_mw
+        if ship_heat_rejection_mw > 0:
+            ship_row["heat_rejection_mw"] = ship_heat_rejection_mw
+        if ship_mining_rate > 0:
+            ship_row["mining_rate_kg_per_hr"] = ship_mining_rate
+        if ship_construction_rate > 0:
+            ship_row["construction_rate_kg_per_hr"] = ship_construction_rate
+        if ship_conversion_eff > 0:
+            ship_row["conversion_efficiency"] = ship_conversion_eff
+        if ship_excavation_type:
+            ship_row["excavation_type"] = ship_excavation_type
+        if ship_specialization:
+            ship_row["specialization"] = ship_specialization
+        if ship_max_recipe_tier > 0:
+            ship_row["max_recipe_tier"] = ship_max_recipe_tier
+        if ship_throughput_mult > 0:
+            ship_row["throughput_mult"] = ship_throughput_mult
+        if ship_min_gravity > 0:
+            ship_row["min_surface_gravity_ms2"] = ship_min_gravity
+        if ship_operating_temp_k > 0:
+            ship_row["operating_temp_k"] = ship_operating_temp_k
+        if ship_branch:
+            ship_row["branch"] = ship_branch
+        if ship_tech_level > 0:
+            ship_row["tech_level"] = ship_tech_level
+
+        rows.append(ship_row)
 
     return rows
 
@@ -2352,31 +2648,84 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
         loc_power = float(part_payload_loc.get("thermal_mw") or part_payload_loc.get("power_mw") or 0)
         loc_cap = float(part_payload_loc.get("capacity_m3") or 0)
 
-        rows.append(
-            {
-                "item_uid": f"location:{location_id}:part:{stack_key}",
-                "item_kind": "part",
-                "item_id": str(part.get("item_id") or "part"),
-                "label": str(part.get("name") or part.get("item_id") or "Part"),
-                "subtitle": subtitle,
-                "category": loc_part_category,
-                "resource_id": "",
-                "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
-                "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),
-                "quantity": qty,
-                "thrust_kn": loc_thrust if loc_thrust > 0 else None,
-                "isp_s": loc_isp if loc_isp > 0 else None,
-                "power_mw": loc_power if loc_power > 0 else None,
-                "capacity_m3": loc_cap if loc_cap > 0 else None,
-                "icon_seed": f"stack_part::{part.get('item_id') or stack_key}",
-                "transfer": {
-                    "source_kind": "location_part",
-                    "source_id": location_id,
-                    "source_key": stack_key,
-                    "amount": 1.0,
-                },
-            }
-        )
+        # Equipment-specific fields for deploy modal
+        electric_mw = float(part_payload_loc.get("electric_mw") or 0)
+        thermal_mw = float(part_payload_loc.get("thermal_mw") or 0)
+        thermal_mw_input = float(part_payload_loc.get("thermal_mw_input") or 0)
+        waste_heat_mw = float(part_payload_loc.get("waste_heat_mw") or 0)
+        heat_rejection_mw = float(part_payload_loc.get("heat_rejection_mw") or 0)
+        mining_rate = float(part_payload_loc.get("mining_rate_kg_per_hr") or 0)
+        construction_rate = float(part_payload_loc.get("construction_rate_kg_per_hr") or 0)
+        conversion_eff = float(part_payload_loc.get("conversion_efficiency") or 0)
+        excavation_type = str(part_payload_loc.get("excavation_type") or "")
+        specialization = str(part_payload_loc.get("specialization") or "")
+        max_recipe_tier = int(part_payload_loc.get("max_recipe_tier") or 0)
+        throughput_mult = float(part_payload_loc.get("throughput_mult") or 0)
+        min_gravity = float(part_payload_loc.get("min_surface_gravity_ms2") or 0)
+        operating_temp_k = float(part_payload_loc.get("operating_temp_k") or 0)
+        branch = str(part_payload_loc.get("branch") or "")
+        tech_level = float(part_payload_loc.get("tech_level") or 0)
+
+        row_dict: Dict[str, Any] = {
+            "item_uid": f"location:{location_id}:part:{stack_key}",
+            "item_kind": "part",
+            "item_id": str(part.get("item_id") or "part"),
+            "label": str(part.get("name") or part.get("item_id") or "Part"),
+            "subtitle": subtitle,
+            "category": loc_part_category,
+            "category_id": loc_part_category,
+            "type": loc_part_category,
+            "resource_id": "",
+            "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
+            "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),
+            "quantity": qty,
+            "thrust_kn": loc_thrust if loc_thrust > 0 else None,
+            "isp_s": loc_isp if loc_isp > 0 else None,
+            "power_mw": loc_power if loc_power > 0 else None,
+            "capacity_m3": loc_cap if loc_cap > 0 else None,
+            "icon_seed": f"stack_part::{part.get('item_id') or stack_key}",
+            "transfer": {
+                "source_kind": "location_part",
+                "source_id": location_id,
+                "source_key": stack_key,
+                "amount": 1.0,
+            },
+        }
+        # Include equipment fields when present
+        if electric_mw > 0:
+            row_dict["electric_mw"] = electric_mw
+        if thermal_mw > 0:
+            row_dict["thermal_mw"] = thermal_mw
+        if thermal_mw_input > 0:
+            row_dict["thermal_mw_input"] = thermal_mw_input
+        if waste_heat_mw > 0:
+            row_dict["waste_heat_mw"] = waste_heat_mw
+        if heat_rejection_mw > 0:
+            row_dict["heat_rejection_mw"] = heat_rejection_mw
+        if mining_rate > 0:
+            row_dict["mining_rate_kg_per_hr"] = mining_rate
+        if construction_rate > 0:
+            row_dict["construction_rate_kg_per_hr"] = construction_rate
+        if conversion_eff > 0:
+            row_dict["conversion_efficiency"] = conversion_eff
+        if excavation_type:
+            row_dict["excavation_type"] = excavation_type
+        if specialization:
+            row_dict["specialization"] = specialization
+        if max_recipe_tier > 0:
+            row_dict["max_recipe_tier"] = max_recipe_tier
+        if throughput_mult > 0:
+            row_dict["throughput_mult"] = throughput_mult
+        if min_gravity > 0:
+            row_dict["min_surface_gravity_ms2"] = min_gravity
+        if operating_temp_k > 0:
+            row_dict["operating_temp_k"] = operating_temp_k
+        if branch:
+            row_dict["branch"] = branch
+        if tech_level > 0:
+            row_dict["tech_level"] = tech_level
+
+        rows.append(row_dict)
     return rows
 
 
@@ -2408,25 +2757,10 @@ def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict
             }
         )
 
-    for part in location_payload.get("parts") or []:
-        stack_key = str(part.get("stack_key") or "")
-        qty = max(0.0, float(part.get("quantity") or 0.0))
-        rows.append(
-            {
-                "item_uid": f"location:{location_id}:part:{stack_key}",
-                "item_kind": "part",
-                "item_id": str(part.get("item_id") or "part"),
-                "label": str(part.get("name") or part.get("item_id") or "Part"),
-                "subtitle": f"Count: {int(round(qty))}",
-                "category": str((part.get("part") or {}).get("type") or (part.get("part") or {}).get("category_id") or "module").strip().lower() if isinstance(part.get("part"), dict) else "module",
-                "resource_id": "",
-                "mass_kg": max(0.0, float(part.get("mass_kg") or 0.0)),
-                "volume_m3": max(0.0, float(part.get("volume_m3") or 0.0)),
-                "quantity": qty,
-                "icon_seed": f"part::{part.get('item_id') or stack_key}",
-                "transfer": None,
-            }
-        )
+    # Parts are NOT included here — they are shown via stack_items
+    # (the PARTS section) on the cargo transfer tab. Including them here
+    # caused them to appear alongside resources under "RESOURCES", making
+    # them look like cargo and confusing the deploy workflow.
     return rows
 
 
@@ -2715,71 +3049,46 @@ def _startup():
     load_resource_catalog()
     load_storage_catalog()
 
+# ── Server environment info (for UI banner) ─────────────────────────
+_ENV_LABEL = os.environ.get("ENV_LABEL", "").strip().upper()
+
+
+@app.get("/api/server/info")
+def server_info():
+    """Return non-secret server metadata so the UI can show an environment banner."""
+    return {
+        "env_label": _ENV_LABEL,  # "", "TEST", "DEV", etc.
+    }
+
 
 @app.get("/")
 def root(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "index.html"))
+    return _serve_authenticated_page(request, "index.html")
 
 
 @app.get("/fleet")
 def fleet(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "fleet.html"))
+    return _serve_authenticated_page(request, "fleet.html")
 
 
 @app.get("/research")
 def research(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "research.html"))
+    return _serve_authenticated_page(request, "research.html")
 
 
 @app.get("/shipyard")
 def shipyard(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "shipyard.html"))
+    return _serve_authenticated_page(request, "shipyard.html")
 
 
 @app.get("/sites")
 def sites(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "sites.html"))
+    return _serve_authenticated_page(request, "sites.html")
 
 
 @app.get("/organization")
 def organization(request: Request):
-    conn = connect_db()
-    try:
-        if not get_current_user(conn, request):
-            return RedirectResponse(url="/login", status_code=302)
-    finally:
-        conn.close()
-    return _html_no_cache(str(APP_DIR / "static" / "organization.html"))
+    return _serve_authenticated_page(request, "organization.html")
 
 
 @app.get("/profile")

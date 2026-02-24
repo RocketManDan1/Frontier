@@ -24,10 +24,10 @@ Use a GitHub PAT with minimum repo write permissions.
 ## 2) Install timer
 
 ```bash
-sudo cp ops/systemd/earthmoon-github-mirror.service /etc/systemd/system/
-sudo cp ops/systemd/earthmoon-github-mirror.timer /etc/systemd/system/
+sudo cp ops/systemd/frontier-sol-2000-github-mirror.service /etc/systemd/system/
+sudo cp ops/systemd/frontier-sol-2000-github-mirror.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now earthmoon-github-mirror.timer
+sudo systemctl enable --now frontier-sol-2000-github-mirror.timer
 ```
 
 ## 3) Test immediately
@@ -40,9 +40,9 @@ set -a && source ./.mirror.env && set +a
 ## 4) Verify
 
 ```bash
-systemctl status earthmoon-github-mirror.timer
-systemctl list-timers --all | grep earthmoon-github-mirror
-journalctl -u earthmoon-github-mirror.service -n 100 --no-pager
+systemctl status frontier-sol-2000-github-mirror.timer
+systemctl list-timers --all | grep frontier-sol-2000-github-mirror
+journalctl -u frontier-sol-2000-github-mirror.service -n 100 --no-pager
 ```
 
 ## Notes

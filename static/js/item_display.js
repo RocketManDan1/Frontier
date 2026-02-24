@@ -158,6 +158,23 @@ window.ItemDisplay = (function () {
       cell.appendChild(badge);
     }
 
+    // Info button (top-right "i" icon) — opens the item info modal
+    const infoItemId = String(o.itemId || o.item_id || o.iconSeed || "").trim();
+    if (infoItemId) {
+      const infoBtn = document.createElement("button");
+      infoBtn.type = "button";
+      infoBtn.className = "invCellInfoBtn";
+      infoBtn.title = "Show Info";
+      infoBtn.textContent = "ⓘ";
+      infoBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (window.ItemInfo) window.ItemInfo.open(infoItemId);
+      });
+      cell.appendChild(infoBtn);
+      cell.dataset.itemId = infoItemId;
+    }
+
     // Icon
     const icon = document.createElement("img");
     icon.className = "invCellIcon";

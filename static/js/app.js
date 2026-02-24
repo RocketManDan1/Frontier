@@ -98,7 +98,9 @@
     const teams = Array.isArray(org.research_teams) ? org.research_teams : [];
     const activeTeamCount = teams.filter((team) => team?.status === "active").length;
     const teamCost = Number(org.team_cost_per_month_usd) || 150000000;
-    const monthlyExpenses = activeTeamCount * teamCost;
+    const monthlyExpenses = Number.isFinite(Number(org.monthly_expenses_usd))
+      ? Number(org.monthly_expenses_usd)
+      : (activeTeamCount * teamCost);
 
     mapOrgBalanceEl.textContent = fmtOrgUsd(org.balance_usd);
     mapOrgIncomeEl.textContent = `${fmtOrgUsd(org.income_per_month_usd)}/mo`;
@@ -989,6 +991,11 @@
     const target = resolveContextTargetAtClientPoint(e.clientX, e.clientY);
     if (!target) return;
 
+    if (target.kind === "docked-chip") {
+      openDockedShipPickerMenu(target.locationId, e);
+      return;
+    }
+
     if (target.kind === "ship") {
       const ship = ships.find((s) => s.id === target.id);
       if (ship) openShipContextMenu(ship, e);
@@ -1009,7 +1016,12 @@
   app.view.addEventListener("click", (e) => {
     if (Number(e.button) !== 0) return;
     const target = resolveContextTargetAtClientPoint(e.clientX, e.clientY);
-    if (!target || target.kind !== "location") return;
+    if (!target) return;
+    if (target.kind === "docked-chip") {
+      openDockedShipPickerMenu(target.locationId, e);
+      return;
+    }
+    if (target.kind !== "location") return;
     if (!ORBIT_IDS.has(target.id)) return;
     const loc = locationsById.get(target.id);
     if (!loc) return;
@@ -1081,8 +1093,9 @@
   const mapOverviewOpenState = new Map();
 
   const locGfx = new Map();   // id -> {dot,label,kind,hovered}
-  const shipGfx = new Map();  // id -> {ship,container,slot,phase}
+  const shipGfx = new Map();  // id -> {ship,container,slot}
   const shipClusterLabels = new Map(); // location_id -> PIXI.Text
+  const dockedChipGfx = new Map(); // location_id -> {container,bg,text,hitRadiusWorld}
   let selectedShipId = null;
   let hoveredShipId = null;
   let shipInfoTab = "details";
@@ -1147,6 +1160,22 @@
       }
     }
     if (bestShip) return { kind: "ship", id: bestShip };
+
+    let bestChipLocId = null;
+    let bestChipD2 = Number.POSITIVE_INFINITY;
+    for (const [locationId, chip] of dockedChipGfx.entries()) {
+      const c = chip?.container;
+      if (!c || c.visible === false) continue;
+      const chipHitRadius = Math.max(10 / zoom, Number(chip.hitRadiusWorld) || 0);
+      const dx = worldPoint.x - Number(c.x || 0);
+      const dy = worldPoint.y - Number(c.y || 0);
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= chipHitRadius * chipHitRadius && d2 < bestChipD2) {
+        bestChipLocId = locationId;
+        bestChipD2 = d2;
+      }
+    }
+    if (bestChipLocId) return { kind: "docked-chip", locationId: bestChipLocId };
 
     const orbitTolWorld = 16 / zoom;
     let bestOrbit = null;
@@ -1244,6 +1273,12 @@
         hideContextMenu();
         if (!item.disabled && typeof item.onClick === "function") item.onClick();
       });
+      btn.addEventListener("contextmenu", (ev) => {
+        if (item.disabled || typeof item.onRightClick !== "function") return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        item.onRightClick(ev);
+      });
       menu.appendChild(btn);
     }
 
@@ -1322,6 +1357,34 @@
     }
 
     showContextMenu(ship.name || ship.id, actionsList, pt.x, pt.y);
+    e?.stopPropagation?.();
+  }
+
+  function openDockedShipPickerMenu(locationId, e) {
+    const anchorId = String(locationId || "");
+    if (!anchorId) return;
+
+    const dockedShips = ships
+      .filter((s) => s?.status === "docked" && dockedChipAnchorIdForLocation(s.location_id) === anchorId)
+      .sort((a, b) => String(a?.name || a?.id || "").localeCompare(String(b?.name || b?.id || "")));
+
+    if (!dockedShips.length) return;
+
+    const loc = locationsById.get(anchorId);
+    const actions = dockedShips.map((ship) => ({
+      label: `${ship.name || ship.id}`,
+      onClick: () => {
+        selectedShipId = ship.id;
+        ensureInfoPanelVisible();
+        showShipPanel();
+      },
+      onRightClick: (ev) => {
+        openShipContextMenu(ship, ev);
+      },
+    }));
+
+    const pt = contextPointerFromEvent(e);
+    showContextMenu(`${loc?.name || anchorId} — Docked`, actions, pt.x, pt.y);
     e?.stopPropagation?.();
   }
 
@@ -1546,6 +1609,7 @@
         const cell = ID.createGridCell({
           label: String(r?.name || r?.item_id || "Resource"),
           iconSeed: `resource::${r?.resource_id || r?.item_id || ""}`,
+          itemId: r?.resource_id || r?.item_id || "",
           category: "resource",
           mass_kg: Number(r?.mass_kg) || 0,
           volume_m3: Number(r?.volume_m3) || 0,
@@ -1564,6 +1628,7 @@
         const cell = ID.createGridCell({
           label: String(p?.name || p?.item_id || "Part"),
           iconSeed: `part::${p?.item_id || ""}`,
+          itemId: p?.item_id || "",
           category: category,
           mass_kg: Number(p?.mass_kg) || 0,
           quantity: Math.max(0, Math.floor(Number(p?.quantity) || 0)),
@@ -2134,6 +2199,7 @@
       const cell = ID.createGridCell({
         label: name,
         iconSeed: p.item_id || name,
+        itemId: p.item_id || "",
         category: category,
         mass_kg: Number(p.mass_kg) || 0,
         subtitle: category,
@@ -2374,6 +2440,7 @@
       const cell = ID.createGridCell({
         label: String(item?.label || item?.item_id || "Cargo"),
         iconSeed: `resource::${item?.resource_id || item?.item_id || ""}`,
+        itemId: item?.resource_id || item?.item_id || "",
         category: "resource",
         mass_kg: Number(item?.mass_kg) || 0,
         volume_m3: Number(item?.volume_m3) || 0,
@@ -2430,8 +2497,14 @@
   const SHIP_WORLD_SCALE_COMPENSATION = 1;
   const MIN_SHIP_HIT_SCREEN_PX = 22;
   const MIN_LOC_HIT_SCREEN_PX = 20;
-  const PARKED_ORBIT_ROTATION_PERIOD_S = 3600;
-  const PARKED_ABOVE_NODE_Y = -14;
+  const DOCKED_ROW_Y_OFFSET_PX = -26;
+  const DOCKED_ROW_SLOT_SPACING_PX = 22;
+  const DOCKED_CHIP_MIN_SCREEN_PX = 28;
+  const DOCKED_CHIP_MAX_SCREEN_PX = 32;
+  const DOCKED_CHIP_HARD_MAX_SCREEN_PX = 36;
+  const DOCKED_CHIP_SCALE_MIN = 0.0002;
+  const DOCKED_CHIP_SCALE_MAX = 0.5;
+  const DOCKED_CHIP_LERP = 0.2;
   const SHIP_TRAIL_DISTANCE_MULT = 1.55;
   const SHIP_PATH_DASH_LEN_MULT = 1.45;
   const SHIP_PATH_GAP_LEN_MULT = 1.1;
@@ -2439,13 +2512,6 @@
   const SHIP_PATH_TRAVELED_ALPHA = 0.06;
   const SHIP_PATH_CHEVRON_ALPHA = 0.45;
   const SHIP_PATH_DEST_MARKER_ALPHA = 0.55;
-  const SHIP_DOCK_BASE_RADIUS_PX = 18;
-  const SHIP_DOCK_RING_STEP_PX = 22;
-  const DOCK_SLOTS_PER_RING = 6;
-  const FAN_OUT_RADIUS_SCREEN_PX = 60;
-  const FAN_OUT_RING_STEP_SCREEN_PX = 50;
-  const FAN_OUT_DETECT_RADIUS_SCREEN_PX = 80;
-  const FAN_OUT_LERP_SPEED = 0.12;
   const SHIP_IDTAG_FADE_IN_ZOOM = 0.85;
   const SHIP_IDTAG_FULL_ZOOM = 1.65;
   const SHIP_CLUSTER_ZOOM_THRESHOLD = 0.24;
@@ -2520,9 +2586,18 @@
     return t;
   }
 
+  function unregisterZoomScaledText(t) {
+    if (!t) return;
+    zoomScaledTexts.delete(t);
+  }
+
   function refreshZoomScaledTextResolution() {
     const targetRes = Math.min(MAX_TEXT_RESOLUTION, Math.max(1, BASE_TEXT_RESOLUTION * world.scale.x));
-    for (const t of zoomScaledTexts) {
+    for (const t of Array.from(zoomScaledTexts)) {
+      if (!t || t.destroyed || t._destroyed) {
+        zoomScaledTexts.delete(t);
+        continue;
+      }
       if (t.resolution !== targetRes) {
         t.resolution = targetRes;
         t.dirty = true;
@@ -2558,7 +2633,11 @@
 
   function applyUniversalTextScaleCap() {
     const zoom = Math.max(0.0001, Number(world.scale.x) || 1);
-    for (const t of zoomScaledTexts) {
+    for (const t of Array.from(zoomScaledTexts)) {
+      if (!t || t.destroyed || t._destroyed) {
+        zoomScaledTexts.delete(t);
+        continue;
+      }
       if (!t?.scale) continue;
       const cap = Math.max(0.2, Number(t.__maxScreenScale) || Number(UNIVERSAL_TEXT_SCALE_CAP) || 1);
       const maxLocalScale = cap / zoom;
@@ -2583,8 +2662,11 @@
 
   function applyTextCollisionCulling() {
     const candidates = [];
-    for (const t of zoomScaledTexts) {
-      if (!t) continue;
+    for (const t of Array.from(zoomScaledTexts)) {
+      if (!t || t.destroyed || t._destroyed) {
+        zoomScaledTexts.delete(t);
+        continue;
+      }
       // reset from prior collision pass; alpha remains authoritative for intended visibility
       t.visible = true;
 
@@ -2809,6 +2891,17 @@
     return null;
   }
 
+  function dockedChipAnchorIdForLocation(locationId) {
+    let cur = String(locationId || "");
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (cur.startsWith("grp_") && !cur.endsWith("_orbits")) return cur;
+      cur = String(locationParentById.get(cur) || "");
+    }
+    return String(locationId || "");
+  }
+
   function pickOrbitTangent(body, point, towardPoint, fallbackDir) {
     if (!body) return normalizeVec(fallbackDir.x, fallbackDir.y, 1, 0);
 
@@ -3017,98 +3110,16 @@
   }
 
   // ---------- Parking offsets ----------
-  function slotOffsetWorld(slotIndex, zoom, baseRadiusPx) {
+  function dockedRowOffsetWorld(slotIndex, zoom, dockedCount) {
     const zoomSafe = Math.max(0.0001, Number(zoom) || 1);
-    if ((slotIndex || 0) === 0) {
-      return { dxWorld: 0, dyWorld: (PARKED_ABOVE_NODE_Y * 0.5) / zoomSafe };
-    }
-    const idx = Math.max(1, slotIndex) - 1;
-    const ring = Math.floor(idx / DOCK_SLOTS_PER_RING);
-    const j = idx % DOCK_SLOTS_PER_RING;
-    const rPx = baseRadiusPx + ring * SHIP_DOCK_RING_STEP_PX;
-    const angle = (-Math.PI / 2) + (2 * Math.PI * (j / DOCK_SLOTS_PER_RING));
+    const count = Math.max(1, Number(dockedCount) || 1);
+    const idxRaw = Math.max(0, Number(slotIndex) || 0);
+    const idx = Math.min(count - 1, idxRaw);
+    const centeredX = idx - ((count - 1) / 2);
     return {
-      dxWorld: (Math.cos(angle) * rPx) / zoomSafe,
-      dyWorld: (Math.sin(angle) * rPx) / zoomSafe,
+      dxWorld: (centeredX * DOCKED_ROW_SLOT_SPACING_PX) / zoomSafe,
+      dyWorld: DOCKED_ROW_Y_OFFSET_PX / zoomSafe,
     };
-  }
-
-  /**
-   * Compute fan-out offset for a ship at a given slot when the location is hovered.
-   * Spreads ships vertically in a column to the right of the location,
-   * centred so the group is balanced above/below the anchor point.
-   */
-  function fanOutOffsetWorld(slotIndex, zoom, dockedCount) {
-    const zoomSafe = Math.max(0.0001, Number(zoom) || 1);
-    const count = Math.max(1, dockedCount || 1);
-    const idx = Math.max(0, slotIndex || 0);
-    const spacingScreenPx = FAN_OUT_RADIUS_SCREEN_PX;
-    const spacing = spacingScreenPx / zoomSafe;
-    // Centre the column vertically
-    const totalHeight = (count - 1) * spacing;
-    const startY = -totalHeight / 2;
-    // Offset to the right so ship column doesn't cover the location dot
-    const xOffset = (FAN_OUT_RADIUS_SCREEN_PX * 0.6) / zoomSafe;
-    return {
-      dxWorld: xOffset,
-      dyWorld: startY + idx * spacing,
-    };
-  }
-
-  // Fan-out state: locationId -> current animation t (0 = compact, 1 = fanned)
-  const fanOutState = new Map();
-  let lastMouseWorldX = 0;
-  let lastMouseWorldY = 0;
-  let mouseOverCanvas = false;
-
-  function updateFanOutState(dockedCountByLocation) {
-    const zoom = Math.max(0.0001, world.scale.x);
-    const detectRadius = FAN_OUT_DETECT_RADIUS_SCREEN_PX / zoom;
-
-    // Determine which location (if any) the mouse is near
-    let hoveredLocId = null;
-    if (mouseOverCanvas) {
-      let bestD2 = detectRadius * detectRadius;
-      for (const [locId, count] of dockedCountByLocation.entries()) {
-        if (count < 2) continue;
-        const loc = locationsById.get(locId);
-        if (!loc || !Number.isFinite(Number(loc.rx)) || !Number.isFinite(Number(loc.ry))) continue;
-        // For orbit locations, use orbit center
-        let cx = loc.rx, cy = loc.ry;
-        if (ORBIT_IDS.has(locId) && orbitInfo.has(locId)) {
-          const oi = orbitInfo.get(locId);
-          cx = oi.cx;
-          cy = oi.cy;
-        }
-        const dx = lastMouseWorldX - cx;
-        const dy = lastMouseWorldY - cy;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          hoveredLocId = locId;
-        }
-      }
-    }
-
-    // Animate fan-out for hovered location, collapse others
-    for (const [locId, count] of dockedCountByLocation.entries()) {
-      if (count < 2) { fanOutState.delete(locId); continue; }
-      const current = fanOutState.get(locId) || 0;
-      const target = (locId === hoveredLocId) ? 1 : 0;
-      const next = current + (target - current) * FAN_OUT_LERP_SPEED;
-      // Snap to 0/1 when close enough
-      if (Math.abs(next - target) < 0.005) {
-        if (target === 0) fanOutState.delete(locId);
-        else fanOutState.set(locId, 1);
-      } else {
-        fanOutState.set(locId, next);
-      }
-    }
-
-    // Clean up entries for locations that no longer have ships
-    for (const locId of fanOutState.keys()) {
-      if (!dockedCountByLocation.has(locId)) fanOutState.delete(locId);
-    }
   }
 
   function assignDockSlots(shipsArr) {
@@ -3501,9 +3512,6 @@
     const my = e.clientY - rect.top;
 
     const p = world.toLocal(new PIXI.Point(mx, my));
-    lastMouseWorldX = p.x;
-    lastMouseWorldY = p.y;
-    mouseOverCanvas = true;
     const tol = 10 / world.scale.x; // hover tolerance band
 
     let best = null;
@@ -3534,7 +3542,6 @@
   app.view.addEventListener("pointerleave", () => {
     hoveredOrbitId = null;
     hoveredBodyId = null;
-    mouseOverCanvas = false;
     for (const t of orbitLabelMap.values()) t.alpha = 0;
   });
 
@@ -3926,6 +3933,145 @@
     }
   }
 
+  function getOrCreateDockedShipChip(locationId) {
+    let chip = dockedChipGfx.get(locationId);
+    if (chip) return chip;
+
+    const container = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    const text = registerZoomScaledText(new PIXI.Text("0", {
+      fontFamily: "Orbitron, Rajdhani, Roboto Condensed, Arial Narrow, sans-serif",
+      fontSize: 26,
+      fontWeight: 700,
+      letterSpacing: 0.5,
+      fill: 0xd8eaff,
+      stroke: 0x000000,
+      strokeThickness: 2,
+    }));
+    text.__collisionPriority = 85;
+
+    text.anchor.set(0.5, 0.5);
+
+    container.visible = false;
+    container.alpha = 0;
+    container.addChild(bg, text);
+    shipClusterLayer.addChild(container);
+
+    chip = {
+      container,
+      bg,
+      text,
+      hitRadiusWorld: 0,
+      targetX: 0,
+      targetY: 0,
+      currentX: 0,
+      currentY: 0,
+      targetScale: 0.1,
+      currentScale: 0.1,
+      targetAlpha: 0,
+      currentAlpha: 0,
+      initialized: false,
+      active: false,
+    };
+    dockedChipGfx.set(locationId, chip);
+    return chip;
+  }
+
+  function updateDockedShipChips(dockedShipsByLocation) {
+    const zoom = Math.max(0.0001, Number(world.scale.x) || 1);
+
+    for (const chip of dockedChipGfx.values()) {
+      if (chip) chip.active = false;
+    }
+
+    for (const [locationId, dockedShips] of dockedShipsByLocation.entries()) {
+      const count = Array.isArray(dockedShips) ? dockedShips.length : 0;
+      if (count <= 0) continue;
+      const loc = locationsById.get(locationId);
+      if (!loc || !Number.isFinite(Number(loc.rx)) || !Number.isFinite(Number(loc.ry))) continue;
+
+      const chip = getOrCreateDockedShipChip(locationId);
+      chip.active = true;
+      const labelText = `${count}`;
+      if (chip.text.text !== labelText) chip.text.text = labelText;
+
+      const innerR = Math.max(chip.text.width, chip.text.height) * 0.5;
+      const circleR = innerR + 1.5;
+      chip.bg.clear();
+      chip.bg.beginFill(0x0d1520, 0.88);
+      chip.bg.lineStyle(1, 0x6b92c8, 0.78);
+      chip.bg.drawCircle(0, 0, circleR);
+      chip.bg.endFill();
+
+      const baseDiameterPx = circleR * 2;
+      const zoomNearT = smoothstep(1.2, 3.8, zoom);
+      const targetDiameterPx =
+        DOCKED_CHIP_MAX_SCREEN_PX
+        - (DOCKED_CHIP_MAX_SCREEN_PX - DOCKED_CHIP_MIN_SCREEN_PX) * zoomNearT;
+      const boundedDiameterPx = Math.min(DOCKED_CHIP_HARD_MAX_SCREEN_PX, targetDiameterPx);
+      // Divide by zoom so badge stays a fixed screen-pixel size regardless of world zoom
+      const targetScale = clamp(
+        boundedDiameterPx / (Math.max(1, baseDiameterPx) * zoom),
+        DOCKED_CHIP_SCALE_MIN,
+        DOCKED_CHIP_SCALE_MAX
+      );
+
+      chip.targetX = Number(loc.rx);
+      chip.targetY = Number(loc.ry) + ((DOCKED_ROW_Y_OFFSET_PX - 14) / zoom);
+      chip.targetScale = targetScale;
+      chip.targetAlpha = 0.96;
+
+      // Runtime guard to keep badges from outgrowing nearby map glyphs
+      const finalDiameterPx = baseDiameterPx * targetScale * zoom;
+      if (finalDiameterPx > DOCKED_CHIP_HARD_MAX_SCREEN_PX + 0.01) {
+        console.warn("Docked chip size exceeded cap", {
+          locationId,
+          finalDiameterPx,
+          capPx: DOCKED_CHIP_HARD_MAX_SCREEN_PX,
+          zoom,
+        });
+      }
+    }
+
+    for (const [locationId, chip] of dockedChipGfx.entries()) {
+      if (!chip || !chip.container) continue;
+
+      if (!chip.active) {
+        chip.targetAlpha = 0;
+      }
+
+      if (!chip.initialized) {
+        chip.currentX = Number(chip.targetX) || 0;
+        chip.currentY = Number(chip.targetY) || 0;
+        chip.currentScale = Number(chip.targetScale) || 0.1;
+        chip.currentAlpha = Number(chip.targetAlpha) || 0;
+        chip.initialized = true;
+      } else {
+        chip.currentX += (chip.targetX - chip.currentX) * DOCKED_CHIP_LERP;
+        chip.currentY += (chip.targetY - chip.currentY) * DOCKED_CHIP_LERP;
+        chip.currentScale += (chip.targetScale - chip.currentScale) * DOCKED_CHIP_LERP;
+        chip.currentAlpha += (chip.targetAlpha - chip.currentAlpha) * DOCKED_CHIP_LERP;
+      }
+
+      chip.container.position.set(chip.currentX, chip.currentY);
+      chip.container.scale.set(chip.currentScale);
+      chip.container.alpha = chip.currentAlpha;
+      chip.container.visible = chip.currentAlpha > 0.02;
+
+      const textW = Number(chip.text?.width) || 10;
+      const textH = Number(chip.text?.height) || 10;
+      const chipRadiusPx = Math.max(textW, textH) * 0.6 * chip.currentScale;
+      chip.hitRadiusWorld = Math.max(3 / zoom, chipRadiusPx);
+
+      // Reset inactive targets to avoid stale interpolation on reactivation
+      if (!chip.active && chip.currentAlpha <= 0.02) {
+        chip.targetScale = chip.currentScale;
+        chip.targetX = chip.currentX;
+        chip.targetY = chip.currentY;
+      }
+    }
+  }
+
   function buildShipSprite(ship) {
     const c = new PIXI.Container();
     c.interactive = true;
@@ -4019,8 +4165,6 @@
 
       const slot = { index: 0 };
 
-      const phase = stringHash01(s.id) * Math.PI * 2;
-
       transitPathLayer.addChild(pathGfx);
       shipLayer.addChild(container);
       shipGfx.set(s.id, {
@@ -4038,7 +4182,6 @@
         colorInt,
         hitRadius,
         slot,
-        phase,
         transitKey: null,
         curve: null,
       });
@@ -4046,6 +4189,8 @@
 
     for (const [shipId, gfx] of shipGfx.entries()) {
       if (nextIds.has(shipId)) continue;
+      unregisterZoomScaledText(gfx.label);
+      unregisterZoomScaledText(gfx.idTag);
       if (gfx.pathGfx?.parent) gfx.pathGfx.parent.removeChild(gfx.pathGfx);
       gfx.pathGfx?.destroy?.();
       if (gfx.container?.parent) gfx.container.parent.removeChild(gfx.container);
@@ -4064,16 +4209,23 @@
     const idTagZoomAlpha = zoomFade(zoom, SHIP_IDTAG_FADE_IN_ZOOM, SHIP_IDTAG_FULL_ZOOM);
     const clusterMode = zoom <= SHIP_CLUSTER_ZOOM_THRESHOLD;
     const dockedCountByLocation = new Map();
+    const dockedShipsByLocation = new Map();
     const hiddenClusterCountByLocation = new Map();
 
     for (const gfx of shipGfx.values()) {
       const s = gfx.ship;
       if (s?.status !== "docked" || !s.location_id) continue;
       dockedCountByLocation.set(s.location_id, (dockedCountByLocation.get(s.location_id) || 0) + 1);
+      // Only count landed ships (not in orbits or L-points) for the badge chip
+      if (!ORBIT_IDS.has(s.location_id) && !LPOINT_IDS.has(s.location_id)) {
+        const chipAnchorId = dockedChipAnchorIdForLocation(s.location_id);
+        if (!dockedShipsByLocation.has(chipAnchorId)) dockedShipsByLocation.set(chipAnchorId, []);
+        dockedShipsByLocation.get(chipAnchorId).push(s);
+      }
     }
 
     for (const gfx of shipGfx.values()) {
-      const { ship, container, shipIcon, headingLine, selectionBox, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot, phase } = gfx;
+      const { ship, container, shipIcon, headingLine, selectionBox, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot } = gfx;
       let facingAngle = 0;
       let headingAngle = 0;
       let px = 0;
@@ -4086,45 +4238,34 @@
 
         const dockedCount = dockedCountByLocation.get(ship.location_id) || 1;
         const isSelectedOrHovered = (ship.id === selectedShipId || ship.id === hoveredShipId);
-        const hideInCluster = clusterMode && dockedCount >= SHIP_CLUSTER_MIN_COUNT && !isSelectedOrHovered;
-        if (hideInCluster) {
+        const isOrbitLocation = ORBIT_IDS.has(ship.location_id);
+        const isLPointLocation = LPOINT_IDS.has(ship.location_id);
+        // Always hide landed ships behind the badge (non-orbit, non-L-point)
+        const isLandedLocation = !isOrbitLocation && !isLPointLocation;
+        if (isLandedLocation && !isSelectedOrHovered) {
           container.visible = false;
           hiddenClusterCountByLocation.set(ship.location_id, (hiddenClusterCountByLocation.get(ship.location_id) || 0) + 1);
           continue;
         }
 
         container.visible = true;
-        const slotIndex = Number(slot?.index) || 0;
-        const compactOffset = slotOffsetWorld(slotIndex, zoom, SHIP_DOCK_BASE_RADIUS_PX);
 
-        // Fan-out: lerp between compact and fanned positions
-        const fanT = fanOutState.get(ship.location_id) || 0;
-        let ox, oy;
-        if (fanT > 0.001 && dockedCount >= 2) {
-          const fanOffset = fanOutOffsetWorld(slotIndex, zoom, dockedCount);
-          ox = compactOffset.dxWorld + (fanOffset.dxWorld - compactOffset.dxWorld) * fanT;
-          oy = compactOffset.dyWorld + (fanOffset.dyWorld - compactOffset.dyWorld) * fanT;
-        } else {
-          ox = compactOffset.dxWorld;
-          oy = compactOffset.dyWorld;
-        }
-
-        // ✅ drift around orbit rings (visual only)
-        if (ORBIT_IDS.has(ship.location_id) && orbitInfo.has(ship.location_id)) {
-          const oi = orbitInfo.get(ship.location_id);
-          const omega = (2 * Math.PI) / PARKED_ORBIT_ROTATION_PERIOD_S;
-          const a = oi.baseAngle + omega * now + phase;
-
-          const x = oi.cx + Math.cos(a) * oi.radius;
-          const y = oi.cy + Math.sin(a) * oi.radius;
-
-          px = x + ox;
-          py = y + oy;
-          facingAngle = a + Math.PI / 2;
+        // Orbit ships: position along the orbit ring with animated rotation
+        const oi = isOrbitLocation ? orbitInfo.get(ship.location_id) : null;
+        if (oi && oi.period_s > 0) {
+          const slotIndex = Number(slot?.index) || 0;
+          const slotSpacing = (2 * Math.PI) / Math.max(1, dockedCount);
+          const elapsed = (performance.now() / 1000);
+          const orbitAngle = oi.baseAngle + (elapsed / oi.period_s) * 2 * Math.PI + slotIndex * slotSpacing;
+          px = oi.cx + oi.radius * Math.cos(orbitAngle);
+          py = oi.cy + oi.radius * Math.sin(orbitAngle);
+          facingAngle = orbitAngle + Math.PI / 2;
           headingAngle = facingAngle;
         } else {
-          px = loc.rx + ox;
-          py = loc.ry + oy;
+          const slotIndex = Number(slot?.index) || 0;
+          const rowOffset = dockedRowOffsetWorld(slotIndex, zoom, dockedCount);
+          px = loc.rx + rowOffset.dxWorld;
+          py = loc.ry + rowOffset.dyWorld;
           facingAngle = 0;
           headingAngle = 0;
         }
@@ -4196,9 +4337,7 @@
         label.position.set(Math.sin(theta) * dy, Math.cos(theta) * dy);
         label.rotation = -theta;
         label.scale.set(shipTextLockedToScreen);
-        const shipFanT = (ship.status === "docked" && ship.location_id) ? (fanOutState.get(ship.location_id) || 0) : 0;
-        const labelShowFan = shipFanT > 0.3 ? shipFanT : 0;
-        label.alpha = Math.max((ship.id === selectedShipId || ship.id === hoveredShipId) ? 1 : 0, labelShowFan);
+        label.alpha = (ship.id === selectedShipId || ship.id === hoveredShipId) ? 1 : 0;
         label.visible = label.alpha > 0.001;
       }
 
@@ -4214,8 +4353,8 @@
       }
     }
 
-    updateShipClusterLabels(hiddenClusterCountByLocation, clusterMode);
-    updateFanOutState(dockedCountByLocation);
+    updateDockedShipChips(dockedShipsByLocation);
+    updateShipClusterLabels(hiddenClusterCountByLocation, false);
 
     applyUniversalTextScaleCap();
   }
@@ -4700,6 +4839,41 @@
       const hasFuel = fuelNeedKg <= shipFuel + 0.1;
       const hasDv = q.dv_m_s <= shipDv + 0.1;
 
+      const evaluateSurfaceTwr = () => {
+        const surfaceSites = Array.isArray(q.surface_sites) ? q.surface_sites : [];
+        if (!surfaceSites.length) return { ok: true };
+        const thrustKn = Number(ship.thrust_kn || 0);
+        const wetMassKg = Number(ship.dry_mass_kg || 0) + Number(ship.fuel_kg || 0);
+        const thrustN = thrustKn * 1000;
+
+        if (!(wetMassKg > 0) || !(thrustN > 0)) {
+          const site = surfaceSites.find((s) => Number(s?.gravity_m_s2 || 0) > 0) || surfaceSites[0] || null;
+          return {
+            ok: false,
+            siteId: String(site?.location_id || "surface site"),
+            gravity: Number(site?.gravity_m_s2 || 0),
+            twr: 0,
+          };
+        }
+
+        for (const site of surfaceSites) {
+          const gravity = Number(site?.gravity_m_s2 || 0);
+          if (!(gravity > 0)) continue;
+          const twr = thrustN / (wetMassKg * gravity);
+          if (twr < 1.0) {
+            return {
+              ok: false,
+              siteId: String(site.location_id || "surface site"),
+              gravity,
+              twr,
+            };
+          }
+        }
+        return { ok: true };
+      };
+      const twrCheck = evaluateSurfaceTwr();
+      const hasSurfaceTwr = twrCheck.ok;
+
       // Overheating check
       const pb = ship.power_balance;
       const wasteSurplus = pb ? Number(pb.waste_heat_surplus_mw || 0) : 0;
@@ -4844,6 +5018,7 @@
           </div>
           ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(q.dv_m_s)}, have ${Math.round(shipDv)})</span></div>` : ""}
           ${!hasFuel && hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>` : ""}
+          ${!hasSurfaceTwr ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient surface TWR for ${_esc(twrCheck.siteId || "surface site")} (TWR ${Number(twrCheck.twr || 0).toFixed(2)} &lt; 1.00 at ${Number(twrCheck.gravity || 0).toFixed(2)} m/s²)</span></div>` : ""}
         </div>
 
         ${isOverheating ? `
@@ -4858,7 +5033,7 @@
         <div class="tpActions">
           <button id="tpCancelBtn" class="btnSecondary">Cancel</button>
           ${window.gameAuth && window.gameAuth.user && window.gameAuth.user.is_admin ? `<button id="tpTeleportBtn" class="btnSecondary" style="background:rgba(255,140,0,0.15);border-color:rgba(255,140,0,0.5);color:#ffa500;">⚡ Teleport</button>` : ""}
-          <button id="tpConfirmBtn" class="btnPrimary" ${hasDv && hasFuel && !isOverheating ? "" : "disabled"}>${isOverheating ? "Overheating" : "Confirm Transfer"}</button>
+          <button id="tpConfirmBtn" class="btnPrimary" ${hasDv && hasFuel && hasSurfaceTwr && !isOverheating ? "" : "disabled"}>${isOverheating ? "Overheating" : "Confirm Transfer"}</button>
         </div>
       `;
 

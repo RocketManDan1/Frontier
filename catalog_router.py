@@ -3,6 +3,7 @@ Catalog & research API routes.
 
 Extracted from main.py — handles:
   /api/catalog/items
+  /api/catalog/item/{item_id}
   /api/catalog/recipes
   /api/catalog/recipes/by-category
   /api/research/tree
@@ -13,7 +14,7 @@ Extracted from main.py — handles:
 import sqlite3
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth_service import require_login
 import catalog_service
@@ -42,8 +43,17 @@ def api_health(conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     conn.execute("SELECT 1")
     return {
         "ok": True,
-        "service": "earthmoon-db",
+        "service": "frontier-sol-2000",
     }
+
+
+@router.get("/api/catalog/item/{item_id}")
+def api_catalog_item_info(item_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    require_login(conn, request)
+    info = catalog_service.get_item_info(item_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+    return {"item": info}
 
 
 @router.get("/api/catalog/recipes")

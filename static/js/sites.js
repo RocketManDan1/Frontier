@@ -80,6 +80,17 @@
     });
   }
 
+  function promptBatchCount(actionLabel) {
+    const raw = window.prompt(`${actionLabel} how many orders?`, "1");
+    if (raw === null) return null;
+    const value = Number(String(raw).trim());
+    if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
+      alert("Please enter a whole number greater than 0.");
+      return null;
+    }
+    return value;
+  }
+
   /* ══════════════════════════════════════════════════════════
      TAB SWITCH
      ══════════════════════════════════════════════════════════ */
@@ -132,7 +143,7 @@
       if (currentFilter === "orbital") return !s.is_surface_site;
       if (currentFilter === "active") {
         const eq = s.equipment || {};
-        return (eq.refinery || eq.constructor || {}).total > 0 || s.active_jobs > 0;
+        return (eq.refinery || {}).total > 0 || (eq.constructor || {}).total > 0 || (eq.robonaut || {}).total > 0 || s.active_jobs > 0;
       }
       return true;
     });
@@ -146,8 +157,9 @@
       const eq = s.equipment || {};
       const refCount = (eq.refinery || {}).total || 0;
       const conCount = (eq.constructor || {}).total || 0;
-      const equipStr = (refCount || conCount)
-        ? `<span class="eqBadge ref">${refCount}R</span><span class="eqBadge con">${conCount}C</span>`
+      const roboCount = (eq.robonaut || {}).total || 0;
+      const equipStr = (refCount || conCount || roboCount)
+        ? `<span class="eqBadge ref">${refCount}R</span><span class="eqBadge con">${conCount}C</span><span class="eqBadge con">${roboCount}B</span>`
         : '<span class="muted">—</span>';
 
       const invStr = s.inventory.stack_count > 0
@@ -264,7 +276,8 @@
       invGrid.innerHTML = "";
       resources.forEach(r => {
         const cell = itemDisplay.createGridCell({
-          label: r.name, iconSeed: r.item_id, category: "resource",
+          label: r.name, iconSeed: r.item_id, itemId: r.item_id,
+          category: "resource",
           mass_kg: r.mass_kg, quantity: r.quantity, subtitle: fmtKg(r.mass_kg),
         });
         invGrid.appendChild(cell);
@@ -273,7 +286,8 @@
         const part = p.part || {};
         const cat = part.category_id || part.type || "generic";
         const cell = itemDisplay.createGridCell({
-          label: p.name, iconSeed: p.item_id, category: cat,
+          label: p.name, iconSeed: p.item_id, itemId: p.item_id,
+          category: cat,
           mass_kg: p.mass_kg, quantity: p.quantity,
         });
         invGrid.appendChild(cell);
@@ -292,7 +306,8 @@
       eqGrid.innerHTML = "";
       equipment.forEach(eq => {
         const cell = itemDisplay.createGridCell({
-          label: eq.name, iconSeed: eq.item_id, category: eq.category,
+          label: eq.name, iconSeed: eq.item_id, itemId: eq.item_id,
+          category: eq.category,
           subtitle: eq.status === "active" ? "⚡ Active" : "Idle",
           className: eq.status === "active" ? "eqActive" : "",
         });
@@ -331,7 +346,7 @@
     const others = [];
     allSites.forEach(s => {
       const eq = s.equipment || {};
-      const hasInd = (eq.refinery || {}).total || (eq.constructor || {}).total || s.active_jobs > 0;
+      const hasInd = (eq.refinery || {}).total || (eq.constructor || {}).total || (eq.robonaut || {}).total || s.active_jobs > 0;
       if (hasInd) withIndustry.push(s); else others.push(s);
     });
 
@@ -416,6 +431,11 @@
         details = `<span class="eqDetail">${cfg.mining_rate_kg_per_hr || 0} kg/hr mining</span>
           <span class="eqDetail">${cfg.construction_rate_kg_per_hr || 0} kg/hr build</span>
           <span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      } else if (eq.category === "robonaut") {
+        icon = "🤖";
+        details = `<span class="eqDetail">${cfg.mining_rate_kg_per_hr || 0} kg/hr ISRU</span>
+          <span class="eqDetail">Water ice → Water</span>
+          <span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
       } else if (eq.category === "reactor") {
         icon = "☢";
         details = `<span class="eqDetail">${cfg.thermal_mw || 0} MWth</span>`;
@@ -441,7 +461,7 @@
             `<button class="btnSmall btnStart" data-equip-id="${eq.id}">Start Job</button>` : ""}
           ${eq.status === "idle" && eq.category === "constructor" ?
             `<button class="btnSmall btnBuild" data-equip-id="${eq.id}">Start Build</button>` : ""}
-          ${eq.status === "idle" && eq.category === "constructor" ?
+          ${eq.status === "idle" && (eq.category === "constructor" || eq.category === "robonaut") ?
             `<button class="btnSmall btnMine" data-equip-id="${eq.id}">Start Mining</button>` : ""}
           ${eq.status === "idle" ?
             `<button class="btnSmall btnUndeploy" data-equip-id="${eq.id}">Undeploy</button>` : ""}
@@ -589,10 +609,15 @@
     const now = serverNow();
     list.innerHTML = jobs.map(job => {
       if (job.job_type === "mine") {
+        const sourceName = job.source_resource_name || job.source_resource_id || "";
+        const outputName = job.resource_name || job.resource_id || "";
+        const conversionLabel = sourceName && outputName && sourceName !== outputName
+          ? `${esc(outputName)} (from ${esc(sourceName)})`
+          : esc(outputName);
         return `<div class="industryJobRow mining">
           <div class="jobIcon">⛏</div>
           <div class="jobInfo">
-            <div class="jobName">Mining: ${esc(job.resource_name || job.resource_id)}</div>
+            <div class="jobName">Mining: ${conversionLabel}</div>
             <div class="jobMeta">${esc(job.equipment_name)} · ${job.rate_kg_per_hr} kg/hr</div>
             <div class="jobMeta muted">Total mined: ${fmtKg(job.total_mined_kg)}</div>
           </div>
@@ -875,10 +900,13 @@
       // Wire start buttons
       list.querySelectorAll(".btnStartRecipe").forEach(function(btn) {
         btn.addEventListener("click", async function() {
+          const batchCount = promptBatchCount("Build");
+          if (batchCount === null) return;
           try {
             await postJSON("/api/industry/jobs/start", {
               equipment_id: btn.dataset.equipId,
               recipe_id: btn.dataset.recipeId,
+              batch_count: batchCount,
             });
             loadIndustryContent();
             loadSites();
@@ -910,6 +938,7 @@
     };
 
     let html = "";
+    let sliderSeq = 0;
     for (const [catId, catRecipes] of Object.entries(groups)) {
       html += `<div class="recipeCategoryGroup">
         <div class="recipeCategoryHeader">${esc(categoryLabels[catId] || catId)}</div>`;
@@ -926,6 +955,8 @@
         const idleEquip = equipType === "constructor"
           ? (recipe.idle_constructors || [])
           : (recipe.idle_refineries || []);
+        const maxBatches = Math.max(1, Number(recipe.max_batches || 1));
+        const sliderId = `recipe-batch-${sliderSeq++}`;
         const noEquipMsg = equipType === "constructor" ? "No idle constructor" : "No idle refinery";
 
         html += `<div class="recipeRow ${canStart ? "canStart" : "cantStart"}">
@@ -943,8 +974,13 @@
           </div>
           <div class="recipeAction">
             ${canStart && idleEquip.length ?
-              `<button class="btnSmall btnStartRecipe" data-recipe-id="${recipe.recipe_id}"
-                data-equip-id="${idleEquip[0].id}">${equipType === "constructor" ? "Build" : "Produce"}</button>` :
+              `<div class="batchSliderRow">
+                <label>Batches:</label>
+                <input type="range" class="recipeBatchSlider" id="${sliderId}" min="1" max="${maxBatches}" value="1">
+                <span class="recipeBatchCount" data-slider-id="${sliderId}">1</span> / ${maxBatches}
+              </div>
+              <button class="btnSmall btnStartRecipe" data-recipe-id="${recipe.recipe_id}"
+                data-equip-id="${idleEquip[0].id}" data-slider-id="${sliderId}">${equipType === "constructor" ? "Build" : "Produce"}</button>` :
               `<span class="muted">${!idleEquip.length ? noEquipMsg : "Missing inputs"}</span>`
             }
           </div>
@@ -956,12 +992,25 @@
 
     list.innerHTML = html;
 
+    list.querySelectorAll(".recipeBatchSlider").forEach(slider => {
+      slider.addEventListener("input", () => {
+        const sliderId = slider.id;
+        const count = parseInt(slider.value, 10) || 1;
+        const counter = list.querySelector(`.recipeBatchCount[data-slider-id="${sliderId}"]`);
+        if (counter) counter.textContent = String(count);
+      });
+    });
+
     list.querySelectorAll(".btnStartRecipe").forEach(btn => {
       btn.addEventListener("click", async () => {
+        const sliderId = btn.dataset.sliderId || "";
+        const slider = sliderId ? list.querySelector(`#${sliderId}`) : null;
+        const batchCount = slider ? (parseInt(slider.value, 10) || 1) : 1;
         try {
           await postJSON("/api/industry/jobs/start", {
             equipment_id: btn.dataset.equipId,
             recipe_id: btn.dataset.recipeId,
+            batch_count: batchCount,
           });
           loadIndustryContent();
           loadSites();
@@ -986,8 +1035,6 @@
 
     const minable = industryData.minable_resources || [];
     const activeJobs = (industryData.active_jobs || []).filter(j => j.job_type === "mine");
-    const idleConstructors = industryData.idle_constructors || [];
-
     let html = "";
 
     // Active mining
@@ -1078,49 +1125,206 @@
     if (!industryLocationId) return;
     document.getElementById("deployModal").style.display = "";
 
-    const grid = document.getElementById("deployableItemsGrid");
+    const listEl = document.getElementById("deployableItemsList");
     const empty = document.getElementById("deployableEmpty");
-    grid.innerHTML = "";
+    const pwrSummary = document.getElementById("deployPowerSummary");
+    listEl.innerHTML = "";
+    pwrSummary.innerHTML = "";
 
     try {
-      const inv = await fetchJSON(`/api/inventory/location/${encodeURIComponent(industryLocationId)}`);
-      const deployableCategories = new Set(["refinery", "constructor", "reactor", "generator", "radiator"]);
-      const parts = (inv.parts || []).filter(p => {
-        const cat = (p.part || {}).category_id || (p.part || {}).type || "";
-        return deployableCategories.has(cat);
+      const normalizeDeployCategory = (raw) => {
+        const value = String(raw || "").trim().toLowerCase();
+        if (!value) return "";
+        // Use Object.create(null) to avoid prototype keys like 'constructor'
+        const aliases = Object.create(null);
+        Object.assign(aliases, {
+          robonauts: "robonaut", robots: "robonaut", robot: "robonaut",
+          constructors: "constructor", builders: "constructor", builder: "constructor",
+          refineries: "refinery", reactors: "reactor", generators: "generator", radiators: "radiator",
+        });
+        return aliases[value] || value;
+      };
+      const deployableCategories = new Set(["refinery", "constructor", "robonaut", "reactor", "generator", "radiator"]);
+      const catOrder = ["reactor", "generator", "radiator", "refinery", "constructor", "robonaut"];
+      const catLabels = Object.create(null);
+      Object.assign(catLabels, { reactor: "Reactors", generator: "Generators", radiator: "Radiators",
+        refinery: "Refineries", constructor: "Constructors", robonaut: "Robonauts" });
+
+      // Fetch cargo context and industry data in parallel
+      const [context, indData] = await Promise.all([
+        fetchJSON(`/api/cargo/context/${encodeURIComponent(industryLocationId)}`),
+        fetchJSON(`/api/industry/${encodeURIComponent(industryLocationId)}`).catch(() => null),
+      ]);
+      const entities = Array.isArray(context.entities) ? context.entities : [];
+
+      // Render power summary from industry data
+      const pb = indData && indData.power_balance;
+      if (pb) {
+        const eSup = Number(pb.electric_mw_supply || 0);
+        const eDem = Number(pb.electric_mw_demand || 0);
+        const eSur = Number(pb.electric_mw_surplus || 0);
+        const tSup = Number(pb.thermal_mw_supply || 0);
+        const eSurClass = eSur >= 0 ? "pwrOk" : "pwrBad";
+
+        pwrSummary.innerHTML = `
+          <div class="deployPwrStat"><span class="deployPwrLabel">Thermal Supply:</span><span class="deployPwrVal">${tSup.toFixed(1)} MWth</span></div>
+          <div class="deployPwrStat"><span class="deployPwrLabel">Electric Supply:</span><span class="deployPwrVal">${eSup.toFixed(1)} MWe</span></div>
+          <div class="deployPwrStat"><span class="deployPwrLabel">Demand:</span><span class="deployPwrVal">${eDem.toFixed(1)} MWe</span></div>
+          <div class="deployPwrStat"><span class="deployPwrLabel">Surplus:</span><span class="deployPwrVal ${eSurClass}">${eSur >= 0 ? "+" : ""}${eSur.toFixed(1)} MWe</span></div>
+        `;
+      }
+
+      // Collect deployable items
+      const deployableItems = [];
+      entities.forEach(entity => {
+        const isShip = String(entity.entity_kind || "") === "ship";
+        const sourceLabel = isShip
+          ? `Ship: ${String(entity.name || entity.id || "Unknown")}`
+          : "Site Inventory";
+
+        (entity.stack_items || []).forEach(item => {
+          const cat = normalizeDeployCategory(item.category_id || item.category || item.type || "");
+          if (!deployableCategories.has(cat)) return;
+
+          const transfer = item.transfer || {};
+          let sourceKind = String(transfer.source_kind || "");
+          let sourceId = String(transfer.source_id || "");
+          const sourceKey = String(transfer.source_key || "");
+          if (!sourceKind) sourceKind = isShip ? "ship_part" : "location_part";
+          if (!sourceId) sourceId = String(entity.id || "");
+
+          deployableItems.push({
+            itemId: String(item.item_id || ""),
+            name: String(item.label || item.name || item.item_id || "Part"),
+            category: cat,
+            quantity: Number(item.quantity || 1),
+            massKg: Number(item.mass_kg || 0),
+            electricMw: Number(item.electric_mw || 0),
+            thermalMw: Number(item.thermal_mw || 0),
+            thermalMwInput: Number(item.thermal_mw_input || 0),
+            wasteHeatMw: Number(item.waste_heat_mw || 0),
+            heatRejectionMw: Number(item.heat_rejection_mw || 0),
+            miningRate: Number(item.mining_rate_kg_per_hr || 0),
+            constructionRate: Number(item.construction_rate_kg_per_hr || 0),
+            conversionEff: Number(item.conversion_efficiency || 0),
+            excavationType: String(item.excavation_type || ""),
+            specialization: String(item.specialization || ""),
+            maxRecipeTier: Number(item.max_recipe_tier || 0),
+            throughputMult: Number(item.throughput_mult || 0),
+            minGravity: Number(item.min_surface_gravity_ms2 || 0),
+            operatingTempK: Number(item.operating_temp_k || 0),
+            branch: String(item.branch || ""),
+            techLevel: Number(item.tech_level || 0),
+            iconSeed: item.icon_seed || item.item_uid || item.item_id,
+            sourceKind, sourceId, sourceKey, sourceLabel,
+          });
+        });
       });
 
-      if (!parts.length) {
+      if (!deployableItems.length) {
         empty.style.display = "";
         return;
       }
       empty.style.display = "none";
 
-      parts.forEach(p => {
-        const part = p.part || {};
-        const cat = part.category_id || part.type || "generic";
-        const cell = itemDisplay.createGridCell({
-          label: p.name, iconSeed: p.item_id, category: cat,
-          quantity: p.quantity, subtitle: cat,
+      // Group by category (Object.create(null) avoids prototype keys like 'constructor')
+      const grouped = Object.create(null);
+      deployableItems.forEach(item => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item);
+      });
+
+      // Build detail chips for each item
+      function buildDetails(item) {
+        const chips = [];
+        const cat = item.category;
+        if (cat === "reactor") {
+          if (item.thermalMw) chips.push(`<b>${item.thermalMw}</b> MWth`);
+        } else if (cat === "generator") {
+          if (item.thermalMwInput) chips.push(`<b>${item.thermalMwInput}</b> MWth in`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe out`);
+          if (item.conversionEff) chips.push(`η ${(item.conversionEff * 100).toFixed(0)}%`);
+          if (item.wasteHeatMw) chips.push(`<b>${item.wasteHeatMw}</b> MWth waste`);
+        } else if (cat === "radiator") {
+          if (item.heatRejectionMw) chips.push(`<b>${item.heatRejectionMw}</b> MWth rejection`);
+          if (item.operatingTempK) chips.push(`${item.operatingTempK} K`);
+        } else if (cat === "refinery") {
+          if (item.specialization) chips.push(item.specialization.replace(/_/g, " "));
+          if (item.maxRecipeTier) chips.push(`Tier ${item.maxRecipeTier}`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+        } else if (cat === "constructor") {
+          if (item.miningRate) chips.push(`<b>${item.miningRate}</b> kg/hr mine`);
+          if (item.constructionRate) chips.push(`<b>${item.constructionRate}</b> kg/hr build`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+          if (item.minGravity) chips.push(`≥${item.minGravity} m/s²`);
+        } else if (cat === "robonaut") {
+          if (item.miningRate) chips.push(`<b>${item.miningRate}</b> kg/hr ISRU`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+        }
+        if (item.massKg > 0) chips.push(`${(item.massKg / 1000).toFixed(1)}t`);
+        if (item.branch) chips.push(item.branch.replace(/_/g, " "));
+        if (item.techLevel > 0) chips.push(`T${item.techLevel}`);
+        return chips.map(c => `<span class="deployItemDetail">${c}</span>`).join("");
+      }
+
+      // Render grouped items
+      catOrder.forEach(cat => {
+        const items = grouped[cat];
+        if (!items || !items.length) return;
+
+        // Category header
+        const header = document.createElement("div");
+        header.className = "deployCatHeader";
+        header.textContent = catLabels[cat] || cat;
+        listEl.appendChild(header);
+
+        // Item rows
+        items.forEach(item => {
+          const row = document.createElement("div");
+          row.className = "deployItemRow";
+          row.innerHTML = `
+            <div class="deployItemInfo">
+              <div class="deployItemName">${esc(item.name)}</div>
+              <div class="deployItemDetails">${buildDetails(item)}</div>
+            </div>
+            <div class="deployItemMeta">
+              <span class="deployItemQty">×${item.quantity}</span>
+              <span class="deployItemSource">${esc(item.sourceLabel)}</span>
+            </div>
+          `;
+
+          row.addEventListener("click", async () => {
+            row.style.pointerEvents = "none";
+            row.style.opacity = "0.5";
+            try {
+              if (item.sourceKind === "ship_part") {
+                await postJSON("/api/stack/transfer", {
+                  source_kind: "ship_part",
+                  source_id: item.sourceId,
+                  source_key: item.sourceKey,
+                  target_kind: "location",
+                  target_id: industryLocationId,
+                });
+              }
+              await postJSON("/api/industry/deploy", {
+                location_id: industryLocationId,
+                item_id: item.itemId,
+              });
+              document.getElementById("deployModal").style.display = "none";
+              loadIndustryContent();
+              loadSites();
+              if (cargoLocationId === industryLocationId) loadCargoContext();
+            } catch (e) {
+              row.style.pointerEvents = "";
+              row.style.opacity = "";
+              alert("Deploy failed: " + e.message);
+            }
+          });
+          listEl.appendChild(row);
         });
-        cell.style.cursor = "pointer";
-        cell.addEventListener("click", async () => {
-          try {
-            await postJSON("/api/industry/deploy", {
-              location_id: industryLocationId,
-              item_id: p.item_id,
-            });
-            document.getElementById("deployModal").style.display = "none";
-            loadIndustryContent();
-            loadSites();
-          } catch (e) {
-            alert("Deploy failed: " + e.message);
-          }
-        });
-        grid.appendChild(cell);
       });
     } catch (e) {
-      grid.innerHTML = `<div class="muted">Failed to load inventory: ${esc(e.message)}</div>`;
+      listEl.innerHTML = `<div class="muted" style="padding:12px">Failed to load inventory: ${esc(e.message)}</div>`;
     }
   }
 
@@ -1145,9 +1349,11 @@
     const cfg = equip.config || {};
     const spec = cfg.specialization || "";
     const maxTier = cfg.max_recipe_tier || 1;
+    const globalRefineryCategories = new Set(["all_refineries"]);
     const recipes = (industryData.available_recipes || []).filter(r => {
       if (r.facility_type === "shipyard") return false; // Only refinery recipes
-      const matchSpec = !spec || r.refinery_category === spec;
+      const recipeCategory = String(r.refinery_category || "").trim();
+      const matchSpec = !spec || !recipeCategory || recipeCategory === spec || globalRefineryCategories.has(recipeCategory);
       const matchTier = (r.min_tech_tier || 0) <= maxTier;
       return matchSpec && matchTier;
     });
@@ -1301,10 +1507,17 @@
     const content = document.getElementById("miningModalContent");
     modal.style.display = "";
 
-    const minable = industryData.minable_resources || [];
+    const equip = (industryData.equipment || []).find(e => e.id === equipId);
+    const isRobonaut = equip && equip.category === "robonaut";
+    const minableAll = industryData.minable_resources || [];
+    const minable = isRobonaut
+      ? minableAll.filter(r => String(r.resource_id || "").toLowerCase() === "water_ice")
+      : minableAll;
     if (!minable.length) {
       if (industryData.is_surface_site && industryData.is_prospected === false) {
         content.innerHTML = '<div class="muted">⚠ Site not prospected. Use a ship with a robonaut to prospect before mining.</div>';
+      } else if (isRobonaut) {
+        content.innerHTML = '<div class="muted">No water ice deposit available for robonaut ISRU at this site</div>';
       } else {
         content.innerHTML = '<div class="muted">No minable resources at this site</div>';
       }
@@ -1672,6 +1885,7 @@
     const cell = itemDisplay.createGridCell({
       label: item.label || item.name || "Item",
       iconSeed: item.icon_seed || item.item_uid || item.item_id,
+      itemId: item.item_id || "",
       category: item.category_id || item.category || item.type,
       quantity: item.quantity || item.amount,
       mass_kg: item.mass_kg,

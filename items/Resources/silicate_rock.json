@@ -5,5 +5,6 @@
   "category_id": "raw_material",
   "mass_per_m3_kg": 2700,
   "description": "Basaltic crust and regolith; primary bulk material on rocky bodies. Source of oxygen, silicon, and ceramics.",
-  "phase": "solid"
+  "phase": "solid",
+  "price_per_kg": 12
 }

@@ -3,6 +3,8 @@ Organization router — API routes for org management, LEO boosts, research team
 
 Routes:
   /api/org                         — get org state (settled)
+    /api/org/marketplace            — market prices + sellable inventory in LEO
+    /api/org/marketplace/sell       — sell resource mass from LEO or ships in LEO
   /api/org/hire-team               — hire a research team
   /api/org/fire-team               — fire a research team
   /api/org/boostable-items         — list items eligible for Earth-to-LEO boost
@@ -41,9 +43,14 @@ def _get_org_id(conn: sqlite3.Connection, user) -> str:
 class FireTeamRequest(BaseModel):
     team_id: str
 
-class BoostRequest(BaseModel):
+class BoostLineItemRequest(BaseModel):
     item_id: str
     quantity: float = 1.0
+
+class BoostRequest(BaseModel):
+    item_id: Optional[str] = None
+    quantity: float = 1.0
+    items: list[BoostLineItemRequest] = []
 
 class BoostCostRequest(BaseModel):
     mass_kg: float
@@ -56,6 +63,16 @@ class UnlockTechRequest(BaseModel):
 class ProspectRequest(BaseModel):
     ship_id: str
     site_location_id: str
+
+class ActivateLoanRequest(BaseModel):
+    loan_code: str
+
+
+class MarketplaceSellRequest(BaseModel):
+    source_kind: str
+    source_id: str
+    resource_id: str
+    mass_kg: float
 
 
 # ── Org State ──────────────────────────────────────────────────────────────────
@@ -75,7 +92,36 @@ def api_get_org(request: Request, conn: sqlite3.Connection = Depends(get_db)) ->
     prospected = org_service.get_prospected_sites(conn, org_id)
     org_state["prospected_sites"] = prospected
 
+    # Include available org-finance loan offers + active trackers
+    org_state["loan_offers"] = org_service.list_loan_offers_with_status(conn, org_id)
+
     return {"org": org_state}
+
+
+@router.get("/api/org/loans")
+def api_get_loans(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Get available loan offers and active repayment trackers for the org."""
+    user = require_login(conn, request)
+    org_id = _get_org_id(conn, user)
+    org_service.settle_org(conn, org_id)
+    offers = org_service.list_loan_offers_with_status(conn, org_id)
+    return {"loans": offers}
+
+
+@router.post("/api/org/loans/activate")
+def api_activate_loan(
+    body: ActivateLoanRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Activate one of the fixed organization loan products."""
+    user = require_login(conn, request)
+    org_id = _get_org_id(conn, user)
+    try:
+        result = org_service.activate_loan(conn, org_id, body.loan_code)
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ── Research Teams ─────────────────────────────────────────────────────────────
@@ -146,7 +192,51 @@ def api_boost_to_leo(
     org_id = _get_org_id(conn, user)
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
     try:
-        result = org_service.boost_to_leo(conn, org_id, body.item_id, body.quantity, corp_id=corp_id or "")
+        manifest = [
+            {"item_id": str(line.item_id), "quantity": float(line.quantity)}
+            for line in (body.items or [])
+        ]
+        if not manifest:
+            if not body.item_id:
+                raise ValueError("No boost items selected")
+            manifest = [{"item_id": str(body.item_id), "quantity": float(body.quantity)}]
+
+        result = org_service.boost_manifest_to_leo(conn, org_id, manifest, corp_id=corp_id or "")
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/api/org/marketplace")
+def api_marketplace(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Return monthly market prices for all resources and org-owned sellable inventory in LEO."""
+    user = require_login(conn, request)
+    org_id = _get_org_id(conn, user)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    snapshot = org_service.get_marketplace_snapshot(conn, org_id, corp_id=str(corp_id or ""))
+    return snapshot
+
+
+@router.post("/api/org/marketplace/sell")
+def api_marketplace_sell(
+    body: MarketplaceSellRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Sell resource mass from LEO location inventory or a docked ship in LEO."""
+    user = require_login(conn, request)
+    org_id = _get_org_id(conn, user)
+    corp_id = user.get("corp_id") if hasattr(user, "get") else None
+    try:
+        result = org_service.sell_market_resource(
+            conn,
+            org_id,
+            source_kind=body.source_kind,
+            source_id=body.source_id,
+            resource_id=body.resource_id,
+            mass_kg=body.mass_kg,
+            corp_id=str(corp_id or ""),
+        )
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

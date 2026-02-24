@@ -8,7 +8,6 @@ Extracted from main.py — handles:
   /api/surface_sites/{site_id}
 """
 
-import json
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 

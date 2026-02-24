@@ -1,0 +1,11 @@
+[Unit]
+Description=Frontier: Sol 2000 hourly GitHub mirror push
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=user
+WorkingDirectory=/home/user/docker/Frontier: Sol 2000
+EnvironmentFile=-/home/user/docker/Frontier: Sol 2000/.mirror.env
+ExecStart=/usr/bin/env bash /home/user/docker/Frontier: Sol 2000/scripts/github_mirror_hourly.sh

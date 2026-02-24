@@ -313,6 +313,45 @@
 
     let currentQuote = null;
 
+    function evaluateSurfaceTwr(quote, shipData) {
+      const sites = Array.isArray(quote?.surface_sites) ? quote.surface_sites : [];
+      if (!sites.length) return { ok: true };
+
+      const thrustKn = Number(shipData?.thrust_kn || 0);
+      const wetMassKg = Number(shipData?.dry_mass_kg || 0) + Number(shipData?.fuel_kg || 0);
+      const thrustN = thrustKn * 1000;
+
+      if (!(wetMassKg > 0) || !(thrustN > 0)) {
+        const site = sites.find((s) => Number(s?.gravity_m_s2 || 0) > 0) || sites[0] || null;
+        return {
+          ok: false,
+          siteId: String(site?.location_id || "surface site"),
+          gravity: Number(site?.gravity_m_s2 || 0),
+          twr: 0,
+          thrustKn,
+          wetMassKg,
+        };
+      }
+
+      for (const site of sites) {
+        const gravity = Number(site?.gravity_m_s2 || 0);
+        if (!(gravity > 0)) continue;
+        const twr = thrustN / (wetMassKg * gravity);
+        if (twr < 1.0) {
+          return {
+            ok: false,
+            siteId: String(site.location_id || "surface site"),
+            gravity,
+            twr,
+            thrustKn,
+            wetMassKg,
+          };
+        }
+      }
+
+      return { ok: true };
+    }
+
     select.addEventListener("change", async () => {
       const destId = select.value;
       confirmBtn.disabled = true;
@@ -326,9 +365,15 @@
         const dvReq = Number(data.dv_m_s || 0);
         const tofH = (Number(data.tof_s || 0) / 3600).toFixed(1);
         const dvShip = Number(ship.delta_v_remaining_m_s || 0);
-        const enough = dvShip >= dvReq;
-        quoteInfo.innerHTML = `Δv required: <b>${dvReq.toFixed(0)} m/s</b> · Time: <b>${tofH}h</b> · Ship Δv: <b style="color:${enough ? "var(--text)" : "#f66"}">${dvShip.toFixed(0)} m/s</b>`;
-        confirmBtn.disabled = !enough;
+        const enoughDv = dvShip >= dvReq;
+        const twrCheck = evaluateSurfaceTwr(data, ship);
+        const enoughTwr = twrCheck.ok;
+        let twrWarning = "";
+        if (!enoughTwr) {
+          twrWarning = `<br><span style="color:#f66;">Insufficient surface TWR for ${escapeHtml(twrCheck.siteId || "surface site")} (TWR ${Number(twrCheck.twr || 0).toFixed(2)} &lt; 1.00 at ${Number(twrCheck.gravity || 0).toFixed(2)} m/s²)</span>`;
+        }
+        quoteInfo.innerHTML = `Δv required: <b>${dvReq.toFixed(0)} m/s</b> · Time: <b>${tofH}h</b> · Ship Δv: <b style="color:${enoughDv ? "var(--text)" : "#f66"}">${dvShip.toFixed(0)} m/s</b>${twrWarning}`;
+        confirmBtn.disabled = !(enoughDv && enoughTwr);
         currentQuote = data;
       } catch (err) {
         quoteInfo.textContent = String(err.message || "Failed to load quote");
@@ -712,6 +757,7 @@
       const cell = itemDisplay.createGridCell({
         label: name,
         iconSeed: p.item_id || name,
+        itemId: p.item_id || "",
         category: category,
         mass_kg: Number(p.mass_kg) || 0,
         subtitle: category,
@@ -783,6 +829,7 @@
         const cell = itemDisplay.createGridCell({
           label: name,
           iconSeed: item.resource_id || name,
+          itemId: item.resource_id || "",
           category: "resource",
           mass_kg: massKg,
           subtitle: "resource",

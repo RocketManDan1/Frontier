@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Shipyard</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout30" />
+    <title>Frontier: Sol 2000 — Shipyard</title>
+    <link rel="stylesheet" href="/static/styles.css?v=layout32" />
   </head>
 
   <body>
@@ -49,6 +49,25 @@
           <section class="shipyardColumn panel">
             <div class="titleSmall">Ship Stack</div>
             <div id="shipyardSlots" class="shipyardSlots"></div>
+            <div id="shipyardFuelSection" class="shipyardFuelSection" style="display:none;">
+              <div class="shipyardFuelHeader">
+                <span class="titleSmall">Fuel Loading</span>
+                <span id="shipyardFuelAvail" class="muted small"></span>
+              </div>
+              <div class="shipyardFuelControls">
+                <input id="shipyardFuelSlider" type="range" min="0" max="0" step="1" value="0" class="shipyardFuelSlider" />
+                <div class="shipyardFuelInputRow">
+                  <input id="shipyardFuelInput" type="number" min="0" max="0" step="1" value="0" class="shipyardFuelInput" />
+                  <span class="shipyardFuelUnit">kg</span>
+                  <button id="shipyardFuelFillBtn" type="button" class="btnSmall" title="Fill to max">Fill</button>
+                  <button id="shipyardFuelEmptyBtn" type="button" class="btnSmall" title="Empty fuel">Empty</button>
+                </div>
+                <div id="shipyardFuelBar" class="shipyardFuelBar">
+                  <div id="shipyardFuelBarFill" class="shipyardFuelBarFill"></div>
+                </div>
+                <div id="shipyardFuelLabel" class="muted small"></div>
+              </div>
+            </div>
           </section>
 
           <section class="shipyardColumn panel">
@@ -66,7 +85,8 @@
 
     <script src="/static/js/auth.js?v=au2"></script>
     <script src="/static/js/clock.js?v=ti3"></script>
-    <script src="/static/js/item_display.js?v=id1"></script>
-    <script src="/static/js/shipyard.js?v=sy15"></script>
+    <script src="/static/js/item_display.js?v=id4"></script>
+    <script src="/static/js/item_info.js?v=ii2"></script>
+    <script src="/static/js/shipyard.js?v=sy16"></script>
   </body>
 </html>

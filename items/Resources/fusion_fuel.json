@@ -5,5 +5,6 @@
   "category_id": "finished_material",
   "mass_per_m3_kg": 200,
   "description": "Packaged D-He3 fuel including cryogenic handling losses and containment overhead. Total feed ~1.10 t per 1 t output.",
-  "phase": "liquid"
+  "phase": "liquid",
+  "price_per_kg": 250000
 }

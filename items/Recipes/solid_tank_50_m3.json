@@ -1,0 +1,18 @@
+{
+  "recipe_id": "solid_tank_50_m3",
+  "name": "Produce Solid Tank 50 M3",
+  "output_item_id": "solid_tank_50_m3",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 3.0
+    }
+  ],
+  "build_time_s": 1000,
+  "facility_type": "shipyard",
+  "refinery_category": "unassigned",
+  "min_tech_tier": 1,
+  "power_kw": 50,
+  "byproducts": []
+}
