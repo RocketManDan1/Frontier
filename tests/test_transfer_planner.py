@@ -187,24 +187,32 @@ class TestWetMassAndAcceleration:
 class TestOrbitalHelpers:
     """Test the interplanetary phase-angle and dv-time tradeoff functions."""
 
-    def test_body_angle_returns_float(self):
-        from fleet_router import _body_angle_at_time
+    def test_heliocentric_state_returns_dict(self):
+        from fleet_router import _body_heliocentric_state
 
-        angle = _body_angle_at_time("earth", 0.0)
-        assert isinstance(angle, float)
+        state = _body_heliocentric_state("earth", 0.0)
+        assert state is not None
+        assert isinstance(state["r_km"], float)
+        assert isinstance(state["theta_rad"], float)
+        assert state["r_km"] > 0
 
-    def test_body_angle_unknown_body_returns_none(self):
-        from fleet_router import _body_angle_at_time
+    def test_heliocentric_state_sun_at_origin(self):
+        from fleet_router import _body_heliocentric_state
 
-        assert _body_angle_at_time("pluto", 0.0) is None
+        state = _body_heliocentric_state("sun", 0.0)
+        assert state == {"r_km": 0.0, "theta_rad": 0.0}
 
-    def test_body_angle_advances_with_time(self):
-        from fleet_router import _body_angle_at_time
+    def test_heliocentric_state_unknown_body_returns_none(self):
+        from fleet_router import _body_heliocentric_state
 
-        a1 = _body_angle_at_time("earth", 0.0)
-        a2 = _body_angle_at_time("earth", 86400 * 365)  # ~1 year
-        # Earth should have moved ~2π radians in one period
-        assert a2 > a1
+        assert _body_heliocentric_state("pluto", 0.0) is None
+
+    def test_heliocentric_state_earth_radius_reasonable(self):
+        from fleet_router import _body_heliocentric_state
+
+        state = _body_heliocentric_state("earth", 0.0)
+        # Earth ~149.6 million km from Sun; allow wide margin
+        assert 1.3e8 < state["r_km"] < 1.6e8
 
     def test_is_interplanetary_same_body(self):
         from fleet_router import _is_interplanetary
@@ -225,20 +233,21 @@ class TestOrbitalHelpers:
         # Unknown locations should return False (no body mapping)
         assert _is_interplanetary("NOWHERE", "LEO") is False
 
-    def test_phase_angle_multiplier_range(self):
-        from fleet_router import _phase_angle_multiplier
+    def test_phase_solution_returns_multiplier_in_range(self):
+        from fleet_router import _body_phase_solution
 
         # At any time, multiplier should be between 1.0 and 1.4
         for t in [0, 86400 * 100, 86400 * 365, 86400 * 730]:
-            m = _phase_angle_multiplier("earth", "mars", t)
+            sol = _body_phase_solution("earth", "mars", t)
+            assert sol is not None, f"No solution at t={t}"
+            m = sol["phase_multiplier"]
             assert 1.0 <= m <= 1.401, f"Phase multiplier {m} out of range at t={t}"
 
-    def test_phase_angle_multiplier_identity(self):
-        from fleet_router import _phase_angle_multiplier
+    def test_phase_solution_unknown_body_returns_none(self):
+        from fleet_router import _body_phase_solution
 
-        # Unknown body pair → 1.0
-        m = _phase_angle_multiplier("earth", "pluto", 0)
-        assert m == 1.0
+        # Unknown body pair → None
+        assert _body_phase_solution("earth", "pluto", 0) is None
 
     def test_excess_dv_time_reduction_zero_extra(self):
         from fleet_router import _excess_dv_time_reduction
@@ -522,6 +531,36 @@ class TestAdvancedTransferQuote:
         })
         assert r.status_code == 404
 
+    def test_interplanetary_quote_has_window_suggestions(self, client):
+        r = client.get("/api/transfer_quote_advanced", params={
+            "from_id": "LEO",
+            "to_id": "LMO",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        if not data.get("is_interplanetary"):
+            pytest.skip("Route resolved as non-interplanetary in this seed")
+
+        orbital = data.get("orbital") or {}
+        suggestions = orbital.get("window_suggestions")
+        assert isinstance(suggestions, list)
+        if suggestions:
+            first = suggestions[0]
+            assert "departure_time" in first
+            assert "wait_s" in first
+            assert "phase_multiplier" in first
+
+    def test_asteroid_belt_body_is_tracked_interplanetary(self, client):
+        r = client.get("/api/transfer_quote_advanced", params={
+            "from_id": "LEO",
+            "to_id": "CERES_LO",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("is_interplanetary") is True
+        orbital = data.get("orbital") or {}
+        assert orbital.get("to_body") == "ceres"
+
 
 # ────────────────────────────────────────────────────────────────────
 # Ship transfer lifecycle (integration via API)
@@ -602,6 +641,11 @@ class TestShipTransferLifecycle:
             assert data["fuel_remaining_kg"] >= 0
             assert data["departed_at"] > 0
             assert data["arrives_at"] > data["departed_at"]
+            assert isinstance(data.get("transfer_legs"), list)
+            if data["transfer_legs"]:
+                first_leg = data["transfer_legs"][0]
+                assert "from_id" in first_leg and "to_id" in first_leg
+                assert "departure_time" in first_leg and "arrival_time" in first_leg
         finally:
             self._delete_ship(client, ship_id)
 

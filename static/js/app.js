@@ -1107,6 +1107,9 @@
   let cameraTweenToken = 0;
   let contextMenuEl = null;
   let syncStatePromise = null;
+  const TRANSIT_ANCHOR_BUCKET_S = 6 * 3600;
+  const transitAnchorSnapshots = new Map();
+  const transitAnchorSnapshotInflight = new Map();
   const HANGAR_WINDOW_EVENT = "earthmoon:open-hangar-window";
 
   function selectedShip() {
@@ -2879,14 +2882,36 @@
   }
 
   function getLocationBodyCenter(locationId) {
-    const loc = locationsById.get(locationId);
-    if (!loc) return null;
-
-    if (loc.id === "grp_earth" || hasAncestor(loc.id, "grp_earth", locationParentById)) {
-      return locationsById.get("grp_earth") || null;
+    // Walk up the location tree to find the nearest grp_* body ancestor.
+    let cur = String(locationId || "");
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (cur.startsWith("grp_") && !cur.endsWith("_orbits") && !cur.endsWith("_sites") && !cur.endsWith("_moons")) {
+        const loc = locationsById.get(cur);
+        if (loc) return loc;
+      }
+      cur = String(locationParentById.get(cur) || "");
     }
-    if (loc.id === "grp_moon" || hasAncestor(loc.id, "grp_moon", locationParentById)) {
-      return locationsById.get("grp_moon") || null;
+    return null;
+  }
+
+  /**
+   * Walk up from a location to find its top-level solar body group
+   * (the ancestor whose parent is grp_sun). Returns the group id string.
+   * For Earth and its Moon, both return "grp_earth".
+   * For Mars and its moons, returns "grp_mars".
+   */
+  function getLocationSolarGroup(locationId) {
+    let cur = String(locationId || "");
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (cur.startsWith("grp_") && !cur.endsWith("_orbits") && !cur.endsWith("_sites") && !cur.endsWith("_moons")) {
+        const parent = String(locationParentById.get(cur) || "");
+        if (parent === "grp_sun" || parent === "") return cur;
+      }
+      cur = String(locationParentById.get(cur) || "");
     }
     return null;
   }
@@ -2915,16 +2940,137 @@
     return ccwScore >= cwScore ? ccw : cw;
   }
 
-  function computeTransitCurve(ship, fromLoc, toLoc) {
+  /**
+   * Compute a Hohmann transfer arc (half-ellipse) between two positions
+   * around a central focus (the Sun). Returns a polyline curve object.
+   * The radial profile follows the Hohmann ellipse r(ν) equation;
+   * the angular sweep is linearly interpolated from θ₁→θ₂ to
+   * guarantee the arc passes through both exact endpoint positions.
+   */
+  function computeHohmannArc(sunX, sunY, fromX, fromY, toX, toY) {
+    const r1 = Math.max(1e-6, Math.hypot(fromX - sunX, fromY - sunY));
+    const r2 = Math.max(1e-6, Math.hypot(toX - sunX, toY - sunY));
+    const theta1 = Math.atan2(fromY - sunY, fromX - sunX);
+    const theta2raw = Math.atan2(toY - sunY, toX - sunX);
+
+    // Compute CCW (prograde) angular sweep from θ₁ to θ₂
+    let sweep = ((theta2raw - theta1) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    // Hohmann sweeps ~π rad; if sweep is very small, add 2π to avoid zero-length arc
+    if (sweep < Math.PI * 0.15) sweep += 2 * Math.PI;
+
+    // Hohmann ellipse parameters
+    const a = (r1 + r2) / 2;                   // semi-major axis
+    const e = Math.abs(r2 - r1) / (r1 + r2);   // eccentricity
+    const p = a * (1 - e * e);                  // semi-latus rectum = 2·r1·r2/(r1+r2)
+
+    // True anomaly range: periapsis→apoapsis (inner→outer) or apoapsis→periapsis (outer→inner)
+    const nuStart = (r1 <= r2) ? 0 : Math.PI;
+    const nuEnd   = (r1 <= r2) ? Math.PI : 2 * Math.PI;
+
+    const numSamples = 96;
+    const points = [];
+    const cumDist = [0];
+    for (let i = 0; i <= numSamples; i++) {
+      const t = i / numSamples;
+      // Radius from the Hohmann ellipse equation
+      const nu = nuStart + (nuEnd - nuStart) * t;
+      const r = p / (1 + e * Math.cos(nu));
+      // Angle: linearly sweep from θ₁ to θ₂
+      const angle = theta1 + sweep * t;
+      const x = sunX + r * Math.cos(angle);
+      const y = sunY + r * Math.sin(angle);
+      points.push({ x, y });
+      if (i > 0) {
+        const ddx = x - points[i - 1].x;
+        const ddy = y - points[i - 1].y;
+        cumDist.push(cumDist[i - 1] + Math.hypot(ddx, ddy));
+      }
+    }
+    return { type: "arc", points, cumDist };
+  }
+
+  /** Interpolate position along an arc polyline at fractional t ∈ [0,1]. */
+  function arcPoint(curve, t) {
+    const totalDist = curve.cumDist[curve.cumDist.length - 1] || 0;
+    return pointOnPolyline(curve.points, curve.cumDist, Math.max(0, Math.min(1, t)) * totalDist);
+  }
+
+  /** Approximate tangent vector along an arc polyline at fractional t ∈ [0,1]. */
+  function arcTangent(curve, t) {
+    const dt = 0.005;
+    const t1 = Math.max(0, t - dt);
+    const t2 = Math.min(1, t + dt);
+    const p1 = arcPoint(curve, t1);
+    const p2 = arcPoint(curve, t2);
+    return { x: p2.x - p1.x, y: p2.y - p1.y };
+  }
+
+  /** Unified curve position: dispatches between Bézier and arc polyline. */
+  function curvePoint(curve, t) {
+    if (curve.type === "arc") return arcPoint(curve, t);
+    return cubicPoint(curve, t);
+  }
+
+  /** Unified curve tangent: dispatches between Bézier and arc polyline. */
+  function curveTangent(curve, t) {
+    if (curve.type === "arc") return arcTangent(curve, t);
+    return cubicTangent(curve, t);
+  }
+
+  function computeTransitCurve(fromLocId, toLocId, fromLoc, toLoc, isInterplanetary, legDeparture, legArrival) {
     const p0 = { x: fromLoc.rx, y: fromLoc.ry };
     const p3 = { x: toLoc.rx, y: toLoc.ry };
+
+    // For solar interplanetary transfers, render a Hohmann transfer arc
+    if (isInterplanetary) {
+      const fromSolar = getLocationSolarGroup(fromLocId);
+      const toSolar = getLocationSolarGroup(toLocId);
+      if (fromSolar && toSolar && fromSolar !== toSolar) {
+        const sun = locationsById.get("grp_sun");
+        if (sun) {
+          // Use parent body centers for the arc so endpoints land on the
+          // planet orbital rings, not offset by local-orbit expansion.
+          // For endpoints: use the arrival-time ANGLE (where the planet will
+          // be along its orbit) but the CURRENT orbital ring radius, so the
+          // arc visually lands on the drawn orbit ring.
+          const fromBodyAnchor = legDeparture != null ? getTransitAnchorWorld(fromSolar, legDeparture) : null;
+          const fromBodyLive = locationsById.get(fromSolar);
+          const fromBodyFuture = fromBodyAnchor || fromBodyLive;
+          const toBodyAnchor = legArrival != null ? getTransitAnchorWorld(toSolar, legArrival) : null;
+          const toBodyLive = locationsById.get(toSolar);
+          const toBodyFuture = toBodyAnchor || toBodyLive;
+
+          // Snap to current ring radius but arrival-time angle
+          function snapToRingRadius(futureBody, liveBody, sunPos) {
+            if (!futureBody || !liveBody) return futureBody || liveBody;
+            const fdx = futureBody.rx - sunPos.rx;
+            const fdy = futureBody.ry - sunPos.ry;
+            const futureR = Math.hypot(fdx, fdy);
+            if (futureR < 1e-6) return futureBody;
+            const futureAngle = Math.atan2(fdy, fdx);
+            const liveR = Math.hypot(liveBody.rx - sunPos.rx, liveBody.ry - sunPos.ry);
+            return {
+              rx: sunPos.rx + liveR * Math.cos(futureAngle),
+              ry: sunPos.ry + liveR * Math.sin(futureAngle),
+            };
+          }
+          const arcFromBody = snapToRingRadius(fromBodyFuture, fromBodyLive, sun);
+          const arcToBody = snapToRingRadius(toBodyFuture, toBodyLive, sun);
+          const arcFrom = arcFromBody ? { x: arcFromBody.rx, y: arcFromBody.ry } : p0;
+          const arcTo = arcToBody ? { x: arcToBody.rx, y: arcToBody.ry } : p3;
+          return computeHohmannArc(sun.rx, sun.ry, arcFrom.x, arcFrom.y, arcTo.x, arcTo.y);
+        }
+      }
+    }
+
+    // Non-interplanetary or Earth-Moon: use existing orbital Bézier
     const dx = p3.x - p0.x;
     const dy = p3.y - p0.y;
     const d = Math.max(1e-6, Math.hypot(dx, dy));
     const dir = normalizeVec(dx, dy, 1, 0);
 
-    const fromBody = getLocationBodyCenter(ship.from_location_id);
-    const toBody = getLocationBodyCenter(ship.to_location_id);
+    const fromBody = getLocationBodyCenter(fromLocId);
+    const toBody = getLocationBodyCenter(toLocId);
     const samePrimary = !!(fromBody && toBody && fromBody.id === toBody.id);
     const primaryBody = samePrimary ? fromBody : (fromBody || toBody || null);
 
@@ -3007,15 +3153,22 @@
   function drawDashedTransitPath(pathGfx, curve, size, isSelected, displayScale = 1, shipProgress = 0) {
     if (!pathGfx || !curve) return;
 
-    const samples = 96;
-    const points = [];
-    for (let i = 0; i <= samples; i++) points.push(cubicPoint(curve, i / samples));
-
-    const cumulative = [0];
-    for (let i = 1; i < points.length; i++) {
-      const dx = points[i].x - points[i - 1].x;
-      const dy = points[i].y - points[i - 1].y;
-      cumulative.push(cumulative[i - 1] + Math.hypot(dx, dy));
+    let points, cumulative;
+    if (curve.type === "arc") {
+      // Arc curves already have pre-computed polyline + cumulative distances
+      points = curve.points;
+      cumulative = curve.cumDist;
+    } else {
+      // Bézier: sample into a polyline
+      const samples = 96;
+      points = [];
+      for (let i = 0; i <= samples; i++) points.push(cubicPoint(curve, i / samples));
+      cumulative = [0];
+      for (let i = 1; i < points.length; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        cumulative.push(cumulative[i - 1] + Math.hypot(dx, dy));
+      }
     }
 
     const total = cumulative[cumulative.length - 1] || 0;
@@ -3107,6 +3260,105 @@
     pathGfx.beginFill(traveledColor, traveledAlpha * 2.5);
     pathGfx.drawCircle(originPt.x, originPt.y, originSize);
     pathGfx.endFill();
+  }
+
+  function pickActiveTransferLeg(ship, nowGameS) {
+    const legs = Array.isArray(ship?.transfer_legs) ? ship.transfer_legs : [];
+    if (!legs.length) return null;
+
+    let active = legs.find((leg) => nowGameS >= Number(leg.departure_time) && nowGameS <= Number(leg.arrival_time));
+    if (!active) {
+      if (nowGameS < Number(legs[0].departure_time)) active = legs[0];
+      else active = legs[legs.length - 1];
+    }
+    if (!active) return null;
+    const idx = Math.max(0, legs.indexOf(active));
+    return {
+      index: idx,
+      count: legs.length,
+      leg: active,
+    };
+  }
+
+  function drawTransitLegMarkers(pathGfx, ship, nowGameS, isSelected) {
+    if (!pathGfx || !ship) return;
+    const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
+    if (!legs.length) return;
+
+    const zoom = Math.max(0.0001, world.scale.x);
+    const markerR = (isSelected ? 3.0 : 2.2) / zoom;
+    const doneColor = 0x627287;
+    const activeColor = 0xd6e9ff;
+    const activeHaloColor = 0xffffff;
+    const pendingColor = 0x9cb4cf;
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.006);
+    const sun = locationsById.get("grp_sun");
+
+    for (let i = 0; i < legs.length; i++) {
+      const leg = legs[i] || {};
+      const toId = String(leg.to_id || "");
+      if (!toId) continue;
+
+      let x, y;
+      // For interplanetary legs, snap marker to body-center on current ring
+      if (leg.is_interplanetary && sun) {
+        const toSolar = getLocationSolarGroup(toId);
+        if (toSolar) {
+          const bodyAnchor = getTransitAnchorWorld(toSolar, Number(leg.arrival_time));
+          const bodyLive = locationsById.get(toSolar);
+          const bodyFuture = bodyAnchor || bodyLive;
+          if (bodyFuture && bodyLive) {
+            const fdx = bodyFuture.rx - sun.rx;
+            const fdy = bodyFuture.ry - sun.ry;
+            const futureR = Math.hypot(fdx, fdy);
+            if (futureR > 1e-6) {
+              const angle = Math.atan2(fdy, fdx);
+              const liveR = Math.hypot(bodyLive.rx - sun.rx, bodyLive.ry - sun.ry);
+              x = sun.rx + liveR * Math.cos(angle);
+              y = sun.ry + liveR * Math.sin(angle);
+            }
+          }
+        }
+      }
+      // Fallback: use orbit-location anchor or live position
+      if (x == null || y == null) {
+        const anchor = getTransitAnchorWorld(toId, Number(leg.arrival_time));
+        const live = locationsById.get(toId);
+        x = Number(anchor?.rx ?? live?.rx);
+        y = Number(anchor?.ry ?? live?.ry);
+      }
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+      const arr = Number(leg.arrival_time || 0);
+      let color = pendingColor;
+      let alpha = isSelected ? 0.85 : 0.65;
+      if (nowGameS >= arr) {
+        color = doneColor;
+        alpha = isSelected ? 0.68 : 0.45;
+      }
+      if (nowGameS >= Number(leg.departure_time || 0) && nowGameS <= arr) {
+        color = activeColor;
+        alpha = 0.95;
+
+        const haloR = markerR * (1.7 + pulse * 0.75);
+        const haloA = (isSelected ? 0.44 : 0.34) * (0.75 + pulse * 0.5);
+        pathGfx.lineStyle(Math.max(0.85, 1.0 / zoom), activeHaloColor, haloA);
+        pathGfx.beginFill(activeHaloColor, haloA * 0.2);
+        pathGfx.drawCircle(x, y, haloR);
+        pathGfx.endFill();
+
+        pathGfx.lineStyle(Math.max(1.1, 1.3 / zoom), activeHaloColor, 0.95);
+        pathGfx.beginFill(activeColor, 0.98);
+        pathGfx.drawCircle(x, y, markerR * 1.12);
+        pathGfx.endFill();
+        continue;
+      }
+
+      pathGfx.lineStyle(Math.max(0.9, 1.1 / zoom), color, alpha);
+      pathGfx.beginFill(color, alpha * 0.92);
+      pathGfx.drawCircle(x, y, markerR);
+      pathGfx.endFill();
+    }
   }
 
   // ---------- Parking offsets ----------
@@ -4270,20 +4522,38 @@
           headingAngle = 0;
         }
       } else {
-        const A = locationsById.get(ship.from_location_id);
-        const B = locationsById.get(ship.to_location_id);
-        if (!A || !B || !ship.departed_at || !ship.arrives_at) continue;
+        if (!ship.departed_at || !ship.arrives_at) continue;
 
-        const t = (now - ship.departed_at) / (ship.arrives_at - ship.departed_at);
+        const activeLegInfo = pickActiveTransferLeg(ship, now);
+        const activeLeg = activeLegInfo?.leg || null;
+
+        const legFromId = String(activeLeg?.from_id || ship.from_location_id || "");
+        const legToId = String(activeLeg?.to_id || ship.to_location_id || "");
+        const legDeparture = Number(activeLeg?.departure_time || ship.departed_at);
+        const legArrival = Number(activeLeg?.arrival_time || ship.arrives_at);
+
+        const A = locationsById.get(legFromId);
+        const B = locationsById.get(legToId);
+        const fromAnchor = getTransitAnchorWorld(legFromId, legDeparture);
+        const toAnchor = getTransitAnchorWorld(legToId, legArrival);
+        const curveFrom = fromAnchor || A;
+        const curveTo = toAnchor || B;
+        if (!curveFrom || !curveTo) continue;
+
+        const denom = Math.max(1e-6, legArrival - legDeparture);
+        const t = (now - legDeparture) / denom;
         const tt = Math.max(0, Math.min(1, t));
-        const transitKey = `${ship.from_location_id}->${ship.to_location_id}`;
+        const fromSig = fromAnchor ? `${fromAnchor.rx.toFixed(2)},${fromAnchor.ry.toFixed(2)}` : (curveFrom ? `~${curveFrom.rx.toFixed(1)},${curveFrom.ry.toFixed(1)}` : "live");
+        const toSig = toAnchor ? `${toAnchor.rx.toFixed(2)},${toAnchor.ry.toFixed(2)}` : (curveTo ? `~${curveTo.rx.toFixed(1)},${curveTo.ry.toFixed(1)}` : "live");
+        const transitKey = `${legFromId}->${legToId}|${fromSig}|${toSig}`;
+        const legIsInterplanetary = !!(activeLeg?.is_interplanetary);
         if (!gfx.curve || gfx.transitKey !== transitKey) {
-          gfx.curve = computeTransitCurve(ship, A, B);
+          gfx.curve = computeTransitCurve(legFromId, legToId, curveFrom, curveTo, legIsInterplanetary, legDeparture, legArrival);
           gfx.transitKey = transitKey;
         }
 
-        const p = cubicPoint(gfx.curve, tt);
-        const tan = cubicTangent(gfx.curve, tt);
+        const p = curvePoint(gfx.curve, tt);
+        const tan = curveTangent(gfx.curve, tt);
         const travelAngle = Math.atan2(tan.y, tan.x);
         const decel = tt >= 0.5;
         facingAngle = decel ? travelAngle + Math.PI : travelAngle;
@@ -4294,6 +4564,7 @@
         if (pathGfx) {
           const isSelected = ship.id === selectedShipId;
           drawDashedTransitPath(pathGfx, gfx.curve, size || 10, isSelected, effectiveShipScale, tt);
+          drawTransitLegMarkers(pathGfx, ship, now, isSelected);
         }
 
         container.visible = true;
@@ -4357,6 +4628,211 @@
     updateShipClusterLabels(hiddenClusterCountByLocation, false);
 
     applyUniversalTextScaleCap();
+  }
+
+  function projectLocationsForMap(rawLocations) {
+    const projectedLocations = Array.isArray(rawLocations)
+      ? rawLocations.map((loc) => ({ ...loc }))
+      : [];
+
+    const parentById = new Map(projectedLocations.map((l) => [l.id, l.parent_id || null]));
+
+    const sun = projectedLocations.find((l) => l.id === "grp_sun");
+    const mercury = projectedLocations.find((l) => l.id === "grp_mercury");
+    const venus = projectedLocations.find((l) => l.id === "grp_venus");
+    const earth = projectedLocations.find((l) => l.id === "grp_earth");
+    const moon = projectedLocations.find((l) => l.id === "grp_moon");
+    const mars = projectedLocations.find((l) => l.id === "grp_mars");
+    const ceres = projectedLocations.find((l) => l.id === "grp_ceres");
+    const vesta = projectedLocations.find((l) => l.id === "grp_vesta");
+    const pallas = projectedLocations.find((l) => l.id === "grp_pallas");
+    const hygiea = projectedLocations.find((l) => l.id === "grp_hygiea");
+
+    const sunX = sun ? Number(sun.x) : 0;
+    const sunY = sun ? Number(sun.y) : 0;
+    const sunRx = sunX * DEEP_SCALE;
+    const sunRy = sunY * DEEP_SCALE;
+
+    function projectDeepPosition(xKm, yKm) {
+      const xx = Number(xKm);
+      const yy = Number(yKm);
+      if (!sun) return { rx: xx * DEEP_SCALE, ry: yy * DEEP_SCALE };
+
+      const dx = xx - sunX;
+      const dy = yy - sunY;
+      const rKm = Math.hypot(dx, dy);
+      if (rKm <= 1e-9) return { rx: sunRx, ry: sunRy };
+
+      const unitX = dx / rKm;
+      const unitY = dy / rKm;
+      const rVisual = Math.max(0, rKm) * HELIO_LINEAR_WORLD_PER_KM;
+      return {
+        rx: sunRx + unitX * rVisual,
+        ry: sunRy + unitY * rVisual,
+      };
+    }
+
+    const mercuryProjected = mercury ? projectDeepPosition(mercury.x, mercury.y) : { rx: 0, ry: 0 };
+    const venusProjected = venus ? projectDeepPosition(venus.x, venus.y) : { rx: 0, ry: 0 };
+    const earthProjected = earth ? projectDeepPosition(earth.x, earth.y) : { rx: 0, ry: 0 };
+    const moonProjected = moon ? projectDeepPosition(moon.x, moon.y) : projectDeepPosition(384400, 0);
+    const marsProjected = mars ? projectDeepPosition(mars.x, mars.y) : { rx: 0, ry: 0 };
+    const ceresProjected = ceres ? projectDeepPosition(ceres.x, ceres.y) : { rx: 0, ry: 0 };
+    const vestaProjected = vesta ? projectDeepPosition(vesta.x, vesta.y) : { rx: 0, ry: 0 };
+    const pallasProjected = pallas ? projectDeepPosition(pallas.x, pallas.y) : { rx: 0, ry: 0 };
+    const hygieaProjected = hygiea ? projectDeepPosition(hygiea.x, hygiea.y) : { rx: 0, ry: 0 };
+    const mercuryRx = mercuryProjected.rx;
+    const mercuryRy = mercuryProjected.ry;
+    const venusRx = venusProjected.rx;
+    const venusRy = venusProjected.ry;
+    const earthRx = earthProjected.rx;
+    const earthRy = earthProjected.ry;
+    const moonRx = moonProjected.rx;
+    const moonRy = moonProjected.ry;
+    const marsRx = marsProjected.rx;
+    const marsRy = marsProjected.ry;
+    const ceresRx = ceresProjected.rx;
+    const ceresRy = ceresProjected.ry;
+    const vestaRx = vestaProjected.rx;
+    const vestaRy = vestaProjected.ry;
+    const pallasRx = pallasProjected.rx;
+    const pallasRy = pallasProjected.ry;
+    const hygieaRx = hygieaProjected.rx;
+    const hygieaRy = hygieaProjected.ry;
+
+    for (const l of projectedLocations) {
+      l.is_group = !!Number(l.is_group);
+
+      const deep = projectDeepPosition(l.x, l.y);
+      let rx = deep.rx;
+      let ry = deep.ry;
+
+      if (!l.is_group && hasAncestor(l.id, "grp_earth_orbits", parentById) && earth) {
+        rx = earthRx + (Number(l.x) - Number(earth.x)) * EARTH_ORBIT_SCALE;
+        ry = earthRy + (Number(l.y) - Number(earth.y)) * EARTH_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_moon_orbits", parentById) && moon) {
+        rx = moonRx + (Number(l.x) - Number(moon.x)) * MOON_ORBIT_SCALE;
+        ry = moonRy + (Number(l.y) - Number(moon.y)) * MOON_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_mercury_orbits", parentById) && mercury) {
+        rx = mercuryRx + (Number(l.x) - Number(mercury.x)) * MERCURY_ORBIT_SCALE;
+        ry = mercuryRy + (Number(l.y) - Number(mercury.y)) * MERCURY_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_venus_orbits", parentById) && venus) {
+        rx = venusRx + (Number(l.x) - Number(venus.x)) * VENUS_ORBIT_SCALE;
+        ry = venusRy + (Number(l.y) - Number(venus.y)) * VENUS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_mars_orbits", parentById) && mars) {
+        rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
+        ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_ceres_orbits", parentById) && ceres) {
+        rx = ceresRx + (Number(l.x) - Number(ceres.x)) * CERES_ORBIT_SCALE;
+        ry = ceresRy + (Number(l.y) - Number(ceres.y)) * CERES_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_vesta_orbits", parentById) && vesta) {
+        rx = vestaRx + (Number(l.x) - Number(vesta.x)) * VESTA_ORBIT_SCALE;
+        ry = vestaRy + (Number(l.y) - Number(vesta.y)) * VESTA_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_pallas_orbits", parentById) && pallas) {
+        rx = pallasRx + (Number(l.x) - Number(pallas.x)) * PALLAS_ORBIT_SCALE;
+        ry = pallasRy + (Number(l.y) - Number(pallas.y)) * PALLAS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_hygiea_orbits", parentById) && hygiea) {
+        rx = hygieaRx + (Number(l.x) - Number(hygiea.x)) * HYGIEA_ORBIT_SCALE;
+        ry = hygieaRy + (Number(l.y) - Number(hygiea.y)) * HYGIEA_ORBIT_SCALE;
+      } else if (l.id === "grp_mercury") {
+        rx = mercuryRx; ry = mercuryRy;
+      } else if (l.id === "grp_venus") {
+        rx = venusRx; ry = venusRy;
+      } else if (l.id === "grp_earth") {
+        rx = earthRx; ry = earthRy;
+      } else if (l.id === "grp_moon") {
+        rx = moonRx; ry = moonRy;
+      } else if (l.id === "grp_mars") {
+        rx = marsRx; ry = marsRy;
+      } else if (l.id === "grp_ceres") {
+        rx = ceresRx; ry = ceresRy;
+      } else if (l.id === "grp_vesta") {
+        rx = vestaRx; ry = vestaRy;
+      } else if (l.id === "grp_pallas") {
+        rx = pallasRx; ry = pallasRy;
+      } else if (l.id === "grp_hygiea") {
+        rx = hygieaRx; ry = hygieaRy;
+      }
+
+      l.rx = rx;
+      l.ry = ry;
+    }
+
+    return {
+      locations: projectedLocations,
+      parentById,
+    };
+  }
+
+  function transitAnchorBucket(gameTimeS) {
+    const t = Number(gameTimeS);
+    if (!Number.isFinite(t)) return null;
+    return Math.floor(t / TRANSIT_ANCHOR_BUCKET_S);
+  }
+
+  function getTransitAnchorWorld(locationId, gameTimeS) {
+    const bucket = transitAnchorBucket(gameTimeS);
+    if (bucket == null) return null;
+    const byLocation = transitAnchorSnapshots.get(String(bucket));
+    if (!byLocation) return null;
+    return byLocation.get(String(locationId)) || null;
+  }
+
+  async function ensureTransitAnchorSnapshot(bucket) {
+    const key = String(bucket);
+    if (transitAnchorSnapshots.has(key)) return;
+    if (transitAnchorSnapshotInflight.has(key)) {
+      await transitAnchorSnapshotInflight.get(key);
+      return;
+    }
+
+    const bucketTime = (Number(bucket) + 0.5) * TRANSIT_ANCHOR_BUCKET_S;
+    const promise = (async () => {
+      const resp = await fetch(`/api/locations?dynamic=1&t=${encodeURIComponent(String(bucketTime))}`, { cache: "no-store" });
+      const data = await resp.json();
+      const projected = projectLocationsForMap(data.locations || []);
+      const byLocation = new Map();
+      for (const loc of projected.locations) {
+        byLocation.set(String(loc.id), {
+          rx: Number(loc.rx),
+          ry: Number(loc.ry),
+        });
+      }
+      transitAnchorSnapshots.set(key, byLocation);
+      while (transitAnchorSnapshots.size > 16) {
+        const first = transitAnchorSnapshots.keys().next().value;
+        if (first == null) break;
+        transitAnchorSnapshots.delete(first);
+      }
+    })();
+
+    transitAnchorSnapshotInflight.set(key, promise);
+    try {
+      await promise;
+    } finally {
+      transitAnchorSnapshotInflight.delete(key);
+    }
+  }
+
+  async function ensureTransitAnchorsForShips(shipList) {
+    const buckets = new Set();
+    for (const ship of (shipList || [])) {
+      if (!ship || ship.status !== "transit") continue;
+      const fromBucket = transitAnchorBucket(ship.departed_at);
+      const toBucket = transitAnchorBucket(ship.arrives_at);
+      if (fromBucket != null) buckets.add(fromBucket);
+      if (toBucket != null) buckets.add(toBucket);
+      // Also collect buckets for every individual transfer leg so that
+      // intermediate interplanetary legs resolve correct future positions.
+      const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
+      for (const leg of legs) {
+        const legDepBucket = transitAnchorBucket(leg.departure_time);
+        const legArrBucket = transitAnchorBucket(leg.arrival_time);
+        if (legDepBucket != null) buckets.add(legDepBucket);
+        if (legArrBucket != null) buckets.add(legArrBucket);
+      }
+    }
+    await Promise.all(Array.from(buckets).map((bucket) => ensureTransitAnchorSnapshot(bucket)));
   }
 
   // ---------- Move Planner modal ----------
@@ -5251,6 +5727,11 @@
     const A = locationsById.get(ship.from_location_id);
     const B = locationsById.get(ship.to_location_id);
     const eta = ship.arrives_at ? Math.max(0, ship.arrives_at - serverNow()) : null;
+    const activeLegInfo = pickActiveTransferLeg(ship, serverNow());
+    const activeLeg = activeLegInfo?.leg || null;
+    const legFrom = activeLeg ? (locationsById.get(String(activeLeg.from_id))?.name || String(activeLeg.from_id || "")) : "";
+    const legTo = activeLeg ? (locationsById.get(String(activeLeg.to_id))?.name || String(activeLeg.to_id || "")) : "";
+    const legEta = activeLeg ? Math.max(0, Number(activeLeg.arrival_time || 0) - serverNow()) : null;
 
     setInfo(
       ship.name,
@@ -5259,6 +5740,7 @@
       [
         ship.dv_planned_m_s != null ? `Δv planned: ${Math.round(ship.dv_planned_m_s)} m/s` : "",
         (ship.transfer_path || []).length ? `Path: ${(ship.transfer_path || []).join(" → ")}` : "",
+        activeLeg ? `Current leg ${Number(activeLegInfo.index) + 1}/${Number(activeLegInfo.count)}: ${legFrom} → ${legTo}${legEta != null ? ` • ETA ${formatEtaDaysHours(legEta)}` : ""}` : "",
       ].filter(Boolean)
     );
     if (infoList) {
@@ -5271,135 +5753,12 @@
   }
 
   // ---------- Sync ----------
-  async function syncLocationsOnce() {
-    const data = await (await fetch("/api/locations", { cache: "no-store" })).json();
-    locations = data.locations || [];
-
-    const parentById = new Map(locations.map((l) => [l.id, l.parent_id || null]));
-    locationParentById = parentById;
-
-    const sun = locations.find((l) => l.id === "grp_sun");
-    const mercury = locations.find((l) => l.id === "grp_mercury");
-    const venus = locations.find((l) => l.id === "grp_venus");
-    const earth = locations.find((l) => l.id === "grp_earth");
-    const moon = locations.find((l) => l.id === "grp_moon");
-    const mars = locations.find((l) => l.id === "grp_mars");
-    const ceres = locations.find((l) => l.id === "grp_ceres");
-    const vesta = locations.find((l) => l.id === "grp_vesta");
-    const pallas = locations.find((l) => l.id === "grp_pallas");
-    const hygiea = locations.find((l) => l.id === "grp_hygiea");
-
-    const sunX = sun ? Number(sun.x) : 0;
-    const sunY = sun ? Number(sun.y) : 0;
-    const sunRx = sunX * DEEP_SCALE;
-    const sunRy = sunY * DEEP_SCALE;
-
-    function projectDeepPosition(xKm, yKm) {
-      const xx = Number(xKm);
-      const yy = Number(yKm);
-      if (!sun) return { rx: xx * DEEP_SCALE, ry: yy * DEEP_SCALE };
-
-      const dx = xx - sunX;
-      const dy = yy - sunY;
-      const rKm = Math.hypot(dx, dy);
-      if (rKm <= 1e-9) return { rx: sunRx, ry: sunRy };
-
-      const unitX = dx / rKm;
-      const unitY = dy / rKm;
-      const rVisual = Math.max(0, rKm) * HELIO_LINEAR_WORLD_PER_KM;
-      return {
-        rx: sunRx + unitX * rVisual,
-        ry: sunRy + unitY * rVisual,
-      };
-    }
-
-    const mercuryProjected = mercury ? projectDeepPosition(mercury.x, mercury.y) : { rx: 0, ry: 0 };
-    const venusProjected = venus ? projectDeepPosition(venus.x, venus.y) : { rx: 0, ry: 0 };
-    const earthProjected = earth ? projectDeepPosition(earth.x, earth.y) : { rx: 0, ry: 0 };
-    const moonProjected = moon ? projectDeepPosition(moon.x, moon.y) : projectDeepPosition(384400, 0);
-    const marsProjected = mars ? projectDeepPosition(mars.x, mars.y) : { rx: 0, ry: 0 };
-    const ceresProjected = ceres ? projectDeepPosition(ceres.x, ceres.y) : { rx: 0, ry: 0 };
-    const vestaProjected = vesta ? projectDeepPosition(vesta.x, vesta.y) : { rx: 0, ry: 0 };
-    const pallasProjected = pallas ? projectDeepPosition(pallas.x, pallas.y) : { rx: 0, ry: 0 };
-    const hygieaProjected = hygiea ? projectDeepPosition(hygiea.x, hygiea.y) : { rx: 0, ry: 0 };
-    const mercuryRx = mercuryProjected.rx;
-    const mercuryRy = mercuryProjected.ry;
-    const venusRx = venusProjected.rx;
-    const venusRy = venusProjected.ry;
-    const earthRx = earthProjected.rx;
-    const earthRy = earthProjected.ry;
-    const moonRx = moonProjected.rx;
-    const moonRy = moonProjected.ry;
-    const marsRx = marsProjected.rx;
-    const marsRy = marsProjected.ry;
-    const ceresRx = ceresProjected.rx;
-    const ceresRy = ceresProjected.ry;
-    const vestaRx = vestaProjected.rx;
-    const vestaRy = vestaProjected.ry;
-    const pallasRx = pallasProjected.rx;
-    const pallasRy = pallasProjected.ry;
-    const hygieaRx = hygieaProjected.rx;
-    const hygieaRy = hygieaProjected.ry;
-
-    for (const l of locations) {
-      l.is_group = !!Number(l.is_group);
-
-      // default deep space mapping (heliocentric log-like)
-      const deep = projectDeepPosition(l.x, l.y);
-      let rx = deep.rx;
-      let ry = deep.ry;
-
-      // expand local orbit nodes relative to their body center
-      if (!l.is_group && hasAncestor(l.id, "grp_earth_orbits", parentById) && earth) {
-        rx = earthRx + (Number(l.x) - Number(earth.x)) * EARTH_ORBIT_SCALE;
-        ry = earthRy + (Number(l.y) - Number(earth.y)) * EARTH_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_moon_orbits", parentById) && moon) {
-        rx = moonRx + (Number(l.x) - Number(moon.x)) * MOON_ORBIT_SCALE;
-        ry = moonRy + (Number(l.y) - Number(moon.y)) * MOON_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_mercury_orbits", parentById) && mercury) {
-        rx = mercuryRx + (Number(l.x) - Number(mercury.x)) * MERCURY_ORBIT_SCALE;
-        ry = mercuryRy + (Number(l.y) - Number(mercury.y)) * MERCURY_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_venus_orbits", parentById) && venus) {
-        rx = venusRx + (Number(l.x) - Number(venus.x)) * VENUS_ORBIT_SCALE;
-        ry = venusRy + (Number(l.y) - Number(venus.y)) * VENUS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_mars_orbits", parentById) && mars) {
-        rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
-        ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_ceres_orbits", parentById) && ceres) {
-        rx = ceresRx + (Number(l.x) - Number(ceres.x)) * CERES_ORBIT_SCALE;
-        ry = ceresRy + (Number(l.y) - Number(ceres.y)) * CERES_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_vesta_orbits", parentById) && vesta) {
-        rx = vestaRx + (Number(l.x) - Number(vesta.x)) * VESTA_ORBIT_SCALE;
-        ry = vestaRy + (Number(l.y) - Number(vesta.y)) * VESTA_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_pallas_orbits", parentById) && pallas) {
-        rx = pallasRx + (Number(l.x) - Number(pallas.x)) * PALLAS_ORBIT_SCALE;
-        ry = pallasRy + (Number(l.y) - Number(pallas.y)) * PALLAS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_hygiea_orbits", parentById) && hygiea) {
-        rx = hygieaRx + (Number(l.x) - Number(hygiea.x)) * HYGIEA_ORBIT_SCALE;
-        ry = hygieaRy + (Number(l.y) - Number(hygiea.y)) * HYGIEA_ORBIT_SCALE;
-      } else if (l.id === "grp_mercury") {
-        rx = mercuryRx; ry = mercuryRy;
-      } else if (l.id === "grp_venus") {
-        rx = venusRx; ry = venusRy;
-      } else if (l.id === "grp_earth") {
-        rx = earthRx; ry = earthRy;
-      } else if (l.id === "grp_moon") {
-        rx = moonRx; ry = moonRy;
-      } else if (l.id === "grp_mars") {
-        rx = marsRx; ry = marsRy;
-      } else if (l.id === "grp_ceres") {
-        rx = ceresRx; ry = ceresRy;
-      } else if (l.id === "grp_vesta") {
-        rx = vestaRx; ry = vestaRy;
-      } else if (l.id === "grp_pallas") {
-        rx = pallasRx; ry = pallasRy;
-      } else if (l.id === "grp_hygiea") {
-        rx = hygieaRx; ry = hygieaRy;
-      }
-
-      l.rx = rx;
-      l.ry = ry;
-    }
+  async function syncLocationsOnce(options = {}) {
+    const shouldRefit = options.refit !== false;
+    const data = await (await fetch("/api/locations?dynamic=1", { cache: "no-store" })).json();
+    const projected = projectLocationsForMap(data.locations || []);
+    locations = projected.locations;
+    locationParentById = projected.parentById;
 
     locationsById = new Map(locations.map((l) => [l.id, l]));
     leaves = locations.filter((l) => !l.is_group);
@@ -5411,7 +5770,9 @@
 
     ensureLocationsGfx();
     updateLocationPositions();
-    fitToLocations();
+    if (shouldRefit) {
+      fitToLocations();
+    }
     applyZoomDetailVisibility();
     buildZoneJumpBar();
     buildMapOverview(true);
@@ -5429,6 +5790,7 @@
     timeScale = Number.isFinite(parsedScale) && parsedScale >= 0 ? parsedScale : 1;
 
     ships = data.ships || [];
+    ensureTransitAnchorsForShips(ships).catch((err) => console.error("Transit anchor prefetch failed:", err));
     upsertShips(ships);
     applyDockSlots(ships);
     buildMapOverview(true);
@@ -5448,9 +5810,12 @@
   }
 
   // ---------- Boot ----------
-  await syncLocationsOnce();
+  await syncLocationsOnce({ refit: true });
   await syncState();
   await syncMapOrgSummary();
+  setInterval(() => {
+    syncLocationsOnce({ refit: false }).catch((err) => console.error(err));
+  }, 5000);
   setInterval(() => {
     syncState().catch((err) => console.error(err));
   }, 1000);

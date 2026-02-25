@@ -130,3 +130,51 @@ class TestCelestialConfig:
         import celestial_config
         cfg = celestial_config.load_celestial_config()
         assert "bodies" in cfg or "locations" in cfg or len(cfg) > 0
+
+    def test_keplerian_positions_are_time_dependent(self):
+        import celestial_config
+
+        config = {
+            "bodies": [
+                {
+                    "id": "sun",
+                    "name": "Sun",
+                    "group_id": "grp_sun",
+                    "sort_order": 1,
+                    "position": {"type": "fixed", "x_km": 0.0, "y_km": 0.0},
+                },
+                {
+                    "id": "planet",
+                    "name": "Planet",
+                    "group_id": "grp_planet",
+                    "sort_order": 2,
+                    "position": {
+                        "type": "keplerian",
+                        "center_body_id": "sun",
+                        "a_km": 10000.0,
+                        "e": 0.0,
+                        "i_deg": 0.0,
+                        "Omega_deg": 0.0,
+                        "omega_deg": 0.0,
+                        "M0_deg": 0.0,
+                        "epoch_jd": 2451544.5,
+                        "period_s": 1000.0,
+                    },
+                },
+            ],
+            "groups": [],
+            "orbit_nodes": [],
+            "lagrange_systems": [],
+            "markers": [],
+            "surface_sites": [],
+            "transfer_edges": [],
+        }
+
+        rows_t0, _ = celestial_config.build_locations_and_edges(config, game_time_s=946684800.0)
+        rows_t1, _ = celestial_config.build_locations_and_edges(config, game_time_s=946685050.0)
+
+        pos_t0 = {row[0]: (row[5], row[6]) for row in rows_t0}
+        pos_t1 = {row[0]: (row[5], row[6]) for row in rows_t1}
+        assert "grp_planet" in pos_t0
+        assert "grp_planet" in pos_t1
+        assert pos_t0["grp_planet"] != pos_t1["grp_planet"]

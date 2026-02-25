@@ -955,7 +955,10 @@ def _hohmann_orbit_change_dv_tof(mu_km3_s2: float, r1_km: float, r2_km: float) -
 
 def ensure_solar_system_expansion(conn: sqlite3.Connection) -> None:
     try:
-        location_rows, edge_rows = celestial_config.load_locations_and_edges()
+        current_game_time = game_now_s()
+        location_rows, edge_rows = celestial_config.load_locations_and_edges(
+            game_time_s=current_game_time,
+        )
         upsert_locations(conn, location_rows)
         upsert_transfer_edges(conn, edge_rows)
 
@@ -2977,7 +2980,11 @@ def settle_arrivals(conn: sqlite3.Connection, now_s: float) -> None:
           to_location_id = NULL,
           departed_at = NULL,
           arrives_at = NULL,
-          transfer_path_json = '[]'
+          transfer_path_json = '[]',
+          transit_from_x = NULL,
+          transit_from_y = NULL,
+          transit_to_x = NULL,
+          transit_to_y = NULL
         WHERE arrives_at IS NOT NULL AND arrives_at <= ?
         """,
         (now_s,),

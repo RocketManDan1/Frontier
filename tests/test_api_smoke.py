@@ -102,6 +102,15 @@ class TestLocationEndpoints:
         r = client.get("/api/locations")
         assert r.status_code == 200
 
+    def test_locations_dynamic(self, client):
+        r = client.get("/api/locations?dynamic=1")
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data.get("locations"), list)
+        assert "game_time_s" in data
+        ids = {str(loc.get("id")) for loc in (data.get("locations") or []) if isinstance(loc, dict)}
+        assert "grp_moon" in ids
+
     def test_locations_tree(self, client):
         r = client.get("/api/locations/tree")
         assert r.status_code == 200
@@ -142,6 +151,16 @@ class TestAdminEndpoints:
     def test_toggle_pause(self, client):
         r = client.post("/api/admin/simulation/toggle_pause")
         assert r.status_code == 200
+
+    def test_admin_org_grant(self, client):
+        r = client.post(
+            "/api/admin/org/grant",
+            json={"username": "admin", "money_usd": 1000, "research_points": 5},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("ok") is True
+        assert "org" in data
 
 
 # ── Inventory endpoints ────────────────────────────────────────────────────

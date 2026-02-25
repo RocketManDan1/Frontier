@@ -29,12 +29,20 @@
             "type": "object",
             "required": ["type"],
             "properties": {
-              "type": { "enum": ["fixed", "polar_from_body"] },
+              "type": { "enum": ["fixed", "polar_from_body", "keplerian"] },
               "x_km": { "type": "number" },
               "y_km": { "type": "number" },
               "center_body_id": { "type": "string" },
               "radius_km": { "type": "number" },
-              "angle_deg": { "type": "number" }
+              "angle_deg": { "type": "number" },
+              "a_km": { "type": "number" },
+              "e": { "type": "number" },
+              "i_deg": { "type": "number" },
+              "Omega_deg": { "type": "number" },
+              "omega_deg": { "type": "number" },
+              "M0_deg": { "type": "number" },
+              "epoch_jd": { "type": "number" },
+              "period_s": { "type": "number" }
             }
           }
         }

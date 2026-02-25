@@ -589,6 +589,14 @@ def _migration_0011_rekey_inventory_stacks(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migration_0012_transit_coord_snapshot(conn: sqlite3.Connection) -> None:
+    """Add columns to snapshot departure/arrival coordinates for in-transit ships."""
+    _safe_add_column(conn, "ships", "transit_from_x", "REAL")
+    _safe_add_column(conn, "ships", "transit_from_y", "REAL")
+    _safe_add_column(conn, "ships", "transit_to_x", "REAL")
+    _safe_add_column(conn, "ships", "transit_to_y", "REAL")
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -602,6 +610,7 @@ def _migrations() -> List[Migration]:
     Migration("0009_industry_actor_identity", "Decouple industry actor identity from users table", _migration_0009_industry_actor_identity),
     Migration("0010_org_loans", "Add organization loans and repayment tracking", _migration_0010_org_loans),
     Migration("0011_rekey_inventory_stacks", "Re-key legacy inventory stacks to SHA1-based stack keys", _migration_0011_rekey_inventory_stacks),
+    Migration("0012_transit_coord_snapshot", "Add transit coordinate snapshot columns to ships", _migration_0012_transit_coord_snapshot),
     ]
 
 

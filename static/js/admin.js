@@ -13,6 +13,10 @@
   const deleteAccountBtn = document.getElementById("deleteAccountBtn");
   const accountsMsgEl = document.getElementById("accountsMsg");
   const accountsListEl = document.getElementById("accountsList");
+  const grantMoneyUsdEl = document.getElementById("grantMoneyUsd");
+  const grantResearchPointsEl = document.getElementById("grantResearchPoints");
+  const grantOrgBtn = document.getElementById("grantOrgBtn");
+  const grantMsgEl = document.getElementById("grantMsg");
 
   function setMessage(text, isError) {
     msgEl.textContent = isError ? `Error: ${text || "Unknown error"}` : (text || "");
@@ -34,6 +38,11 @@
 
   function selectedAccountUsername() {
     return String(accountUsernameEl?.value || "").trim().toLowerCase();
+  }
+
+  function setGrantMessage(text, isError) {
+    if (!grantMsgEl) return;
+    grantMsgEl.textContent = isError ? `Error: ${text || "Unknown error"}` : (text || "");
   }
 
   async function loadSimulationStatus() {
@@ -340,6 +349,56 @@
       setAccountsMessage(`Delete failed: ${err.message || err}`, true);
     } finally {
       deleteAccountBtn.disabled = false;
+    }
+  });
+
+  grantOrgBtn?.addEventListener("click", async () => {
+    const username = selectedAccountUsername();
+    const moneyUsd = Number(grantMoneyUsdEl?.value || 0);
+    const researchPoints = Number(grantResearchPointsEl?.value || 0);
+
+    if (!username) {
+      setGrantMessage("Select or enter an account username first.", true);
+      return;
+    }
+    if (!Number.isFinite(moneyUsd) || moneyUsd < 0 || !Number.isFinite(researchPoints) || researchPoints < 0) {
+      setGrantMessage("Give Money and Give Research Points must be non-negative numbers.", true);
+      return;
+    }
+    if (moneyUsd <= 0 && researchPoints <= 0) {
+      setGrantMessage("Provide a positive amount for money or research points.", true);
+      return;
+    }
+
+    grantOrgBtn.disabled = true;
+    setGrantMessage("Applying grant…", false);
+
+    try {
+      const resp = await fetch("/api/admin/org/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          money_usd: moneyUsd,
+          research_points: researchPoints,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setGrantMessage(data.detail || "Failed to apply grant.", true);
+        return;
+      }
+
+      const balance = Number(data?.org?.balance_usd || 0);
+      const rp = Number(data?.org?.research_points || 0);
+      setGrantMessage(
+        `Granted to ${username}. New balance: $${Math.round(balance).toLocaleString()} • RP: ${rp.toFixed(1)}`,
+        false
+      );
+    } catch (err) {
+      setGrantMessage(`Grant failed: ${err.message || err}`, true);
+    } finally {
+      grantOrgBtn.disabled = false;
     }
   });
 

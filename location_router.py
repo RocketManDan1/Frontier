@@ -14,7 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth_service import require_login
+import celestial_config
 from db import get_db
+from sim_service import game_now_s
 
 router = APIRouter(tags=["locations"])
 
@@ -61,11 +63,41 @@ def build_tree(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
 # ── Routes ─────────────────────────────────────────────────
 
 @router.get("/api/locations")
-def api_locations(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+def api_locations(
+    request: Request,
+    dynamic: bool = True,
+    t: Optional[float] = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
     require_login(conn, request)
-    rows = conn.execute(
-        "SELECT id,name,parent_id,is_group,sort_order,x,y FROM locations ORDER BY sort_order, name"
-    ).fetchall()
+
+    effective_game_time_s: Optional[float] = None
+    if dynamic:
+        effective_game_time_s = float(t) if t is not None else float(game_now_s())
+        try:
+            cfg = celestial_config.load_celestial_config()
+            location_rows, _ = celestial_config.build_locations_and_edges(cfg, game_time_s=effective_game_time_s)
+        except celestial_config.CelestialConfigError as exc:
+            raise HTTPException(status_code=500, detail=f"Dynamic location generation failed: {exc}")
+
+        rows = [
+            {
+                "id": row[0],
+                "name": row[1],
+                "parent_id": row[2],
+                "is_group": row[3],
+                "sort_order": row[4],
+                "x": row[5],
+                "y": row[6],
+            }
+            for row in location_rows
+        ]
+        rows.sort(key=lambda item: (int(item.get("sort_order", 100)), str(item.get("name") or "")))
+    else:
+        rows = conn.execute(
+            "SELECT id,name,parent_id,is_group,sort_order,x,y FROM locations ORDER BY sort_order, name"
+        ).fetchall()
+
     metadata_by_id = _main()._location_metadata_by_id()
     locations = []
     for row in rows:
@@ -74,7 +106,10 @@ def api_locations(request: Request, conn: sqlite3.Connection = Depends(get_db)) 
         if extra:
             item.update(extra)
         locations.append(item)
-    return {"locations": locations}
+    response: Dict[str, Any] = {"locations": locations}
+    if effective_game_time_s is not None:
+        response["game_time_s"] = effective_game_time_s
+    return response
 
 
 @router.get("/api/locations/tree")

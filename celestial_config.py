@@ -15,6 +15,9 @@ class CelestialConfigError(ValueError):
     pass
 
 
+UNIX_EPOCH_JD = 2440587.5
+
+
 def _as_float(value: Any, field: str) -> float:
     try:
         return float(value)
@@ -48,6 +51,75 @@ def _get_angle_deg(entry: Dict[str, Any], key: str = "angle_deg") -> float:
     return _as_float(entry.get(key, 0.0), key)
 
 
+def _unix_s_to_julian_day(unix_s: float) -> float:
+    return (float(unix_s) / 86400.0) + UNIX_EPOCH_JD
+
+
+def _solve_eccentric_anomaly(mean_anomaly_rad: float, eccentricity: float) -> float:
+    m = float(mean_anomaly_rad)
+    e = max(0.0, min(0.999999999, float(eccentricity)))
+
+    estimate = m if e < 0.8 else math.pi
+    for _ in range(25):
+        f = estimate - e * math.sin(estimate) - m
+        fp = 1.0 - e * math.cos(estimate)
+        if abs(fp) < 1e-12:
+            break
+        step = f / fp
+        estimate -= step
+        if abs(step) < 1e-12:
+            break
+    return estimate
+
+
+def _compute_keplerian_position(pos: Dict[str, Any], field_prefix: str, game_time_s: float) -> Tuple[float, float]:
+    a_km = _as_float(pos.get("a_km"), f"{field_prefix}.a_km")
+    if a_km <= 0.0:
+        raise CelestialConfigError(f"{field_prefix}.a_km must be > 0")
+
+    e = _as_float(pos.get("e", 0.0), f"{field_prefix}.e")
+    if e < 0.0 or e >= 1.0:
+        raise CelestialConfigError(f"{field_prefix}.e must be in [0, 1)")
+
+    i_rad = math.radians(_as_float(pos.get("i_deg", 0.0), f"{field_prefix}.i_deg"))
+    omega_big_rad = math.radians(_as_float(pos.get("Omega_deg", 0.0), f"{field_prefix}.Omega_deg"))
+    omega_small_rad = math.radians(_as_float(pos.get("omega_deg", 0.0), f"{field_prefix}.omega_deg"))
+    m0_rad = math.radians(_as_float(pos.get("M0_deg", 0.0), f"{field_prefix}.M0_deg"))
+    epoch_jd = _as_float(pos.get("epoch_jd"), f"{field_prefix}.epoch_jd")
+    period_s = _as_float(pos.get("period_s"), f"{field_prefix}.period_s")
+    if period_s <= 0.0:
+        raise CelestialConfigError(f"{field_prefix}.period_s must be > 0")
+
+    current_jd = _unix_s_to_julian_day(game_time_s)
+    dt_s = (current_jd - epoch_jd) * 86400.0
+    n_rad_s = (2.0 * math.pi) / period_s
+    m = m0_rad + n_rad_s * dt_s
+    m = math.fmod(m, 2.0 * math.pi)
+    if m < 0.0:
+        m += 2.0 * math.pi
+
+    eccentric_anomaly = _solve_eccentric_anomaly(m, e)
+    cos_e = math.cos(eccentric_anomaly)
+    sin_e = math.sin(eccentric_anomaly)
+    x_orb = a_km * (cos_e - e)
+    y_orb = a_km * math.sqrt(max(0.0, 1.0 - e * e)) * sin_e
+
+    cos_omega_big = math.cos(omega_big_rad)
+    sin_omega_big = math.sin(omega_big_rad)
+    cos_omega_small = math.cos(omega_small_rad)
+    sin_omega_small = math.sin(omega_small_rad)
+    cos_i = math.cos(i_rad)
+
+    r11 = cos_omega_big * cos_omega_small - sin_omega_big * sin_omega_small * cos_i
+    r12 = -cos_omega_big * sin_omega_small - sin_omega_big * cos_omega_small * cos_i
+    r21 = sin_omega_big * cos_omega_small + cos_omega_big * sin_omega_small * cos_i
+    r22 = -sin_omega_big * sin_omega_small + cos_omega_big * cos_omega_small * cos_i
+
+    x = r11 * x_orb + r12 * y_orb
+    y = r21 * x_orb + r22 * y_orb
+    return x, y
+
+
 def load_celestial_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
     if not path.exists():
         raise CelestialConfigError(f"Config not found: {path}")
@@ -60,7 +132,7 @@ def load_celestial_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
     return raw
 
 
-def _compute_body_positions(bodies: Sequence[Dict[str, Any]]) -> Dict[str, Tuple[float, float]]:
+def _compute_body_positions(bodies: Sequence[Dict[str, Any]], game_time_s: float = 0.0) -> Dict[str, Tuple[float, float]]:
     by_id: Dict[str, Dict[str, Any]] = {}
     for body in bodies:
         bid = _require_str(body, "id", "bodies[]")
@@ -103,6 +175,20 @@ def _compute_body_positions(bodies: Sequence[Dict[str, Any]]) -> Dict[str, Tuple
                 progressed = True
                 continue
 
+            if pos_type == "keplerian":
+                center_body_id = str(pos.get("center_body_id") or "").strip()
+                if center_body_id and center_body_id not in positions:
+                    continue
+                x_local, y_local = _compute_keplerian_position(pos, f"bodies[{bid}].position", game_time_s)
+                if center_body_id:
+                    cx, cy = positions[center_body_id]
+                    positions[bid] = (cx + x_local, cy + y_local)
+                else:
+                    positions[bid] = (x_local, y_local)
+                unresolved.remove(bid)
+                progressed = True
+                continue
+
             raise CelestialConfigError(f"Body {bid} has unsupported position.type: {pos_type}")
 
         if not progressed:
@@ -140,12 +226,13 @@ def _body_group_row(body: Dict[str, Any], body_pos: Dict[str, Tuple[float, float
     return (group_id, name, parent_group_id, 1, sort_order, float(x), float(y))
 
 
-def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow], List[EdgeRow]]:
+def build_locations_and_edges(config: Dict[str, Any], game_time_s: Optional[float] = None) -> Tuple[List[LocationRow], List[EdgeRow]]:
     bodies = config.get("bodies")
     if not isinstance(bodies, list) or not bodies:
         raise CelestialConfigError("bodies must be a non-empty array")
 
-    body_pos = _compute_body_positions(bodies)
+    resolved_game_time_s = float(game_time_s) if game_time_s is not None else 0.0
+    body_pos = _compute_body_positions(bodies, game_time_s=resolved_game_time_s)
 
     location_rows: List[LocationRow] = []
     location_ids: set[str] = set()
@@ -371,9 +458,9 @@ def build_locations_and_edges(config: Dict[str, Any]) -> Tuple[List[LocationRow]
     return location_rows, edge_rows
 
 
-def load_locations_and_edges(path: Path = CONFIG_PATH) -> Tuple[List[LocationRow], List[EdgeRow]]:
+def load_locations_and_edges(path: Path = CONFIG_PATH, game_time_s: Optional[float] = None) -> Tuple[List[LocationRow], List[EdgeRow]]:
     config = load_celestial_config(path)
-    return build_locations_and_edges(config)
+    return build_locations_and_edges(config, game_time_s=game_time_s)
 
 
 # ── Surface Site data types ────────────────────────────────

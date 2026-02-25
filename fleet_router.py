@@ -13,15 +13,18 @@ Extracted from main.py — handles:
 """
 
 import json
+import heapq
 import math
 import sqlite3
-from typing import Any, Dict, Optional
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from auth_service import require_login
 import catalog_service
+import celestial_config
 from db import get_db
 from sim_service import (
     effective_time_scale,
@@ -86,29 +89,31 @@ def api_time(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Di
 @router.get("/api/transfer_quote")
 def api_transfer_quote(from_id: str, to_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     require_login(conn, request)
-    row = conn.execute(
-        "SELECT dv_m_s,tof_s,path_json FROM transfer_matrix WHERE from_id=? AND to_id=?",
-        (from_id, to_id),
-    ).fetchone()
-    if not row:
+    quote = _compute_route_quote(
+        conn,
+        from_id=from_id,
+        to_id=to_id,
+        departure_time_s=game_now_s(),
+        extra_dv_fraction=0.0,
+    )
+    if not quote:
         raise HTTPException(status_code=404, detail="No transfer data for that pair")
 
     result: Dict[str, Any] = {
         "from_id": from_id,
         "to_id": to_id,
-        "dv_m_s": float(row["dv_m_s"]),
-        "tof_s": float(row["tof_s"]),
-        "path": json.loads(row["path_json"] or "[]"),
+        "dv_m_s": float(quote["dv_m_s"]),
+        "tof_s": float(quote["tof_s"]),
+        "path": list(quote["path"]),
+        "departure_time": float(quote["departure_time"]),
+        "is_interplanetary": bool(quote["is_interplanetary"]),
     }
 
     # Check if any locations on the path are surface sites
     path_ids = [from_id, to_id]
-    try:
-        hops = json.loads(row["path_json"] or "[]")
-        if isinstance(hops, list):
-            path_ids.extend(str(h) for h in hops if isinstance(h, str))
-    except (json.JSONDecodeError, TypeError):
-        pass
+    hops = quote["path"]
+    if isinstance(hops, list):
+        path_ids.extend(str(h) for h in hops if isinstance(h, str))
     path_ids_unique = list(dict.fromkeys(path_ids))
     if path_ids_unique:
         placeholders = ",".join("?" for _ in path_ids_unique)
@@ -139,6 +144,10 @@ _BODY_ORBITS: Dict[str, Dict[str, float]] = {
     "venus":   {"a_km": 108_209_475.0, "period_s": 19_414_166.4},  # 224.701 d
     "earth":   {"a_km": 149_597_870.7, "period_s": 31_558_149.8},  # 365.256 d
     "mars":    {"a_km": 227_943_824.0, "period_s": 59_355_072.0},  # 686.971 d
+    "ceres":   {"a_km": 413_767_000.0, "period_s": 145_166_000.0},
+    "vesta":   {"a_km": 353_340_000.0, "period_s": 114_500_000.0},
+    "pallas":  {"a_km": 414_500_000.0, "period_s": 145_700_000.0},
+    "hygiea":  {"a_km": 470_300_000.0, "period_s": 175_400_000.0},
 }
 
 # Reference epoch for mean anomaly: game epoch 0 = 2040-01-01T00:00 UTC
@@ -147,6 +156,10 @@ _EPOCH_MEAN_ANOMALY_DEG: Dict[str, float] = {
     "venus":   50.115,
     "earth":   357.529,
     "mars":    19.373,
+    "ceres":   95.989,
+    "vesta":   149.84,
+    "pallas":  33.2,
+    "hygiea":  98.0,
 }
 
 # Which parent body does a location orbit?
@@ -160,18 +173,541 @@ _LOCATION_PARENT_BODY: Dict[str, str] = {
     "VEN_ORB": "venus", "VEN_HEO": "venus", "VEN_GEO": "venus", "ZOOZVE": "venus",
     "LMO": "mars", "HMO": "mars", "MGO": "mars",
     "PHOBOS": "mars", "DEIMOS": "mars",
+    "CERES_LO": "ceres", "CERES_HO": "ceres",
+    "VESTA_LO": "vesta", "VESTA_HO": "vesta",
+    "PALLAS_LO": "pallas", "PALLAS_HO": "pallas",
+    "HYGIEA_LO": "hygiea", "HYGIEA_HO": "hygiea",
+    "CERES_OCCATOR": "ceres", "CERES_AHUNA": "ceres", "CERES_KERWAN": "ceres",
+    "VESTA_RHEASILVIA": "vesta", "VESTA_MARCIANOVA": "vesta", "VESTA_OPPIA": "vesta",
+    "PALLAS_DIPOLE": "pallas", "PALLAS_EQUATORIAL": "pallas", "PALLAS_PELION": "pallas",
+    "HYGIEA_CENTRAL": "hygiea", "HYGIEA_EASTERN": "hygiea", "HYGIEA_SOUTH": "hygiea",
     "SUN": "sun",
 }
 
+_SUN_MU_KM3_S2 = 1.32712440018e11
+_BODY_CONSTANTS: Dict[str, Dict[str, float]] = {
+    "mercury": {"mu_km3_s2": 22031.86855, "radius_km": 2439.7, "parking_alt_km": 200.0},
+    "venus": {"mu_km3_s2": 324858.592, "radius_km": 6051.8, "parking_alt_km": 250.0},
+    "earth": {"mu_km3_s2": 398600.4418, "radius_km": 6378.137, "parking_alt_km": 400.0},
+    "mars": {"mu_km3_s2": 42828.375214, "radius_km": 3389.5, "parking_alt_km": 250.0},
+    "ceres": {"mu_km3_s2": 62.63, "radius_km": 473.0, "parking_alt_km": 100.0},
+    "vesta": {"mu_km3_s2": 17.29, "radius_km": 262.7, "parking_alt_km": 80.0},
+    "pallas": {"mu_km3_s2": 13.61, "radius_km": 256.0, "parking_alt_km": 80.0},
+    "hygiea": {"mu_km3_s2": 5.56, "radius_km": 217.0, "parking_alt_km": 70.0},
+}
 
-def _body_angle_at_time(body_id: str, game_time_s: float) -> Optional[float]:
-    """Return heliocentric longitude (radians) for a body at game_time_s."""
-    orb = _BODY_ORBITS.get(body_id)
-    if not orb:
+_ROUTE_CACHE_BUCKET_S = 6.0 * 3600.0
+_ROUTE_CACHE_MAX = 512
+_ROUTE_QUOTE_CACHE: Dict[Tuple[str, str, str, int, int], Dict[str, Any]] = {}
+_TRANSFER_GRAPH_CACHE: Dict[str, Dict[str, List[Tuple[str, float, float]]]] = {}
+
+
+# Cache position lookups bucketed to 5-minute intervals to keep
+# the LRU effective at 48× game speed while staying accurate enough
+# for phase-angle and Hohmann calculations.
+_DYN_LOC_BUCKET_S = 300  # 5 minutes
+
+
+@lru_cache(maxsize=64)
+def _dynamic_locations_by_id(game_time_bucket: int) -> Dict[str, Tuple[float, float]]:
+    cfg = celestial_config.load_celestial_config()
+    rows, _ = celestial_config.build_locations_and_edges(
+        cfg, game_time_s=float(game_time_bucket) * _DYN_LOC_BUCKET_S,
+    )
+    return {str(row[0]): (float(row[5]), float(row[6])) for row in rows}
+
+
+def _body_heliocentric_state(body_id: str, game_time_s: float) -> Optional[Dict[str, float]]:
+    if str(body_id or "").strip().lower() == "sun":
+        return {"r_km": 0.0, "theta_rad": 0.0}
+
+    bucket = int(float(game_time_s) // _DYN_LOC_BUCKET_S)
+    locs = _dynamic_locations_by_id(bucket)
+    sun = locs.get("grp_sun")
+    body = locs.get(f"grp_{body_id}")
+    if not sun or not body:
         return None
-    m0 = math.radians(_EPOCH_MEAN_ANOMALY_DEG.get(body_id, 0.0))
-    mean_motion = 2.0 * math.pi / orb["period_s"]
-    return m0 + mean_motion * game_time_s
+
+    dx = body[0] - sun[0]
+    dy = body[1] - sun[1]
+    radius_km = max(1e-9, math.hypot(dx, dy))
+    theta_rad = math.atan2(dy, dx) % (2.0 * math.pi)
+    return {"r_km": radius_km, "theta_rad": theta_rad}
+
+
+def _body_phase_solution(from_body: str, to_body: str, game_time_s: float) -> Optional[Dict[str, float]]:
+    from_state = _body_heliocentric_state(from_body, game_time_s)
+    to_state = _body_heliocentric_state(to_body, game_time_s)
+    if not from_state or not to_state:
+        return None
+
+    phase = (to_state["theta_rad"] - from_state["theta_rad"]) % (2.0 * math.pi)
+    r1 = max(1e-9, from_state["r_km"])
+    r2 = max(1e-9, to_state["r_km"])
+    optimal_phase = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((r1 + r2) / r2) ** (2.0 / 3.0))
+    if r2 < r1:
+        optimal_phase = 2.0 * math.pi - abs(optimal_phase)
+    optimal_phase %= (2.0 * math.pi)
+
+    delta = phase - optimal_phase
+    alignment = (1.0 - math.cos(delta)) / 2.0
+    phase_multiplier = 1.0 + 0.4 * alignment
+
+    return {
+        "r1_km": r1,
+        "r2_km": r2,
+        "phase_angle_deg": float(math.degrees(phase)),
+        "optimal_phase_deg": float(math.degrees(optimal_phase)),
+        "alignment_pct": float(alignment * 100.0),
+        "phase_multiplier": float(phase_multiplier),
+    }
+
+
+def _scan_departure_windows(
+    from_body: str,
+    to_body: str,
+    departure_time_s: float,
+    current_phase_multiplier: float,
+    synodic_period_s: Optional[float],
+) -> List[Dict[str, float]]:
+    if synodic_period_s is None or synodic_period_s <= 0:
+        return []
+
+    horizon_s = max(86400.0, min(float(synodic_period_s), 240.0 * 86400.0))
+    step_s = 86400.0
+    candidates: List[Dict[str, float]] = []
+    samples = int(horizon_s / step_s)
+
+    for idx in range(1, samples + 1):
+        t = float(departure_time_s) + idx * step_s
+        solution = _body_phase_solution(from_body, to_body, t)
+        if not solution:
+            continue
+        multiplier = float(solution["phase_multiplier"])
+        savings_pct = 0.0
+        if current_phase_multiplier > 1e-9:
+            savings_pct = max(0.0, (1.0 - multiplier / current_phase_multiplier) * 100.0)
+        candidates.append(
+            {
+                "departure_time": t,
+                "wait_s": float(t - departure_time_s),
+                "phase_multiplier": multiplier,
+                "phase_angle_deg": float(solution["phase_angle_deg"]),
+                "optimal_phase_deg": float(solution["optimal_phase_deg"]),
+                "alignment_pct": float(solution["alignment_pct"]),
+                "dv_savings_pct": float(savings_pct),
+            }
+        )
+
+    candidates.sort(key=lambda item: (item["phase_multiplier"], item["wait_s"]))
+    return candidates[:3]
+
+
+def _estimate_next_window_s(
+    from_body: str,
+    to_body: str,
+    departure_time_s: float,
+    current_phase_multiplier: float,
+    synodic_period_s: Optional[float],
+) -> Optional[float]:
+    windows = _scan_departure_windows(
+        from_body=from_body,
+        to_body=to_body,
+        departure_time_s=departure_time_s,
+        current_phase_multiplier=current_phase_multiplier,
+        synodic_period_s=synodic_period_s,
+    )
+    if not windows:
+        return None
+    best_wait = float(windows[0]["wait_s"])
+    if float(windows[0]["phase_multiplier"]) >= current_phase_multiplier - 1e-6:
+        return None
+    return best_wait
+
+
+def _clone_json_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+    return json.loads(json.dumps(data))
+
+
+def _evict_route_cache_if_needed() -> None:
+    while len(_ROUTE_QUOTE_CACHE) > _ROUTE_CACHE_MAX:
+        oldest_key = next(iter(_ROUTE_QUOTE_CACHE.keys()))
+        _ROUTE_QUOTE_CACHE.pop(oldest_key, None)
+
+
+def _edge_hash(conn: sqlite3.Connection) -> str:
+    row = conn.execute("SELECT value FROM transfer_meta WHERE key='edges_hash'").fetchone()
+    if row and str(row["value"] or "").strip():
+        return str(row["value"])
+    return str(_main().hash_edges(conn))
+
+
+def _get_transfer_graph(conn: sqlite3.Connection, edge_hash: str) -> Dict[str, List[Tuple[str, float, float]]]:
+    cached = _TRANSFER_GRAPH_CACHE.get(edge_hash)
+    if cached is not None:
+        return cached
+
+    rows = conn.execute("SELECT from_id,to_id,dv_m_s,tof_s FROM transfer_edges").fetchall()
+    graph: Dict[str, List[Tuple[str, float, float]]] = {}
+    for row in rows:
+        src = str(row["from_id"])
+        dst = str(row["to_id"])
+        graph.setdefault(src, []).append((dst, float(row["dv_m_s"]), float(row["tof_s"])))
+        graph.setdefault(dst, graph.get(dst, []))
+
+    _TRANSFER_GRAPH_CACHE.clear()
+    _TRANSFER_GRAPH_CACHE[edge_hash] = graph
+    return graph
+
+
+def _compute_leg_at_departure(
+    leg_from: str,
+    leg_to: str,
+    base_dv: float,
+    base_tof: float,
+    departure_time_s: float,
+    extra_dv_fraction: float,
+) -> Dict[str, Any]:
+    leg_base_dv = float(base_dv)
+    leg_base_tof = float(base_tof)
+    leg_phase_multiplier = 1.0
+    leg_phase_adjusted_dv = leg_base_dv
+    leg_final_dv = leg_base_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
+    leg_final_tof = _excess_dv_time_reduction(leg_base_tof, leg_base_dv, max(0.0, float(extra_dv_fraction)))
+    orbital: Optional[Dict[str, float]] = None
+
+    if _is_interplanetary(leg_from, leg_to):
+        orbital = _compute_interplanetary_leg_quote(leg_from, leg_to, departure_time_s, extra_dv_fraction)
+        if orbital:
+            leg_base_dv = float(orbital["base_dv_m_s"])
+            leg_base_tof = float(orbital["base_tof_s"])
+            leg_phase_multiplier = float(orbital["phase_multiplier"])
+            leg_phase_adjusted_dv = float(orbital["phase_adjusted_dv_m_s"])
+            leg_final_dv = float(orbital["dv_m_s"])
+            leg_final_tof = float(orbital["tof_s"])
+
+    return {
+        "from_id": leg_from,
+        "to_id": leg_to,
+        "is_interplanetary": bool(orbital),
+        "base_dv_m_s": leg_base_dv,
+        "base_tof_s": leg_base_tof,
+        "phase_multiplier": leg_phase_multiplier,
+        "phase_adjusted_dv_m_s": leg_phase_adjusted_dv,
+        "dv_m_s": leg_final_dv,
+        "tof_s": leg_final_tof,
+        "departure_time": float(departure_time_s),
+        "orbital": orbital,
+    }
+
+
+def _solve_dynamic_route(
+    conn: sqlite3.Connection,
+    from_id: str,
+    to_id: str,
+    departure_time_s: float,
+    extra_dv_fraction: float,
+) -> Optional[Dict[str, Any]]:
+    if from_id == to_id:
+        return {
+            "from_id": from_id,
+            "to_id": to_id,
+            "path": [from_id],
+            "base_dv_m_s": 0.0,
+            "base_tof_s": 0.0,
+            "phase_adjusted_dv_m_s": 0.0,
+            "phase_multiplier": 1.0,
+            "dv_m_s": 0.0,
+            "tof_s": 0.0,
+            "extra_dv_fraction": float(extra_dv_fraction),
+            "departure_time": float(departure_time_s),
+            "is_interplanetary": False,
+            "legs": [],
+            "route_mode": "dynamic-dijkstra",
+        }
+
+    edge_hash = _edge_hash(conn)
+    graph = _get_transfer_graph(conn, edge_hash)
+    if from_id not in graph or to_id not in graph:
+        return None
+
+    best_cost: Dict[str, Tuple[float, float]] = {from_id: (0.0, 0.0)}
+    prev: Dict[str, Tuple[str, Dict[str, Any]]] = {}
+    pq: List[Tuple[float, float, str]] = [(0.0, 0.0, from_id)]
+
+    while pq:
+        current_dv, elapsed_s, node = heapq.heappop(pq)
+        known = best_cost.get(node)
+        if known is None:
+            continue
+        if current_dv > known[0] + 1e-9:
+            continue
+        if node == to_id:
+            break
+
+        for nxt, edge_dv, edge_tof in graph.get(node, []):
+            leg_departure = float(departure_time_s) + float(elapsed_s)
+            leg = _compute_leg_at_departure(node, nxt, edge_dv, edge_tof, leg_departure, extra_dv_fraction)
+
+            ndv = float(current_dv + float(leg["dv_m_s"]))
+            nelapsed = float(elapsed_s + float(leg["tof_s"]))
+            existing = best_cost.get(nxt)
+            better = (
+                existing is None
+                or ndv < existing[0] - 1e-9
+                or (abs(ndv - existing[0]) <= 1e-9 and nelapsed < existing[1] - 1e-6)
+            )
+            if not better:
+                continue
+
+            best_cost[nxt] = (ndv, nelapsed)
+            prev[nxt] = (node, leg)
+            heapq.heappush(pq, (ndv, nelapsed, nxt))
+
+    if to_id not in best_cost:
+        return None
+
+    reversed_legs: List[Dict[str, Any]] = []
+    path_nodes = [to_id]
+    cursor = to_id
+    while cursor != from_id:
+        step = prev.get(cursor)
+        if not step:
+            return None
+        parent, leg = step
+        reversed_legs.append(leg)
+        path_nodes.append(parent)
+        cursor = parent
+
+    legs = list(reversed(reversed_legs))
+    path = list(reversed(path_nodes))
+
+    base_total_dv = sum(float(leg["base_dv_m_s"]) for leg in legs)
+    base_total_tof = sum(float(leg["base_tof_s"]) for leg in legs)
+    phase_adjusted_total_dv = sum(float(leg["phase_adjusted_dv_m_s"]) for leg in legs)
+    total_dv = sum(float(leg["dv_m_s"]) for leg in legs)
+    total_tof = sum(float(leg["tof_s"]) for leg in legs)
+    phase_multiplier = (phase_adjusted_total_dv / base_total_dv) if base_total_dv > 0 else 1.0
+
+    return {
+        "from_id": from_id,
+        "to_id": to_id,
+        "path": path,
+        "base_dv_m_s": base_total_dv,
+        "base_tof_s": base_total_tof,
+        "phase_adjusted_dv_m_s": phase_adjusted_total_dv,
+        "phase_multiplier": phase_multiplier,
+        "dv_m_s": total_dv,
+        "tof_s": total_tof,
+        "extra_dv_fraction": float(extra_dv_fraction),
+        "departure_time": float(departure_time_s),
+        "is_interplanetary": any(bool(leg.get("is_interplanetary")) for leg in legs),
+        "legs": legs,
+        "route_mode": "dynamic-dijkstra",
+    }
+
+
+def _compute_route_quote_from_path(
+    conn: sqlite3.Connection,
+    path: List[str],
+    departure_time_s: float,
+    extra_dv_fraction: float,
+) -> Optional[Dict[str, Any]]:
+    if not path:
+        return None
+    if len(path) == 1:
+        node = str(path[0])
+        return {
+            "from_id": node,
+            "to_id": node,
+            "path": [node],
+            "base_dv_m_s": 0.0,
+            "base_tof_s": 0.0,
+            "phase_adjusted_dv_m_s": 0.0,
+            "phase_multiplier": 1.0,
+            "dv_m_s": 0.0,
+            "tof_s": 0.0,
+            "extra_dv_fraction": float(extra_dv_fraction),
+            "departure_time": float(departure_time_s),
+            "is_interplanetary": False,
+            "legs": [],
+            "route_mode": "fixed-path",
+        }
+
+    base_total_dv = 0.0
+    base_total_tof = 0.0
+    phase_adjusted_total_dv = 0.0
+    total_dv = 0.0
+    total_tof = 0.0
+    legs: List[Dict[str, Any]] = []
+
+    leg_departure = float(departure_time_s)
+    for idx in range(len(path) - 1):
+        leg_from = str(path[idx])
+        leg_to = str(path[idx + 1])
+        edge = conn.execute(
+            "SELECT dv_m_s,tof_s FROM transfer_edges WHERE from_id=? AND to_id=?",
+            (leg_from, leg_to),
+        ).fetchone()
+        if not edge:
+            return None
+
+        leg = _compute_leg_at_departure(
+            leg_from,
+            leg_to,
+            float(edge["dv_m_s"]),
+            float(edge["tof_s"]),
+            leg_departure,
+            extra_dv_fraction,
+        )
+        legs.append(leg)
+
+        base_total_dv += float(leg["base_dv_m_s"])
+        base_total_tof += float(leg["base_tof_s"])
+        phase_adjusted_total_dv += float(leg["phase_adjusted_dv_m_s"])
+        total_dv += float(leg["dv_m_s"])
+        total_tof += float(leg["tof_s"])
+        leg_departure += float(leg["tof_s"])
+
+    phase_multiplier = (phase_adjusted_total_dv / base_total_dv) if base_total_dv > 0 else 1.0
+    return {
+        "from_id": str(path[0]),
+        "to_id": str(path[-1]),
+        "path": [str(n) for n in path],
+        "base_dv_m_s": base_total_dv,
+        "base_tof_s": base_total_tof,
+        "phase_adjusted_dv_m_s": phase_adjusted_total_dv,
+        "phase_multiplier": phase_multiplier,
+        "dv_m_s": total_dv,
+        "tof_s": total_tof,
+        "extra_dv_fraction": float(extra_dv_fraction),
+        "departure_time": float(departure_time_s),
+        "is_interplanetary": any(bool(leg.get("is_interplanetary")) for leg in legs),
+        "legs": legs,
+        "route_mode": "fixed-path",
+    }
+
+
+def _route_legs_timeline(legs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    timeline: List[Dict[str, Any]] = []
+    for leg in (legs or []):
+        dep = float(leg.get("departure_time") or 0.0)
+        tof = max(0.0, float(leg.get("tof_s") or 0.0))
+        timeline.append(
+            {
+                "from_id": str(leg.get("from_id") or ""),
+                "to_id": str(leg.get("to_id") or ""),
+                "departure_time": dep,
+                "arrival_time": dep + tof,
+                "tof_s": tof,
+                "dv_m_s": float(leg.get("dv_m_s") or 0.0),
+                "is_interplanetary": bool(leg.get("is_interplanetary")),
+            }
+        )
+    return timeline
+
+
+def _load_matrix_path(path_json: str, from_id: str, to_id: str) -> List[str]:
+    try:
+        raw = json.loads(path_json or "[]")
+    except (json.JSONDecodeError, TypeError):
+        raw = []
+
+    path = [str(node) for node in raw if isinstance(node, str)] if isinstance(raw, list) else []
+    if not path:
+        return [from_id, to_id]
+    if path[0] != from_id:
+        path = [from_id] + path
+    if path[-1] != to_id:
+        path = path + [to_id]
+    return path
+
+
+def _compute_interplanetary_leg_quote(
+    from_id: str,
+    to_id: str,
+    departure_time_s: float,
+    extra_dv_fraction: float,
+) -> Optional[Dict[str, float]]:
+    from_body = _LOCATION_PARENT_BODY.get(from_id, "")
+    to_body = _LOCATION_PARENT_BODY.get(to_id, "")
+    if not from_body or not to_body or from_body == to_body:
+        return None
+    if from_body == "sun" or to_body == "sun":
+        return None
+
+    origin = _BODY_CONSTANTS.get(from_body)
+    destination = _BODY_CONSTANTS.get(to_body)
+    if not origin or not destination:
+        return None
+
+    phase_solution = _body_phase_solution(from_body, to_body, departure_time_s)
+    if not phase_solution:
+        return None
+    from_state = _body_heliocentric_state(from_body, departure_time_s)
+    to_state = _body_heliocentric_state(to_body, departure_time_s)
+    if not from_state or not to_state:
+        return None
+
+    base_dv_m_s, base_tof_s = _main()._hohmann_interplanetary_dv_tof(
+        from_state["r_km"],
+        to_state["r_km"],
+        _SUN_MU_KM3_S2,
+        origin["mu_km3_s2"],
+        origin["radius_km"] + origin["parking_alt_km"],
+        destination["mu_km3_s2"],
+        destination["radius_km"] + destination["parking_alt_km"],
+    )
+
+    phase_multiplier = float(phase_solution["phase_multiplier"])
+
+    phase_adjusted_dv = base_dv_m_s * phase_multiplier
+    dv_m_s = phase_adjusted_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
+    tof_s = _excess_dv_time_reduction(base_tof_s, phase_adjusted_dv, max(0.0, float(extra_dv_fraction)))
+
+    return {
+        "base_dv_m_s": float(base_dv_m_s),
+        "base_tof_s": float(base_tof_s),
+        "phase_multiplier": float(phase_multiplier),
+        "phase_adjusted_dv_m_s": float(phase_adjusted_dv),
+        "dv_m_s": float(dv_m_s),
+        "tof_s": float(tof_s),
+        "phase_angle_deg": float(phase_solution["phase_angle_deg"]),
+        "optimal_phase_deg": float(phase_solution["optimal_phase_deg"]),
+        "alignment_pct": float(phase_solution["alignment_pct"]),
+        "from_body": from_body,
+        "to_body": to_body,
+    }
+
+
+def _compute_route_quote(
+    conn: sqlite3.Connection,
+    from_id: str,
+    to_id: str,
+    departure_time_s: float,
+    extra_dv_fraction: float,
+) -> Optional[Dict[str, Any]]:
+    dep_bucket = int(float(departure_time_s) // _ROUTE_CACHE_BUCKET_S)
+    extra_bucket = int(round(float(extra_dv_fraction) * 10000.0))
+    edge_hash = _edge_hash(conn)
+    cache_key = (edge_hash, str(from_id), str(to_id), dep_bucket, extra_bucket)
+    cached = _ROUTE_QUOTE_CACHE.get(cache_key)
+    if cached is not None:
+        return _clone_json_dict(cached)
+
+    solved = _solve_dynamic_route(
+        conn,
+        from_id=from_id,
+        to_id=to_id,
+        departure_time_s=departure_time_s,
+        extra_dv_fraction=extra_dv_fraction,
+    )
+    if solved is None:
+        return None
+
+    _ROUTE_QUOTE_CACHE[cache_key] = _clone_json_dict(solved)
+    _evict_route_cache_if_needed()
+    return solved
 
 
 def _is_interplanetary(from_id: str, to_id: str) -> bool:
@@ -181,37 +717,6 @@ def _is_interplanetary(from_id: str, to_id: str) -> bool:
     if not a or not b or a == "sun" or b == "sun":
         return False
     return a != b
-
-
-def _phase_angle_multiplier(from_body: str, to_body: str, game_time_s: float) -> float:
-    """
-    Compute a delta-v multiplier based on the synodic phase angle.
-    Returns 1.0 at optimal Hohmann alignment, up to ~1.4 at worst alignment.
-    Uses a cosine model: multiplier = 1 + penalty * (1 - cos(phase - optimal)) / 2
-    """
-    theta_from = _body_angle_at_time(from_body, game_time_s)
-    theta_to = _body_angle_at_time(to_body, game_time_s)
-    if theta_from is None or theta_to is None:
-        return 1.0
-
-    # Current phase angle
-    phase = (theta_to - theta_from) % (2.0 * math.pi)
-
-    # Optimal Hohmann phase angle
-    a_from = _BODY_ORBITS[from_body]["a_km"]
-    a_to = _BODY_ORBITS[to_body]["a_km"]
-    a_transfer = 0.5 * (a_from + a_to)
-    optimal_phase = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((a_from + a_to) / a_to) ** (2.0 / 3.0))
-    if a_to < a_from:
-        optimal_phase = 2.0 * math.pi - abs(optimal_phase)
-    optimal_phase = optimal_phase % (2.0 * math.pi)
-
-    # Delta from optimal
-    delta = phase - optimal_phase
-    alignment = (1.0 - math.cos(delta)) / 2.0  # 0 = optimal, 1 = worst
-
-    # Penalty: up to 40% more delta-v at worst alignment
-    return 1.0 + 0.4 * alignment
 
 
 def _excess_dv_time_reduction(base_tof_s: float, base_dv_m_s: float, extra_dv_fraction: float) -> float:
@@ -250,77 +755,60 @@ def api_transfer_quote_advanced(
     """
     require_login(conn, request)
 
-    row = conn.execute(
-        "SELECT dv_m_s,tof_s,path_json FROM transfer_matrix WHERE from_id=? AND to_id=?",
-        (from_id, to_id),
-    ).fetchone()
-    if not row:
+    dep_time = departure_time if departure_time is not None else game_now_s()
+    quote = _compute_route_quote(
+        conn,
+        from_id=from_id,
+        to_id=to_id,
+        departure_time_s=dep_time,
+        extra_dv_fraction=extra_dv_fraction,
+    )
+    if not quote:
         raise HTTPException(status_code=404, detail="No transfer data for that pair")
 
-    base_dv = float(row["dv_m_s"])
-    base_tof = float(row["tof_s"])
-    path = json.loads(row["path_json"] or "[]")
+    base_dv = float(quote["base_dv_m_s"])
+    base_tof = float(quote["base_tof_s"])
+    adjusted_dv = float(quote["phase_adjusted_dv_m_s"])
+    total_dv = float(quote["dv_m_s"])
+    adjusted_tof = float(quote["tof_s"])
+    path = list(quote["path"])
+    phase_multiplier = float(quote["phase_multiplier"])
+    is_interplanetary = bool(quote["is_interplanetary"])
 
-    dep_time = departure_time if departure_time is not None else game_now_s()
-
-    # Phase angle adjustment for interplanetary legs
-    from_body = _LOCATION_PARENT_BODY.get(from_id, "")
-    to_body = _LOCATION_PARENT_BODY.get(to_id, "")
-    is_interplanetary = _is_interplanetary(from_id, to_id)
-
-    phase_multiplier = 1.0
-    phase_angle_deg = None
-    optimal_phase_deg = None
-    alignment_pct = None
+    interplanetary_legs = [leg for leg in quote["legs"] if bool(leg.get("is_interplanetary"))]
+    orbital_seed = (interplanetary_legs[0].get("orbital") if interplanetary_legs else None) or {}
+    from_body = str(orbital_seed.get("from_body") or "")
+    to_body = str(orbital_seed.get("to_body") or "")
+    phase_angle_deg = orbital_seed.get("phase_angle_deg")
+    optimal_phase_deg = orbital_seed.get("optimal_phase_deg")
+    alignment_pct = orbital_seed.get("alignment_pct")
     synodic_period_s = None
     next_window_s = None
 
-    if is_interplanetary and from_body in _BODY_ORBITS and to_body in _BODY_ORBITS:
-        phase_multiplier = _phase_angle_multiplier(from_body, to_body, dep_time)
-
-        # Compute current phase angle for display
-        theta_from = _body_angle_at_time(from_body, dep_time)
-        theta_to = _body_angle_at_time(to_body, dep_time)
-        if theta_from is not None and theta_to is not None:
-            phase_rad = (theta_to - theta_from) % (2.0 * math.pi)
-            phase_angle_deg = round(math.degrees(phase_rad), 1)
-
-            # Optimal phase
-            a_from = _BODY_ORBITS[from_body]["a_km"]
-            a_to = _BODY_ORBITS[to_body]["a_km"]
-            opt = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((a_from + a_to) / a_to) ** (2.0 / 3.0))
-            if a_to < a_from:
-                opt = 2.0 * math.pi - abs(opt)
-            opt = opt % (2.0 * math.pi)
-            optimal_phase_deg = round(math.degrees(opt), 1)
-
-            delta = phase_rad - opt
-            alignment_pct = round((1.0 - math.cos(delta)) / 2.0 * 100, 1)
-
-            # Synodic period
-            p1 = _BODY_ORBITS[from_body]["period_s"]
-            p2 = _BODY_ORBITS[to_body]["period_s"]
+    if from_body in _BODY_ORBITS and to_body in _BODY_ORBITS:
+        p1 = _BODY_ORBITS[from_body]["period_s"]
+        p2 = _BODY_ORBITS[to_body]["period_s"]
+        if abs((1.0 / p1) - (1.0 / p2)) > 1e-12:
             synodic_period_s = round(abs(1.0 / (1.0 / p1 - 1.0 / p2)), 0)
+            next_wait = _estimate_next_window_s(
+                from_body=from_body,
+                to_body=to_body,
+                departure_time_s=dep_time,
+                current_phase_multiplier=phase_multiplier,
+                synodic_period_s=synodic_period_s,
+            )
+            if next_wait is not None:
+                next_window_s = round(float(next_wait), 0)
 
-            # Find next optimal window (search forward in 1-day steps)
-            best_time = dep_time
-            best_mult = phase_multiplier
-            step = 86400.0  # 1 day
-            for i in range(1, int(synodic_period_s / step) + 2):
-                t = dep_time + i * step
-                m = _phase_angle_multiplier(from_body, to_body, t)
-                if m < best_mult:
-                    best_mult = m
-                    best_time = t
-            if best_time > dep_time:
-                next_window_s = round(best_time - dep_time, 0)
-
-    # Apply phase multiplier
-    adjusted_dv = base_dv * phase_multiplier
-
-    # Apply extra delta-v for faster transit
-    total_dv = adjusted_dv * (1.0 + extra_dv_fraction)
-    adjusted_tof = _excess_dv_time_reduction(base_tof, adjusted_dv, extra_dv_fraction)
+    window_suggestions: List[Dict[str, float]] = []
+    if from_body and to_body and synodic_period_s:
+        window_suggestions = _scan_departure_windows(
+            from_body=from_body,
+            to_body=to_body,
+            departure_time_s=dep_time,
+            current_phase_multiplier=phase_multiplier,
+            synodic_period_s=float(synodic_period_s),
+        )
 
     result: Dict[str, Any] = {
         "from_id": from_id,
@@ -345,21 +833,30 @@ def api_transfer_quote_advanced(
         result["orbital"] = {
             "from_body": from_body,
             "to_body": to_body,
-            "phase_angle_deg": phase_angle_deg,
-            "optimal_phase_deg": optimal_phase_deg,
-            "alignment_pct": alignment_pct,
+            "phase_angle_deg": round(float(phase_angle_deg), 1) if phase_angle_deg is not None else None,
+            "optimal_phase_deg": round(float(optimal_phase_deg), 1) if optimal_phase_deg is not None else None,
+            "alignment_pct": round(float(alignment_pct), 1) if alignment_pct is not None else None,
             "synodic_period_s": synodic_period_s,
             "next_window_s": next_window_s,
+            "window_suggestions": [
+                {
+                    "departure_time": round(float(entry["departure_time"]), 0),
+                    "wait_s": round(float(entry["wait_s"]), 0),
+                    "phase_multiplier": round(float(entry["phase_multiplier"]), 4),
+                    "phase_angle_deg": round(float(entry["phase_angle_deg"]), 1),
+                    "optimal_phase_deg": round(float(entry["optimal_phase_deg"]), 1),
+                    "alignment_pct": round(float(entry["alignment_pct"]), 1),
+                    "dv_savings_pct": round(float(entry["dv_savings_pct"]), 2),
+                }
+                for entry in window_suggestions
+            ],
         }
 
     # Surface sites
     path_ids = [from_id, to_id]
-    try:
-        hops = json.loads(row["path_json"] or "[]")
-        if isinstance(hops, list):
-            path_ids.extend(str(h) for h in hops if isinstance(h, str))
-    except (json.JSONDecodeError, TypeError):
-        pass
+    hops = path
+    if isinstance(hops, list):
+        path_ids.extend(str(h) for h in hops if isinstance(h, str))
     path_ids_unique = list(dict.fromkeys(path_ids))
     if path_ids_unique:
         placeholders = ",".join("?" for _ in path_ids_unique)
@@ -398,7 +895,8 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                location_id,from_location_id,to_location_id,departed_at,arrives_at,
                  transfer_path_json,dv_planned_m_s,dock_slot,
                  parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
-                 corp_id
+                 corp_id,
+                 transit_from_x,transit_from_y,transit_to_x,transit_to_y
         FROM ships
         ORDER BY id
         """
@@ -439,6 +937,33 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "corp_id": ship_corp_id,
             "is_own": is_own,
         }
+
+        # Attach snapshot coordinates for in-transit ships
+        if r["arrives_at"] and r["transit_from_x"] is not None:
+            ship_data["transit_from_x"] = r["transit_from_x"]
+            ship_data["transit_from_y"] = r["transit_from_y"]
+            ship_data["transit_to_x"] = r["transit_to_x"]
+            ship_data["transit_to_y"] = r["transit_to_y"]
+
+        if r["arrives_at"] and r["from_location_id"] and r["to_location_id"] and r["departed_at"]:
+            raw_path = json.loads(r["transfer_path_json"] or "[]")
+            fixed_path = [str(node) for node in raw_path if isinstance(node, str)] if isinstance(raw_path, list) else []
+            if not fixed_path:
+                fixed_path = [str(r["from_location_id"]), str(r["to_location_id"])]
+            else:
+                if fixed_path[0] != str(r["from_location_id"]):
+                    fixed_path = [str(r["from_location_id"])] + fixed_path
+                if fixed_path[-1] != str(r["to_location_id"]):
+                    fixed_path = fixed_path + [str(r["to_location_id"])]
+
+            route_at_departure = _compute_route_quote_from_path(
+                conn,
+                path=fixed_path,
+                departure_time_s=float(r["departed_at"]),
+                extra_dv_fraction=0.0,
+            )
+            if route_at_departure:
+                ship_data["transfer_legs"] = _route_legs_timeline(route_at_departure.get("legs") or [])
 
         # Only include detailed data for own ships
         if is_own:
@@ -520,16 +1045,19 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     if not from_id:
         raise HTTPException(status_code=400, detail="Ship has no current location_id")
 
-    row = conn.execute(
-        "SELECT dv_m_s,tof_s,path_json FROM transfer_matrix WHERE from_id=? AND to_id=?",
-        (from_id, to_id),
-    ).fetchone()
-    if not row:
+    route_quote = _compute_route_quote(
+        conn,
+        from_id=from_id,
+        to_id=to_id,
+        departure_time_s=now_s,
+        extra_dv_fraction=0.0,
+    )
+    if not route_quote:
         raise HTTPException(status_code=404, detail="No transfer data for that destination")
 
-    dv = float(row["dv_m_s"])
-    tof = float(row["tof_s"])
-    path_json = row["path_json"] or "[]"
+    dv = float(route_quote["dv_m_s"])
+    tof = float(route_quote["tof_s"])
+    path_json = json.dumps(route_quote["path"])
 
     parts = m.normalize_parts(json.loads(ship["parts_json"] or "[]"))
     stats = m.derive_ship_stats_from_parts(
@@ -633,6 +1161,19 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     dep = now_s
     arr = now_s + max(1.0, tof)
 
+    # Snapshot departure/arrival coordinates so in-transit interpolation
+    # is stable even as celestial bodies move during the transfer.
+    try:
+        bucket = int(float(dep) // _DYN_LOC_BUCKET_S)
+        snap_locs = _dynamic_locations_by_id(bucket)
+        from_xy = snap_locs.get(from_id, (0.0, 0.0))
+        to_bucket = int(float(arr) // _DYN_LOC_BUCKET_S)
+        snap_locs_arr = _dynamic_locations_by_id(to_bucket)
+        to_xy = snap_locs_arr.get(to_id, (0.0, 0.0))
+    except Exception:
+        from_xy = (0.0, 0.0)
+        to_xy = (0.0, 0.0)
+
     conn.execute(
         """
         UPDATE ships
@@ -643,11 +1184,16 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
           departed_at=?,
           arrives_at=?,
           transfer_path_json=?,
-                        dv_planned_m_s=?,
-                        fuel_kg=?
+          dv_planned_m_s=?,
+          fuel_kg=?,
+          transit_from_x=?,
+          transit_from_y=?,
+          transit_to_x=?,
+          transit_to_y=?
         WHERE id=?
         """,
-                    (from_id, to_id, dep, arr, path_json, dv, fuel_remaining_kg, ship_id),
+        (from_id, to_id, dep, arr, path_json, dv, fuel_remaining_kg,
+         from_xy[0], from_xy[1], to_xy[0], to_xy[1], ship_id),
     )
     conn.commit()
 
@@ -658,6 +1204,7 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         "to": to_id,
         "dv_m_s": dv,
         "tof_s": tof,
+        "transfer_legs": _route_legs_timeline(route_quote.get("legs") or []),
         "fuel_used_kg": fuel_used_kg,
         "fuel_remaining_kg": fuel_remaining_kg,
         "departed_at": dep,

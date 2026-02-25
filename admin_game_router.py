@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from auth_service import ensure_default_admin_account, require_admin
 from db import get_db
+import org_service
 from shipyard_router import _next_available_ship_id
 from sim_service import (
     game_now_s,
@@ -52,6 +53,12 @@ class SpawnShipReq(BaseModel):
     notes: List[str] = Field(default_factory=list)
     parts: List[Any] = Field(default_factory=list)
     fuel_kg: Optional[float] = None
+
+
+class AdminGrantOrgReq(BaseModel):
+    username: str
+    money_usd: float = 0.0
+    research_points: float = 0.0
 
 
 # ── Routes ─────────────────────────────────────────────────
@@ -104,6 +111,66 @@ def api_admin_reset_game(request: Request, conn: sqlite3.Connection = Depends(ge
         "paused": simulation_paused(),
         "server_time": game_now_s(),
         "time_scale": effective_time_scale(),
+    }
+
+
+@router.post("/api/admin/org/grant")
+def api_admin_grant_org_resources(
+    req: AdminGrantOrgReq,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    require_admin(conn, request)
+
+    username = str(req.username or "").strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail="username is required")
+
+    money_usd = float(req.money_usd or 0.0)
+    research_points = float(req.research_points or 0.0)
+    if money_usd < 0.0 or research_points < 0.0:
+        raise HTTPException(status_code=400, detail="money_usd and research_points must be non-negative")
+    if money_usd <= 0.0 and research_points <= 0.0:
+        raise HTTPException(status_code=400, detail="Provide a positive money_usd or research_points amount")
+
+    user_row = conn.execute("SELECT username FROM users WHERE username=?", (username,)).fetchone()
+    if not user_row:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    org_id = org_service.get_org_id_for_user(conn, username)
+    if not org_id:
+        org_id = org_service.ensure_org_for_user(conn, username)
+
+    org_service.settle_org(conn, org_id)
+    conn.execute(
+        """
+        UPDATE organizations
+        SET balance_usd = balance_usd + ?,
+            research_points = research_points + ?
+        WHERE id = ?
+        """,
+        (money_usd, research_points, org_id),
+    )
+    conn.commit()
+
+    org = conn.execute(
+        "SELECT id,name,balance_usd,research_points FROM organizations WHERE id=?",
+        (org_id,),
+    ).fetchone()
+
+    return {
+        "ok": True,
+        "username": username,
+        "org": {
+            "id": str(org["id"]),
+            "name": str(org["name"]),
+            "balance_usd": float(org["balance_usd"]),
+            "research_points": float(org["research_points"]),
+        },
+        "granted": {
+            "money_usd": money_usd,
+            "research_points": research_points,
+        },
     }
 
 
@@ -317,7 +384,11 @@ def api_admin_teleport_ship(
             to_location_id = NULL,
             departed_at = NULL,
             arrives_at = NULL,
-            transfer_path_json = '[]'
+            transfer_path_json = '[]',
+            transit_from_x = NULL,
+            transit_from_y = NULL,
+            transit_to_x = NULL,
+            transit_to_y = NULL
         WHERE id = ?
         """,
         (dest, sid),

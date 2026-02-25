@@ -29,10 +29,16 @@
       "gravity_m_s2": 3.7,
       "radius_km": 2439.7,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 57909227.0,
-        "angle_deg": -16.0
+        "a_km": 57909083.0,
+        "e": 0.20563069,
+        "i_deg": 7.00487,
+        "Omega_deg": 48.33167,
+        "omega_deg": 29.12478,
+        "M0_deg": 174.796,
+        "epoch_jd": 2451544.5,
+        "period_s": 7600521.6
       }
     },
     {
@@ -48,10 +54,16 @@
       "gravity_m_s2": 8.87,
       "radius_km": 6051.8,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 108209475.0,
-        "angle_deg": 11.0
+        "a_km": 108208930.0,
+        "e": 0.00677323,
+        "i_deg": 3.39471,
+        "Omega_deg": 76.68069,
+        "omega_deg": 54.85229,
+        "M0_deg": 50.115,
+        "epoch_jd": 2451544.5,
+        "period_s": 19414166.4
       }
     },
     {
@@ -85,10 +97,16 @@
       "gravity_m_s2": 9.81,
       "radius_km": 6378.137,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 149597870.7,
-        "angle_deg": 0.0
+        "a_km": 149598023.0,
+        "e": 0.0167086,
+        "i_deg": 0.00005,
+        "Omega_deg": -11.26064,
+        "omega_deg": 114.20783,
+        "M0_deg": 357.529,
+        "epoch_jd": 2451544.5,
+        "period_s": 31558149.8
       }
     },
     {
@@ -104,10 +122,16 @@
       "gravity_m_s2": 1.62,
       "radius_km": 1737.4,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "earth",
-        "radius_km": 384400.0,
-        "angle_deg": 10.0
+        "a_km": 384399.0,
+        "e": 0.0549,
+        "i_deg": 5.145,
+        "Omega_deg": 125.08,
+        "omega_deg": 318.15,
+        "M0_deg": 115.3654,
+        "epoch_jd": 2451544.5,
+        "period_s": 2360591.5
       }
     },
     {
@@ -123,10 +147,16 @@
       "gravity_m_s2": 3.71,
       "radius_km": 3389.5,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 227943824.0,
-        "angle_deg": -7.0
+        "a_km": 227939200.0,
+        "e": 0.0934,
+        "i_deg": 1.85061,
+        "Omega_deg": 49.57854,
+        "omega_deg": 286.4623,
+        "M0_deg": 19.412,
+        "epoch_jd": 2451544.5,
+        "period_s": 59355072.0
       }
     },
     {
@@ -194,10 +224,16 @@
       "gravity_m_s2": 0.28,
       "radius_km": 473.0,
       "position": {
-        "type": "polar_from_body",
-        "center_body_id": "asteroid_belt",
-        "radius_km": 0.0,
-        "angle_deg": 0.0
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 413767000.0,
+        "e": 0.0758,
+        "i_deg": 10.593,
+        "Omega_deg": 80.305,
+        "omega_deg": 73.597,
+        "M0_deg": 95.989,
+        "epoch_jd": 2451544.5,
+        "period_s": 145166000.0
       }
     },
     {
@@ -212,10 +248,16 @@
       "gravity_m_s2": 0.25,
       "radius_km": 262.7,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 353400000.0,
-        "angle_deg": 25.0
+        "a_km": 353340000.0,
+        "e": 0.08874,
+        "i_deg": 7.14,
+        "Omega_deg": 103.851,
+        "omega_deg": 151.198,
+        "M0_deg": 149.84,
+        "epoch_jd": 2451544.5,
+        "period_s": 114500000.0
       }
     },
     {
@@ -230,10 +272,16 @@
       "gravity_m_s2": 0.21,
       "radius_km": 256.0,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 414700000.0,
-        "angle_deg": -35.0
+        "a_km": 414500000.0,
+        "e": 0.230,
+        "i_deg": 34.84,
+        "Omega_deg": 173.08,
+        "omega_deg": 310.17,
+        "M0_deg": 33.20,
+        "epoch_jd": 2451544.5,
+        "period_s": 145700000.0
       }
     },
     {
@@ -248,10 +296,16 @@
       "gravity_m_s2": 0.032,
       "radius_km": 217.0,
       "position": {
-        "type": "polar_from_body",
+        "type": "keplerian",
         "center_body_id": "sun",
-        "radius_km": 470300000.0,
-        "angle_deg": 55.0
+        "a_km": 470300000.0,
+        "e": 0.112,
+        "i_deg": 3.842,
+        "Omega_deg": 283.17,
+        "omega_deg": 312.3,
+        "M0_deg": 98.0,
+        "epoch_jd": 2451544.5,
+        "period_s": 175400000.0
       }
     }
   ],
