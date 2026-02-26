@@ -2760,13 +2760,60 @@ body.fleetPage {
   margin: 0;
 }
 
+/* ── Transfer destination tree — segmented accordion ──── */
+
 .transferTreeRoot {
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  background: rgba(8, 13, 22, 0.78);
-  padding: 6px;
+  padding: 0;
 }
 
+/* Top-level zone headers (Sun, Mercury, Earth, Mars…) */
+.transferTreeZone {
+  border-bottom: 1px solid rgba(120, 165, 214, 0.1);
+}
+
+.transferTreeZone > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(198, 222, 250, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+.transferTreeZone > summary::-webkit-details-marker { display: none; }
+
+.transferTreeZone > summary::before {
+  content: "\25B8";
+  color: var(--muted);
+  font-size: 9px;
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+
+.transferTreeZone[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.transferTreeZone > summary:hover {
+  background: rgba(71, 127, 191, 0.14);
+}
+
+.transferTreeZoneSymbol {
+  font-size: 1.3em;
+  line-height: 1;
+}
+
+.transferTreeZoneBody {
+  padding: 0 0 2px 0;
+}
+
+/* Sub-groups within a zone (Orbits, Moons, Lagrange, Surface Sites…) */
 .transferTreeGroup {
   margin: 0;
 }
@@ -2774,77 +2821,118 @@ body.fleetPage {
 .transferTreeSummary {
   list-style: none;
   cursor: pointer;
-}
-
-.transferTreeSummary::-webkit-details-marker {
-  display: none;
-}
-
-.transferTreeRow {
   display: flex;
   align-items: center;
-  min-width: 0;
-  font-size: 12px;
-  padding: 4px 6px;
-}
-
-.transferTreeFolderRow {
+  gap: 4px;
+  padding: 2px 6px 2px 16px;
+  font-size: 10px;
   font-weight: 600;
-  color: rgba(214, 233, 250, 0.96);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
 }
 
-.transferTreeSummary:hover .transferTreeRow {
-  background: rgba(71, 127, 191, 0.14);
+.transferTreeSummary::-webkit-details-marker { display: none; }
+
+.transferTreeSummary::before {
+  content: "\25B8";
+  color: var(--muted);
+  font-size: 8px;
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+
+details.transferTreeGroup[open] > .transferTreeSummary::before {
+  transform: rotate(90deg);
+}
+
+.transferTreeSummary:hover {
+  background: rgba(71, 127, 191, 0.1);
+}
+
+/* ── Body-level groups (Luna, Ceres, Vesta, Io…) ────── */
+
+.transferTreeBody {
+  border-top: 1px solid rgba(120, 165, 214, 0.08);
+}
+
+.transferTreeBody:first-child {
+  border-top: none;
+}
+
+.transferTreeBodySummary {
+  padding: 4px 6px 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(198, 222, 250, 0.9);
+  text-transform: none;
+  letter-spacing: 0;
+  gap: 5px;
+}
+
+.transferTreeBodySymbol {
+  font-size: 1.15em;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+/* ── Category-level groups (Orbits, Surface Sites…) ──── */
+
+.transferTreeCatSummary {
+  padding: 3px 6px 1px 18px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(140, 165, 195, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.transferTreeCatSummary::before {
+  font-size: 7px;
 }
 
 .transferTreeChildren {
-  margin-left: 10px;
-  border-left: 1px solid rgba(120, 165, 214, 0.2);
+  padding: 0;
+  margin: 0;
 }
 
-.transferTreePrefix {
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  white-space: pre;
-  margin-right: 4px;
-  flex: 0 0 auto;
-}
-
-.transferTreeSymbol {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  margin-right: 6px;
-  font-size: 1.2em;
-  line-height: 1;
-  color: rgba(220, 236, 252, 0.95);
-}
+/* Hidden — no longer used */
+.transferTreePrefix { display: none; }
+.transferTreeRow { display: contents; }
+.transferTreeFolderRow { display: contents; }
+.transferTreeSymbol { display: none; }
 
 .transferTreeLabel {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
+/* Leaf items (orbit destinations) */
 .transferTreeLeaf {
   width: 100%;
   text-align: left;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: rgba(225, 238, 249, 0.94);
+  color: rgba(225, 238, 249, 0.82);
   cursor: pointer;
-  padding: 0;
+  padding: 2px 6px 2px 26px;
+  font-size: 11px;
+  display: block;
+  line-height: 1.5;
 }
 
-.transferTreeLeaf:hover .transferTreeRow {
+.transferTreeLeaf:hover {
   background: rgba(71, 127, 191, 0.14);
 }
 
-.transferTreeLeaf.isSelected .transferTreeRow {
-  background: rgba(68, 224, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(109, 182, 255, 0.46);
+.transferTreeLeaf.isSelected {
+  background: rgba(68, 224, 255, 0.1);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+  color: var(--accent);
 }
 
 .adminGrid {
@@ -5674,8 +5762,9 @@ tr.bodyGroupHeader td {
 .tpModal {
   position: relative;
   width: min(1080px, 94vw);
-  max-height: 90vh;
-  overflow: hidden;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
   border-radius: 2px;
   border: 1px solid rgba(122, 170, 222, 0.4);
   background:
@@ -5691,6 +5780,7 @@ tr.bodyGroupHeader td {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-soft);
   background: linear-gradient(180deg, rgba(18, 28, 42, 0.6), transparent);
+  flex: 0 0 auto;
 }
 
 .tpHeaderLeft { display: flex; flex-direction: column; gap: 2px; }
@@ -5710,25 +5800,32 @@ tr.bodyGroupHeader td {
 
 .tpBody {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 220px 1fr;
   gap: 0;
-  max-height: calc(90vh - 56px);
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tpDestPanel {
   border-right: 1px solid var(--border-soft);
   overflow-y: auto;
-  padding: 10px;
+  padding: 0;
   background: rgba(6, 10, 18, 0.5);
+  min-height: 0;
 }
 
 .tpDestLabel {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 10px;
-  color: var(--muted);
-  margin-bottom: 6px;
-  padding: 0 4px;
+  color: rgba(218, 236, 252, 0.82);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: rgba(8, 13, 21, 0.96);
 }
 
 .tpDetailPanel {
@@ -5737,6 +5834,7 @@ tr.bodyGroupHeader td {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
 }
 
 /* ── Transfer details sections ─────────────────────────── */
@@ -5961,6 +6059,52 @@ tr.bodyGroupHeader td {
 
 .tpActions .btnPrimary {
   min-width: 100px;
+}
+
+/* ── Porkchop plot ──────────────────────────────────────── */
+
+.tpPorkchopTip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(8, 14, 24, 0.95);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.5;
+  z-index: 100;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.tpPorkchopTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tpPorkchopTable th {
+  text-align: left;
+  padding: 4px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border-soft);
+  font-weight: 600;
+}
+
+.tpPorkchopTable td {
+  padding: 3px 6px;
+  color: rgba(163, 184, 203, 0.95);
+  border-bottom: 1px solid rgba(109, 182, 255, 0.06);
+}
+
+.tpPorkchopTable tr:first-child td {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ── Responsive ─────────────────────────────────────────── */

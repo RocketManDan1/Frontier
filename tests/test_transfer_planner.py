@@ -187,32 +187,37 @@ class TestWetMassAndAcceleration:
 class TestOrbitalHelpers:
     """Test the interplanetary phase-angle and dv-time tradeoff functions."""
 
-    def test_heliocentric_state_returns_dict(self):
-        from fleet_router import _body_heliocentric_state
+    def test_body_state_returns_3d_vector(self):
+        import celestial_config
+        cfg = celestial_config.load_celestial_config()
+        r, v = celestial_config.compute_body_state(cfg, "earth", 0.0)
+        assert len(r) == 3
+        assert len(v) == 3
+        import math
+        r_mag = math.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
+        assert r_mag > 0
 
-        state = _body_heliocentric_state("earth", 0.0)
-        assert state is not None
-        assert isinstance(state["r_km"], float)
-        assert isinstance(state["theta_rad"], float)
-        assert state["r_km"] > 0
+    def test_body_state_sun_at_origin(self):
+        import celestial_config, math
+        cfg = celestial_config.load_celestial_config()
+        r, v = celestial_config.compute_body_state(cfg, "sun", 0.0)
+        r_mag = math.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
+        assert r_mag < 1.0  # Sun should be at or very near origin
 
-    def test_heliocentric_state_sun_at_origin(self):
-        from fleet_router import _body_heliocentric_state
+    def test_body_state_unknown_body_raises(self):
+        import celestial_config
+        cfg = celestial_config.load_celestial_config()
+        import pytest
+        with pytest.raises(Exception):
+            celestial_config.compute_body_state(cfg, "pluto", 0.0)
 
-        state = _body_heliocentric_state("sun", 0.0)
-        assert state == {"r_km": 0.0, "theta_rad": 0.0}
-
-    def test_heliocentric_state_unknown_body_returns_none(self):
-        from fleet_router import _body_heliocentric_state
-
-        assert _body_heliocentric_state("pluto", 0.0) is None
-
-    def test_heliocentric_state_earth_radius_reasonable(self):
-        from fleet_router import _body_heliocentric_state
-
-        state = _body_heliocentric_state("earth", 0.0)
+    def test_body_state_earth_radius_reasonable(self):
+        import celestial_config, math
+        cfg = celestial_config.load_celestial_config()
+        r, v = celestial_config.compute_body_state(cfg, "earth", 0.0)
+        r_mag = math.sqrt(r[0]**2 + r[1]**2 + r[2]**2)
         # Earth ~149.6 million km from Sun; allow wide margin
-        assert 1.3e8 < state["r_km"] < 1.6e8
+        assert 1.3e8 < r_mag < 1.6e8
 
     def test_is_interplanetary_same_body(self):
         from fleet_router import _is_interplanetary
@@ -233,21 +238,21 @@ class TestOrbitalHelpers:
         # Unknown locations should return False (no body mapping)
         assert _is_interplanetary("NOWHERE", "LEO") is False
 
-    def test_phase_solution_returns_multiplier_in_range(self):
-        from fleet_router import _body_phase_solution
+    def test_interplanetary_leg_returns_multiplier_in_range(self):
+        import transfer_planner
 
         # At any time, multiplier should be between 1.0 and 1.4
         for t in [0, 86400 * 100, 86400 * 365, 86400 * 730]:
-            sol = _body_phase_solution("earth", "mars", t)
-            assert sol is not None, f"No solution at t={t}"
-            m = sol["phase_multiplier"]
+            result = transfer_planner.compute_interplanetary_leg("LEO", "LMO", t)
+            assert result is not None, f"No result at t={t}"
+            m = result["phase_multiplier"]
             assert 1.0 <= m <= 1.401, f"Phase multiplier {m} out of range at t={t}"
 
-    def test_phase_solution_unknown_body_returns_none(self):
-        from fleet_router import _body_phase_solution
+    def test_interplanetary_leg_unknown_locations_returns_none(self):
+        import transfer_planner
 
-        # Unknown body pair → None
-        assert _body_phase_solution("earth", "pluto", 0) is None
+        # Unknown location pair → None
+        assert transfer_planner.compute_interplanetary_leg("LEO", "NOWHERE", 0) is None
 
     def test_excess_dv_time_reduction_zero_extra(self):
         from fleet_router import _excess_dv_time_reduction
@@ -278,6 +283,86 @@ class TestOrbitalHelpers:
         # Even with extreme extra-dv, should not go below 1 hour
         reduced = _excess_dv_time_reduction(86400, 1000, 2.0)
         assert reduced >= 3600
+
+
+class TestPorkchopPlot:
+    """Test the porkchop plot computation."""
+
+    def test_porkchop_returns_grid_for_earth_mars(self):
+        import transfer_planner
+
+        result = transfer_planner.compute_porkchop(
+            from_location="LEO",
+            to_location="LMO",
+            departure_start_s=0.0,
+            departure_end_s=60_000_000.0,
+            tof_min_s=60 * 86400.0,
+            tof_max_s=400 * 86400.0,
+            grid_size=10,
+        )
+        assert result is not None
+        assert result["from_body"] == "earth"
+        assert result["to_body"] == "mars"
+        assert len(result["departure_times"]) == 10
+        assert len(result["tof_values"]) == 10
+        assert len(result["dv_grid"]) == 10
+        # At least some cells should have valid dv
+        valid_count = sum(
+            1 for row in result["dv_grid"] for v in row if v is not None
+        )
+        assert valid_count > 0, "Porkchop grid should have valid dv entries"
+
+    def test_porkchop_best_solutions_present(self):
+        import transfer_planner
+
+        result = transfer_planner.compute_porkchop(
+            from_location="LEO",
+            to_location="LMO",
+            departure_start_s=0.0,
+            departure_end_s=60_000_000.0,
+            tof_min_s=60 * 86400.0,
+            tof_max_s=400 * 86400.0,
+            grid_size=10,
+        )
+        assert result is not None
+        best = result["best_solutions"]
+        assert len(best) > 0
+        sol = best[0]
+        assert "dv_m_s" in sol
+        assert "departure_time" in sol
+        assert "tof_s" in sol
+        assert "dv_depart_m_s" in sol
+        assert "dv_arrive_m_s" in sol
+        assert sol["dv_m_s"] > 0
+
+    def test_porkchop_same_body_returns_none(self):
+        import transfer_planner
+
+        result = transfer_planner.compute_porkchop(
+            from_location="LEO",
+            to_location="GEO",
+            departure_start_s=0.0,
+            departure_end_s=86400.0,
+            tof_min_s=86400.0,
+            tof_max_s=172800.0,
+            grid_size=5,
+        )
+        assert result is None
+
+    def test_porkchop_grid_size_clamped(self):
+        import transfer_planner
+
+        result = transfer_planner.compute_porkchop(
+            from_location="LEO",
+            to_location="LMO",
+            departure_start_s=0.0,
+            departure_end_s=60_000_000.0,
+            tof_min_s=100 * 86400.0,
+            tof_max_s=300 * 86400.0,
+            grid_size=3,  # Below minimum of 5
+        )
+        assert result is not None
+        assert result["grid_size"] == 5
 
 
 # ────────────────────────────────────────────────────────────────────

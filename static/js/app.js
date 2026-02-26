@@ -5882,6 +5882,9 @@
     let currentExtraDvFraction = 0;
     let departureTimeOverride = null; // null = "now"
     let lastQuote = null;
+    let lastPorkchopData = null;       // stored porkchop grid data
+    let lastPorkchopDepTime = null;    // departure time used for the porkchop
+    let porkchopRedrawCrosshair = null; // function to redraw crosshair at a TOF
     const transferTreeOpenState = new Map();
 
     function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -5941,23 +5944,20 @@
     }
 
     function fmtGameDate(gameTimeS) {
-      // Game epoch 0 = 2040-01-01T00:00 UTC
-      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
-      const date = new Date(epochMs + gameTimeS * 1000);
+      // Game time is a Unix timestamp (epoch = 1970-01-01, game starts ~2000-01-01)
+      const date = new Date(gameTimeS * 1000);
       return date.toISOString().slice(0, 16).replace("T", " ") + " UTC";
     }
 
     function gameTimeToISOInput(gameTimeS) {
-      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
-      const date = new Date(epochMs + gameTimeS * 1000);
+      const date = new Date(gameTimeS * 1000);
       return date.toISOString().slice(0, 16);
     }
 
     function isoInputToGameTime(isoStr) {
-      const epochMs = Date.UTC(2040, 0, 1, 0, 0, 0);
       const d = new Date(isoStr + "Z");
       if (isNaN(d.getTime())) return null;
-      return (d.getTime() - epochMs) / 1000;
+      return d.getTime() / 1000;
     }
 
     function alignmentClass(pct) {
@@ -5974,22 +5974,152 @@
       return "Bad";
     }
 
-    // ── Destination tree ───────────────────────────────────
+    // ── Destination tree ── segmented accordion ──────────
     function buildDestinationTree() {
       treeRoot.innerHTML = "";
       const wrap = document.createElement("div");
-      wrap.className = "tree transferTreeRoot";
-      for (let i = 0; i < treeCache.length; i += 1) {
-        renderTreeNode(
-          treeCache[i],
-          wrap,
-          selectLeaf,
-          { ancestorHasNext: [], isLast: i === treeCache.length - 1, depth: 0 },
-          selectedDest,
-          transferTreeOpenState
-        );
+      wrap.className = "transferTreeRoot";
+
+      // treeCache usually has one root (grp_sun) — flatten to its children
+      let zoneNodes = treeCache;
+      if (zoneNodes.length === 1 && zoneNodes[0].is_group && Array.isArray(zoneNodes[0].children)) {
+        zoneNodes = zoneNodes[0].children;
       }
+
+      const zoneDetails = []; // track <details> for exclusive-open
+
+      for (const zoneNode of zoneNodes) {
+        if (!zoneNode.is_group) {
+          // Top-level leaf (e.g. "SUN") — render directly
+          const btn = makeLeafButton(zoneNode);
+          wrap.appendChild(btn);
+          continue;
+        }
+
+        const zone = document.createElement("details");
+        zone.className = "transferTreeZone";
+        const stateKey = `zone:${zoneNode.id}`;
+        const savedOpen = transferTreeOpenState.get(stateKey);
+        zone.open = savedOpen != null ? !!savedOpen : (zoneNode.id === "grp_earth");
+
+        zone.addEventListener("toggle", () => {
+          transferTreeOpenState.set(stateKey, !!zone.open);
+          // Accordion: close other zones when one opens
+          if (zone.open) {
+            for (const other of zoneDetails) {
+              if (other !== zone && other.open) {
+                other.open = false;
+                const otherKey = other.dataset.stateKey;
+                if (otherKey) transferTreeOpenState.set(otherKey, false);
+              }
+            }
+          }
+        });
+        zone.dataset.stateKey = stateKey;
+
+        const summary = document.createElement("summary");
+        const sym = locationsById.get(zoneNode.id)?.symbol || "";
+        if (sym) {
+          const symSpan = document.createElement("span");
+          symSpan.className = "transferTreeZoneSymbol";
+          symSpan.textContent = sym;
+          summary.appendChild(symSpan);
+        }
+        summary.appendChild(document.createTextNode(zoneNode.name));
+        zone.appendChild(summary);
+
+        const body = document.createElement("div");
+        body.className = "transferTreeZoneBody";
+        renderZoneChildren(zoneNode.children || [], body);
+        zone.appendChild(body);
+
+        wrap.appendChild(zone);
+        zoneDetails.push(zone);
+      }
+
       treeRoot.appendChild(wrap);
+    }
+
+    function renderZoneChildren(nodes, container) {
+      for (const node of nodes) {
+        if (!node.is_group) {
+          container.appendChild(makeLeafButton(node));
+          continue;
+        }
+        // Sub-group (Orbits, Moons, Lagrange, Surface Sites, sub-bodies like Luna, Ceres…)
+        const kids = Array.isArray(node.children) ? node.children : [];
+        const hasLeaves = kids.some((k) => !k.is_group);
+        const hasGroups = kids.some((k) => k.is_group);
+
+        // If this is a body group (Luna, Deimos, Ceres, etc.) that contains both
+        // sub-groups and leaves, render it as a mini zone header
+        if (hasGroups) {
+          const details = document.createElement("details");
+          details.className = "transferTreeGroup transferTreeBody";
+          details.open = transferTreeOpenState.has(node.id) ? !!transferTreeOpenState.get(node.id) : true;
+          details.addEventListener("toggle", () => {
+            transferTreeOpenState.set(node.id, !!details.open);
+          });
+
+          const summary = document.createElement("summary");
+          summary.className = "transferTreeSummary transferTreeBodySummary";
+          const sym = locationsById.get(node.id)?.symbol || "";
+          if (sym) {
+            const symSpan = document.createElement("span");
+            symSpan.className = "transferTreeBodySymbol";
+            symSpan.textContent = sym;
+            summary.appendChild(symSpan);
+          }
+          summary.appendChild(document.createTextNode(node.name));
+          details.appendChild(summary);
+
+          const inner = document.createElement("div");
+          inner.className = "transferTreeChildren";
+          renderZoneChildren(kids, inner);
+          details.appendChild(inner);
+          container.appendChild(details);
+          continue;
+        }
+
+        // Pure leaf group (e.g. "Orbits" with only orbit leaves)
+        if (hasLeaves) {
+          const details = document.createElement("details");
+          details.className = "transferTreeGroup transferTreeCategory";
+          details.open = transferTreeOpenState.has(node.id) ? !!transferTreeOpenState.get(node.id) : true;
+          details.addEventListener("toggle", () => {
+            transferTreeOpenState.set(node.id, !!details.open);
+          });
+
+          const summary = document.createElement("summary");
+          summary.className = "transferTreeSummary transferTreeCatSummary";
+          summary.appendChild(document.createTextNode(node.name));
+          details.appendChild(summary);
+
+          const inner = document.createElement("div");
+          inner.className = "transferTreeChildren";
+          for (const kid of kids) {
+            if (!kid.is_group) {
+              inner.appendChild(makeLeafButton(kid));
+            } else {
+              renderZoneChildren([kid], inner);
+            }
+          }
+          details.appendChild(inner);
+          container.appendChild(details);
+          continue;
+        }
+
+        // Empty group — skip
+      }
+    }
+
+    function makeLeafButton(node) {
+      const btn = document.createElement("button");
+      btn.className = `transferTreeLeaf${selectedDest === node.id ? " isSelected" : ""}`;
+      btn.type = "button";
+      btn.textContent = node.name;
+      btn.onclick = () => selectLeaf(node);
+      return btn;
     }
 
     // ── Fetch & render quote ───────────────────────────────
@@ -6091,7 +6221,6 @@
         const alignLbl = alignmentLabel(orb.alignment_pct);
         const synodicDays = orb.synodic_period_s ? (orb.synodic_period_s / 86400).toFixed(0) : "—";
         const nextWindowDays = orb.next_window_s ? (orb.next_window_s / 86400).toFixed(0) : "—";
-        const dvPenaltyPct = Math.round((q.phase_multiplier - 1.0) * 100);
 
         orbitalHtml = `
           <div class="tpSection">
@@ -6105,10 +6234,6 @@
               <span class="tpVal">${orb.phase_angle_deg}° <span class="muted">(optimal ${orb.optimal_phase_deg}°)</span></span>
             </div>
             <div class="tpRow">
-              <span class="tpLabel">Δv penalty</span>
-              <span class="tpVal ${dvPenaltyPct > 15 ? 'tpWarn' : dvPenaltyPct > 0 ? 'tpAccent' : ''}">${dvPenaltyPct > 0 ? "+" : ""}${dvPenaltyPct}%</span>
-            </div>
-            <div class="tpRow">
               <span class="tpLabel">Synodic period</span>
               <span class="tpVal">${synodicDays} days</span>
             </div>
@@ -6117,12 +6242,20 @@
               <span class="tpVal">${nextWindowDays !== "—" ? nextWindowDays + " days" : "—"}</span>
             </div>
           </div>
+          <div id="tpPorkchopContainer" class="tpSection">
+            <div class="tpSectionTitle">Porkchop Plot — Departure Window Map</div>
+            <div id="tpPorkchopContent" style="position:relative;min-height:60px;">
+              <div class="muted" style="text-align:center;padding:12px;">Loading porkchop plot…</div>
+            </div>
+          </div>
         `;
       }
 
-      // Extra dv slider section
-      const sliderPct = Math.round(currentExtraDvFraction * 100);
-      const timeReduction = q.base_tof_s > 0 ? Math.round((1 - q.tof_s / q.base_tof_s) * 100) : 0;
+      // TOF slider section — replaces the old burn profile.
+      // For interplanetary transfers, the actual Δv shown comes from the
+      // porkchop grid at the selected TOF.  For local transfers we just
+      // show the Lambert/Hohmann result.
+      const tofDays = Math.round(q.base_tof_s / 86400);
 
       const html = `
         <!-- Departure Date -->
@@ -6143,12 +6276,12 @@
           <div class="tpPathWrap">${pathHtml}</div>
           <div style="margin-top:8px;">
             <div class="tpRow">
-              <span class="tpLabel">Hohmann Δv</span>
+              <span class="tpLabel">Lambert Δv</span>
               <span class="tpVal">${Math.round(q.base_dv_m_s)} m/s</span>
             </div>
             ${q.is_interplanetary ? `<div class="tpRow">
-              <span class="tpLabel">Phase-adjusted Δv</span>
-              <span class="tpVal">${Math.round(q.phase_adjusted_dv_m_s)} m/s <span class="muted">(×${q.phase_multiplier.toFixed(2)})</span></span>
+              <span class="tpLabel">Transfer Δv</span>
+              <span class="tpVal">${Math.round(q.phase_adjusted_dv_m_s)} m/s</span>
             </div>` : ""}
             <div class="tpRow">
               <span class="tpLabel">Hohmann transit time</span>
@@ -6159,36 +6292,31 @@
 
         ${orbitalHtml}
 
-        <!-- Delta-V / Time Tradeoff -->
+        <!-- Transfer — TOF slider + live Δv readout -->
         <div class="tpSection">
-          <div class="tpSectionTitle">Burn Profile</div>
+          <div class="tpSectionTitle">Transfer</div>
+          ${q.is_interplanetary ? `
           <div class="tpSliderWrap">
             <div class="tpRow">
-              <span class="tpLabel">Extra Δv</span>
-              <span class="tpVal tpAccent" id="tpSliderReadout">+${sliderPct}%</span>
+              <span class="tpLabel">Time of flight</span>
+              <span class="tpVal tpAccent" id="tpTofReadout">${tofDays} days</span>
             </div>
             <div class="tpSliderRow">
-              <span class="muted" style="font-size:10px;">Min</span>
-              <input type="range" class="tpSlider" id="tpDvSlider"
-                     min="0" max="200" step="5" value="${sliderPct}">
-              <span class="muted" style="font-size:10px;">+200%</span>
+              <span class="muted" style="font-size:10px;" id="tpTofMinLabel">—</span>
+              <input type="range" class="tpSlider" id="tpTofSlider"
+                     min="0" max="100" step="1" value="50" disabled
+                     title="Adjust after porkchop loads">
+              <span class="muted" style="font-size:10px;" id="tpTofMaxLabel">—</span>
             </div>
-            <div class="tpSliderTicks">
-              <span>Hohmann</span>
-              <span>+50%</span>
-              <span>+100%</span>
-              <span>+150%</span>
-              <span>Brachistochrone</span>
-            </div>
-          </div>
+          </div>` : ""}
           <div style="margin-top:10px;">
             <div class="tpRow tpHighlight">
               <span class="tpLabel"><b>Total Δv</b></span>
-              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}"><b>${Math.round(q.dv_m_s)} m/s</b></span>
+              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpTotalDvReadout"><b>${Math.round(q.dv_m_s)} m/s</b></span>
             </div>
             <div class="tpRow">
               <span class="tpLabel">Transit time</span>
-              <span class="tpVal">${fmtDuration(q.tof_s)} ${timeReduction > 0 ? `<span class="muted">(${timeReduction}% faster)</span>` : ""}</span>
+              <span class="tpVal" id="tpTransitTimeReadout">${fmtDuration(q.tof_s)}</span>
             </div>
           </div>
         </div>
@@ -6198,19 +6326,21 @@
           <div class="tpSectionTitle">Ship Cost</div>
           <div class="tpRow">
             <span class="tpLabel">Fuel required</span>
-            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}">${fmtKg(fuelNeedKg)}</span>
+            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}" id="tpFuelRequired">${fmtKg(fuelNeedKg)}</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Fuel remaining after</span>
-            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}">${fmtKg(fuelAfterKg)} (${fuelAfterPct}%)</span>
+            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}" id="tpFuelRemaining">${fmtKg(fuelAfterKg)} (${fuelAfterPct}%)</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Ship Δv remaining</span>
-            <span class="tpVal">${Math.round(shipDv)} m/s</span>
+            <span class="tpVal" id="tpShipDvRemaining">${Math.round(shipDv)} m/s</span>
           </div>
+          <div id="tpCostStatus">
           ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(q.dv_m_s)}, have ${Math.round(shipDv)})</span></div>` : ""}
           ${!hasFuel && hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>` : ""}
           ${!hasSurfaceTwr ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient surface TWR for ${_esc(twrCheck.siteId || "surface site")} (TWR ${Number(twrCheck.twr || 0).toFixed(2)} &lt; 1.00 at ${Number(twrCheck.gravity || 0).toFixed(2)} m/s²)</span></div>` : ""}
+          </div>
         </div>
 
         ${isOverheating ? `
@@ -6277,20 +6407,10 @@
         }
       };
 
-      // Delta-v slider
-      const slider = document.getElementById("tpDvSlider");
-      const readout = document.getElementById("tpSliderReadout");
-
-      slider.oninput = () => {
-        const pct = Number(slider.value);
-        readout.textContent = `+${pct}%`;
-      };
-
-      slider.onchange = () => {
-        const pct = Number(slider.value);
-        currentExtraDvFraction = pct / 100;
-        fetchAndRenderQuote();
-      };
+      // Auto-fetch porkchop for interplanetary transfers
+      if (q.is_interplanetary && q.orbital) {
+        fetchAndRenderPorkchop(q, depTime);
+      }
 
       // Confirm button
       document.getElementById("tpConfirmBtn").onclick = async () => {
@@ -6318,6 +6438,443 @@
           btn.disabled = false;
         }
       };
+    }
+
+    // ── Porkchop plot ──────────────────────────────────────
+    async function fetchAndRenderPorkchop(q, depTime) {
+      const container = document.getElementById("tpPorkchopContainer");
+      const content = document.getElementById("tpPorkchopContent");
+      if (!container || !content) return;
+
+      container.style.display = "";
+      content.innerHTML = `<div class="muted" style="text-align:center;padding:16px;">Computing porkchop plot…</div>`;
+
+      try {
+        const params = new URLSearchParams({
+          from_id: ship.location_id,
+          to_id: selectedDest,
+          departure_start: String(depTime),
+          grid_size: "50",
+        });
+        const resp = await fetch(`/api/transfer/porkchop?${params}`, { cache: "no-store" });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          content.innerHTML = `<div class="muted" style="text-align:center;padding:12px;">${_esc(err.detail || "Failed to compute porkchop plot.")}</div>`;
+          return;
+        }
+        const data = await resp.json();
+        lastPorkchopData = data;
+        lastPorkchopDepTime = depTime;
+        renderPorkchopPlot(content, data, depTime);
+        wireTofSlider(data, depTime);
+      } catch (err) {
+        console.error("Porkchop error:", err);
+        content.innerHTML = `<div class="muted" style="text-align:center;padding:12px;">Failed to load porkchop data.</div>`;
+      }
+    }
+
+    function renderPorkchopPlot(container, data, currentDep) {
+      const depTimes = data.departure_times || [];
+      const tofs = data.tof_values || [];
+      const grid = data.dv_grid || [];
+      const best = data.best_solutions || [];
+      const gs = grid.length;
+      if (gs === 0 || tofs.length === 0) {
+        container.innerHTML = `<div class="muted" style="text-align:center;padding:12px;">No data returned.</div>`;
+        return;
+      }
+
+      // Find dv range for color mapping
+      let dvMin = Infinity, dvMax = 0;
+      for (let di = 0; di < gs; di++) {
+        for (let ti = 0; ti < (grid[di] || []).length; ti++) {
+          const v = grid[di][ti];
+          if (v != null && isFinite(v)) {
+            if (v < dvMin) dvMin = v;
+            if (v > dvMax) dvMax = v;
+          }
+        }
+      }
+      if (dvMin >= dvMax) dvMax = dvMin + 1000;
+
+      // Cap the color range at 3× minimum to avoid washing out
+      const dvColorMax = Math.min(dvMax, dvMin * 3.0);
+
+      // Canvas dimensions
+      const MARGIN_L = 70, MARGIN_B = 65, MARGIN_T = 10, MARGIN_R = 80;
+      const cellW = 6, cellH = 6;
+      const plotW = gs * cellW, plotH = tofs.length * cellH;
+      const canvasW = MARGIN_L + plotW + MARGIN_R;
+      const canvasH = MARGIN_T + plotH + MARGIN_B;
+
+      container.innerHTML = `
+        <canvas id="tpPorkchopCanvas" width="${canvasW}" height="${canvasH}" style="width:100%;max-width:${canvasW}px;image-rendering:pixelated;cursor:crosshair;"></canvas>
+        <div id="tpPorkchopTooltip" class="tpPorkchopTip" style="display:none;"></div>
+        <div id="tpPorkchopBest" style="margin-top:8px;"></div>
+      `;
+
+      const canvas = document.getElementById("tpPorkchopCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // ── Draw the static base image ──
+      function drawBase() {
+        // Background
+        ctx.fillStyle = "rgba(4, 8, 14, 0.95)";
+        ctx.fillRect(0, 0, canvasW, canvasH);
+
+        // Heatmap cells
+        for (let di = 0; di < gs; di++) {
+          for (let ti = 0; ti < (grid[di] || []).length; ti++) {
+            const v = grid[di][ti];
+            const x = MARGIN_L + di * cellW;
+            const y = MARGIN_T + (tofs.length - 1 - ti) * cellH;
+            if (v == null) {
+              ctx.fillStyle = "rgba(20, 20, 30, 0.8)";
+            } else {
+              const t = Math.max(0, Math.min(1, (v - dvMin) / (dvColorMax - dvMin)));
+              ctx.fillStyle = porkchopColor(t);
+            }
+            ctx.fillRect(x, y, cellW, cellH);
+          }
+        }
+
+        // Best solution markers
+        for (const sol of best) {
+          const di = depTimes.findIndex((t, i) => i === depTimes.length - 1 || depTimes[i + 1] > sol.departure_time);
+          const ti = tofs.findIndex((t, i) => i === tofs.length - 1 || tofs[i + 1] > sol.tof_s);
+          if (di >= 0 && ti >= 0) {
+            const x = MARGIN_L + di * cellW + cellW / 2;
+            const y = MARGIN_T + (tofs.length - 1 - ti) * cellH + cellH / 2;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(x, y, 2, 0, 2 * Math.PI);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+          }
+        }
+
+        // Current departure time vertical line (clamped so it always appears)
+        if (depTimes.length >= 2) {
+          const frac = Math.max(0, Math.min(1,
+            (currentDep - depTimes[0]) / (depTimes[depTimes.length - 1] - depTimes[0])
+          ));
+          const cx = MARGIN_L + frac * plotW;
+          ctx.strokeStyle = "rgba(89,185,230,0.6)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(cx, MARGIN_T);
+          ctx.lineTo(cx, MARGIN_T + plotH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Axes
+        ctx.strokeStyle = "rgba(109,182,255,0.3)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(MARGIN_L, MARGIN_T);
+        ctx.lineTo(MARGIN_L, MARGIN_T + plotH);
+        ctx.lineTo(MARGIN_L + plotW, MARGIN_T + plotH);
+        ctx.stroke();
+
+        // X axis labels
+        ctx.fillStyle = "rgba(163,184,203,0.7)";
+        ctx.font = "9px sans-serif";
+        ctx.textAlign = "center";
+        const xLabels = 5;
+        for (let i = 0; i <= xLabels; i++) {
+          const idx = Math.round((i / xLabels) * (gs - 1));
+          const t = depTimes[idx];
+          const x = MARGIN_L + idx * cellW + cellW / 2;
+          const dateStr = fmtGameDate(t).slice(0, 10);
+          ctx.fillText(dateStr, x, MARGIN_T + plotH + 14);
+        }
+        ctx.save();
+        ctx.translate(MARGIN_L + plotW / 2, MARGIN_T + plotH + 40);
+        ctx.textAlign = "center";
+        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "rgba(163,184,203,0.6)";
+        ctx.fillText("Departure Date", 0, 0);
+        ctx.restore();
+
+        // Y axis labels
+        ctx.textAlign = "right";
+        ctx.font = "9px sans-serif";
+        ctx.fillStyle = "rgba(163,184,203,0.7)";
+        const yLabels = 5;
+        for (let i = 0; i <= yLabels; i++) {
+          const idx = Math.round((i / yLabels) * (tofs.length - 1));
+          const tofDays = (tofs[idx] / 86400).toFixed(0);
+          const y = MARGIN_T + (tofs.length - 1 - idx) * cellH + cellH / 2;
+          ctx.fillText(`${tofDays}d`, MARGIN_L - 6, y + 3);
+        }
+        ctx.save();
+        ctx.translate(12, MARGIN_T + plotH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "rgba(163,184,203,0.6)";
+        ctx.fillText("Time of Flight", 0, 0);
+        ctx.restore();
+
+        // Color bar
+        const barX = MARGIN_L + plotW + 12, barW = 14, barH = plotH;
+        for (let i = 0; i < barH; i++) {
+          const t = i / barH;
+          ctx.fillStyle = porkchopColor(t);
+          ctx.fillRect(barX, MARGIN_T + i, barW, 1);
+        }
+        ctx.strokeStyle = "rgba(109,182,255,0.3)";
+        ctx.strokeRect(barX, MARGIN_T, barW, barH);
+        ctx.fillStyle = "rgba(163,184,203,0.7)";
+        ctx.font = "9px sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(`${(dvMin / 1000).toFixed(1)}`, barX + barW + 4, MARGIN_T + barH + 3);
+        ctx.fillText(`${(dvColorMax / 1000).toFixed(1)}`, barX + barW + 4, MARGIN_T + 9);
+        ctx.fillText("km/s", barX + barW + 4, MARGIN_T + barH / 2 + 3);
+      }
+
+      drawBase();
+
+      // Save the base image so we can redraw crosshairs without re-rendering
+      const baseImageData = ctx.getImageData(0, 0, canvasW, canvasH);
+
+      // ── Crosshair drawing (for TOF slider) ──
+      porkchopRedrawCrosshair = function(tofS) {
+        ctx.putImageData(baseImageData, 0, 0);
+        if (tofS == null) return;
+        const tofMin = tofs[0], tofMax = tofs[tofs.length - 1];
+        if (tofS < tofMin || tofS > tofMax) return;
+        const frac = (tofS - tofMin) / (tofMax - tofMin);
+        const cy = MARGIN_T + (1 - frac) * plotH; // TOF increases upward
+        ctx.strokeStyle = "rgba(68, 224, 255, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(MARGIN_L, cy);
+        ctx.lineTo(MARGIN_L + plotW, cy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw a diamond at the intersection with the departure line
+        // Clamp to range so it always appears even if currentDep is slightly outside
+        if (depTimes.length >= 2) {
+          const depFrac = Math.max(0, Math.min(1,
+            (currentDep - depTimes[0]) / (depTimes[depTimes.length - 1] - depTimes[0])
+          ));
+          const cx = MARGIN_L + depFrac * plotW;
+          const sz = 6;
+          // Dark outline for contrast against any heatmap color
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - sz);
+          ctx.lineTo(cx + sz, cy);
+          ctx.lineTo(cx, cy + sz);
+          ctx.lineTo(cx - sz, cy);
+          ctx.closePath();
+          ctx.stroke();
+          // Bright fill
+          ctx.fillStyle = "#44e0ff";
+          ctx.fill();
+          // Thin bright border on top
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+          ctx.stroke();
+        }
+      };
+
+      // ── Canvas hover tooltip ──
+      const tooltip = document.getElementById("tpPorkchopTooltip");
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleX;
+        const di = Math.floor((mx - MARGIN_L) / cellW);
+        const ti = tofs.length - 1 - Math.floor((my - MARGIN_T) / cellH);
+        if (di < 0 || di >= gs || ti < 0 || ti >= tofs.length) {
+          tooltip.style.display = "none";
+          return;
+        }
+        const v = (grid[di] || [])[ti];
+        const depDate = fmtGameDate(depTimes[di]).slice(0, 10);
+        const tofDays = (tofs[ti] / 86400).toFixed(0);
+        const dvStr = v != null ? `${(v / 1000).toFixed(2)} km/s` : "N/A";
+        tooltip.style.display = "";
+        tooltip.style.left = (e.clientX - canvas.closest(".tpSection").getBoundingClientRect().left + 14) + "px";
+        tooltip.style.top = (e.clientY - canvas.closest(".tpSection").getBoundingClientRect().top - 10) + "px";
+        tooltip.innerHTML = `<b>Δv ${dvStr}</b><br>Depart: ${depDate}<br>TOF: ${tofDays} days`;
+      };
+      canvas.onmouseleave = () => { tooltip.style.display = "none"; };
+
+      // Best solutions table
+      const bestEl = document.getElementById("tpPorkchopBest");
+      if (best.length > 0) {
+        let rows = best.map((s, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${fmtGameDate(s.departure_time).slice(0, 10)}</td>
+            <td>${(s.tof_s / 86400).toFixed(0)}d</td>
+            <td><b>${(s.dv_m_s / 1000).toFixed(2)}</b></td>
+            <td>${(s.dv_depart_m_s / 1000).toFixed(2)}</td>
+            <td>${(s.dv_arrive_m_s / 1000).toFixed(2)}</td>
+            <td>${s.v_inf_depart_km_s.toFixed(2)}</td>
+          </tr>
+        `).join("");
+        bestEl.innerHTML = `
+          <div class="tpSectionTitle" style="margin-top:4px;">Best Transfer Windows</div>
+          <table class="tpPorkchopTable">
+            <thead><tr>
+              <th>#</th><th>Depart</th><th>TOF</th><th>Δv (km/s)</th><th>Dep Δv</th><th>Arr Δv</th><th>V∞ Dep</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+    }
+
+    // ── Wire TOF slider to porkchop data ───────────────────
+    function wireTofSlider(data, depTime) {
+      const slider = document.getElementById("tpTofSlider");
+      const readout = document.getElementById("tpTofReadout");
+      const dvReadout = document.getElementById("tpTotalDvReadout");
+      const transitReadout = document.getElementById("tpTransitTimeReadout");
+      const tofMinLabel = document.getElementById("tpTofMinLabel");
+      const tofMaxLabel = document.getElementById("tpTofMaxLabel");
+      if (!slider || !readout) return;
+
+      const tofs = data.tof_values || [];
+      const depTimes = data.departure_times || [];
+      const grid = data.dv_grid || [];
+      if (tofs.length === 0 || depTimes.length === 0) return;
+
+      const tofMinS = tofs[0];
+      const tofMaxS = tofs[tofs.length - 1];
+
+      // Set slider range (use index = 0..tofs.length-1)
+      slider.min = "0";
+      slider.max = String(tofs.length - 1);
+      slider.step = "1";
+      slider.disabled = false;
+
+      if (tofMinLabel) tofMinLabel.textContent = `${Math.round(tofMinS / 86400)}d`;
+      if (tofMaxLabel) tofMaxLabel.textContent = `${Math.round(tofMaxS / 86400)}d`;
+
+      // Find nearest departure column to current dep time
+      let bestDepIdx = 0;
+      let bestDepDist = Infinity;
+      for (let i = 0; i < depTimes.length; i++) {
+        const dist = Math.abs(depTimes[i] - depTime);
+        if (dist < bestDepDist) { bestDepDist = dist; bestDepIdx = i; }
+      }
+
+      // Find the best-Δv TOF index at this departure column
+      let bestTofIdx = Math.floor(tofs.length / 2);
+      let bestDv = Infinity;
+      const depCol = grid[bestDepIdx] || [];
+      for (let ti = 0; ti < depCol.length; ti++) {
+        const v = depCol[ti];
+        if (v != null && isFinite(v) && v < bestDv) {
+          bestDv = v;
+          bestTofIdx = ti;
+        }
+      }
+
+      slider.value = String(bestTofIdx);
+
+      function updateFromSlider() {
+        const ti = Number(slider.value);
+        const tofS = tofs[ti];
+        const tofDays = Math.round(tofS / 86400);
+        readout.textContent = `${tofDays} days`;
+
+        // Look up Δv at (bestDepIdx, ti) from the grid
+        const dv = (grid[bestDepIdx] || [])[ti];
+        if (dv != null && isFinite(dv)) {
+          const dvM = Math.round(dv);
+          if (dvReadout) dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
+          // Update fuel/feasibility class
+          if (dvReadout) {
+            dvReadout.className = dvM <= shipDv + 0.1 ? "tpVal tpPositive" : "tpVal tpNegative";
+          }
+        } else {
+          if (dvReadout) { dvReadout.innerHTML = `<b>N/A</b>`; dvReadout.className = "tpVal muted"; }
+        }
+
+        if (transitReadout) transitReadout.textContent = fmtDuration(tofS);
+
+        // Update ship cost section with new Δv
+        if (dv != null && isFinite(dv)) updateShipCostFromDv(dv);
+
+        // Redraw crosshair on porkchop
+        if (porkchopRedrawCrosshair) porkchopRedrawCrosshair(tofS);
+      }
+
+      slider.oninput = updateFromSlider;
+      // Trigger initial update
+      updateFromSlider();
+    }
+
+    // ── Update ship cost section from a given Δv ──────────
+    function updateShipCostFromDv(dvMs) {
+      const fuelReqEl = document.getElementById("tpFuelRequired");
+      const fuelRemEl = document.getElementById("tpFuelRemaining");
+      const statusEl = document.getElementById("tpCostStatus");
+      const confirmBtn = document.getElementById("tpConfirmBtn");
+      if (!fuelReqEl || !fuelRemEl) return;
+
+      const fuelNeed = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, dvMs);
+      const fuelAfter = Math.max(0, shipFuel - fuelNeed);
+      const fuelAfterP = shipFuelCap > 0 ? Math.round((fuelAfter / shipFuelCap) * 100) : 0;
+      const okFuel = fuelNeed <= shipFuel + 0.1;
+      const okDv = dvMs <= shipDv + 0.1;
+
+      fuelReqEl.textContent = fmtKg(fuelNeed);
+      fuelReqEl.className = "tpVal" + (okFuel ? "" : " tpNegative");
+
+      fuelRemEl.textContent = `${fmtKg(fuelAfter)} (${fuelAfterP}%)`;
+      fuelRemEl.className = "tpVal" + (fuelAfterP > 20 ? "" : fuelAfterP > 0 ? " tpWarn" : " tpNegative");
+
+      // Rebuild status messages
+      if (statusEl) {
+        let msgs = "";
+        if (!okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(dvMs)}, have ${Math.round(shipDv)})</span></div>`;
+        if (!okFuel && okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>`;
+        statusEl.innerHTML = msgs;
+      }
+
+      // Enable/disable confirm button
+      if (confirmBtn) {
+        const canTransfer = okDv && okFuel && !confirmBtn.textContent.includes("Overheating");
+        confirmBtn.disabled = !canTransfer;
+      }
+    }
+
+    function porkchopColor(t) {
+      // t: 0 = best (low dv), 1 = worst (high dv)
+      // Color scale: dark blue → cyan → green → yellow → red
+      t = Math.max(0, Math.min(1, t));
+      let r, g, b;
+      if (t < 0.25) {
+        const f = t / 0.25;
+        r = 0; g = Math.round(40 + f * 120); b = Math.round(80 + f * 100);
+      } else if (t < 0.5) {
+        const f = (t - 0.25) / 0.25;
+        r = 0; g = Math.round(160 + f * 80); b = Math.round(180 - f * 130);
+      } else if (t < 0.75) {
+        const f = (t - 0.5) / 0.25;
+        r = Math.round(f * 240); g = Math.round(240 - f * 60); b = Math.round(50 - f * 50);
+      } else {
+        const f = (t - 0.75) / 0.25;
+        r = Math.round(240 + f * 15); g = Math.round(180 - f * 150); b = 0;
+      }
+      return `rgb(${r},${g},${b})`;
     }
 
     // ── Select destination leaf ─────────────────────────────

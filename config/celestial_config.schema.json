@@ -110,7 +110,20 @@
         }
       }
     },
-    "transfer_edges": { "type": "array" },
+    "transfer_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from_id", "to_id", "dv_m_s", "tof_s"],
+        "properties": {
+          "from_id": { "type": "string" },
+          "to_id": { "type": "string" },
+          "dv_m_s": { "type": "number" },
+          "tof_s": { "type": "number" },
+          "type": { "type": "string", "enum": ["local", "interplanetary", "lagrange"] }
+        }
+      }
+    },
     "surface_sites": {
       "type": "array",
       "items": {

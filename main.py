@@ -873,15 +873,16 @@ def upsert_locations(conn: sqlite3.Connection, rows: List[Tuple[str, str, Option
             break
 
 
-def upsert_transfer_edges(conn: sqlite3.Connection, rows: List[Tuple[str, str, float, float]]) -> None:
+def upsert_transfer_edges(conn: sqlite3.Connection, rows: List[Tuple[str, str, float, float, str]]) -> None:
     for row in rows:
         conn.execute(
             """
-            INSERT INTO transfer_edges (from_id,to_id,dv_m_s,tof_s)
-            VALUES (?,?,?,?)
+            INSERT INTO transfer_edges (from_id,to_id,dv_m_s,tof_s,edge_type)
+            VALUES (?,?,?,?,?)
             ON CONFLICT(from_id,to_id) DO UPDATE SET
               dv_m_s=excluded.dv_m_s,
-              tof_s=excluded.tof_s
+              tof_s=excluded.tof_s,
+              edge_type=excluded.edge_type
             """,
             row,
         )
@@ -1069,7 +1070,7 @@ def ensure_solar_system_expansion(conn: sqlite3.Connection) -> None:
         "LMO": "mars",
     }
 
-    computed_edges: List[Tuple[str, str, float, float]] = []
+    computed_edges: List[Tuple[str, str, float, float, str]] = []
     nodes = list(node_to_body.keys())
     for from_id in nodes:
         for to_id in nodes:
@@ -1086,7 +1087,7 @@ def ensure_solar_system_expansion(conn: sqlite3.Connection) -> None:
                 to_body["mu"],
                 to_body["radius_km"] + to_body["alt_km"],
             )
-            computed_edges.append((from_id, to_id, round(dv_m_s, 2), round(tof_s, 1)))
+            computed_edges.append((from_id, to_id, round(dv_m_s, 2), round(tof_s, 1), "interplanetary"))
 
     mars_mu = planetary["mars"]["mu"]
     r_lmo = planetary["mars"]["radius_km"] + 250.0
@@ -1099,26 +1100,26 @@ def ensure_solar_system_expansion(conn: sqlite3.Connection) -> None:
 
     computed_edges.extend(
         [
-            ("LMO", "PHOBOS", round(lmo_phobos_dv, 2), round(lmo_phobos_tof, 1)),
-            ("PHOBOS", "LMO", round(lmo_phobos_dv, 2), round(lmo_phobos_tof, 1)),
-            ("LMO", "DEIMOS", round(lmo_deimos_dv, 2), round(lmo_deimos_tof, 1)),
-            ("DEIMOS", "LMO", round(lmo_deimos_dv, 2), round(lmo_deimos_tof, 1)),
-            ("PHOBOS", "DEIMOS", round(phobos_deimos_dv, 2), round(phobos_deimos_tof, 1)),
-            ("DEIMOS", "PHOBOS", round(phobos_deimos_dv, 2), round(phobos_deimos_tof, 1)),
+            ("LMO", "PHOBOS", round(lmo_phobos_dv, 2), round(lmo_phobos_tof, 1), "local"),
+            ("PHOBOS", "LMO", round(lmo_phobos_dv, 2), round(lmo_phobos_tof, 1), "local"),
+            ("LMO", "DEIMOS", round(lmo_deimos_dv, 2), round(lmo_deimos_tof, 1), "local"),
+            ("DEIMOS", "LMO", round(lmo_deimos_dv, 2), round(lmo_deimos_tof, 1), "local"),
+            ("PHOBOS", "DEIMOS", round(phobos_deimos_dv, 2), round(phobos_deimos_tof, 1), "local"),
+            ("DEIMOS", "PHOBOS", round(phobos_deimos_dv, 2), round(phobos_deimos_tof, 1), "local"),
         ]
     )
 
     # Approximate heliocentric transfer between Earth LEO and near-Sun orbit marker.
     computed_edges.extend(
         [
-            ("LEO", "SUN", 28000.0, 130.0 * 24.0 * 3600.0),
-            ("SUN", "LEO", 28000.0, 130.0 * 24.0 * 3600.0),
-            ("MERC_ORB", "SUN", 12000.0, 55.0 * 24.0 * 3600.0),
-            ("SUN", "MERC_ORB", 12000.0, 55.0 * 24.0 * 3600.0),
-            ("VEN_ORB", "SUN", 19000.0, 90.0 * 24.0 * 3600.0),
-            ("SUN", "VEN_ORB", 19000.0, 90.0 * 24.0 * 3600.0),
-            ("LMO", "SUN", 22000.0, 180.0 * 24.0 * 3600.0),
-            ("SUN", "LMO", 22000.0, 180.0 * 24.0 * 3600.0),
+            ("LEO", "SUN", 28000.0, 130.0 * 24.0 * 3600.0, "interplanetary"),
+            ("SUN", "LEO", 28000.0, 130.0 * 24.0 * 3600.0, "interplanetary"),
+            ("MERC_ORB", "SUN", 12000.0, 55.0 * 24.0 * 3600.0, "interplanetary"),
+            ("SUN", "MERC_ORB", 12000.0, 55.0 * 24.0 * 3600.0, "interplanetary"),
+            ("VEN_ORB", "SUN", 19000.0, 90.0 * 24.0 * 3600.0, "interplanetary"),
+            ("SUN", "VEN_ORB", 19000.0, 90.0 * 24.0 * 3600.0, "interplanetary"),
+            ("LMO", "SUN", 22000.0, 180.0 * 24.0 * 3600.0, "interplanetary"),
+            ("SUN", "LMO", 22000.0, 180.0 * 24.0 * 3600.0, "interplanetary"),
         ]
     )
 
@@ -2901,7 +2902,7 @@ def compute_fuel_needed_for_delta_v_kg(dry_mass_kg: float, fuel_kg: float, isp_s
 
 def hash_edges(conn: sqlite3.Connection) -> str:
     rows = conn.execute(
-        "SELECT from_id,to_id,dv_m_s,tof_s FROM transfer_edges ORDER BY from_id,to_id"
+        "SELECT from_id,to_id,dv_m_s,tof_s,edge_type FROM transfer_edges ORDER BY from_id,to_id"
     ).fetchall()
     blob = json.dumps([dict(r) for r in rows], separators=(",", ":"), sort_keys=True).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()

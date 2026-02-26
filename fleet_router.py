@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from auth_service import require_login
 import catalog_service
 import celestial_config
+import transfer_planner
 from db import get_db
 from sim_service import (
     effective_time_scale,
@@ -135,87 +136,12 @@ def api_transfer_quote(from_id: str, to_id: str, request: Request, conn: sqlite3
     return result
 
 
-# ── Orbital mechanics helpers for advanced quotes ──────────
-
-# Simplified Keplerian orbital elements (J2000 epoch: 2000-01-01T12:00 TT)
-# Each entry: (a_km, e, i_deg, Omega_deg, w_deg, M0_deg, period_s)
-_BODY_ORBITS: Dict[str, Dict[str, float]] = {
-    "mercury": {"a_km": 57_909_227.0, "period_s": 7_600_521.6},  # 87.969 d
-    "venus":   {"a_km": 108_209_475.0, "period_s": 19_414_166.4},  # 224.701 d
-    "earth":   {"a_km": 149_597_870.7, "period_s": 31_558_149.8},  # 365.256 d
-    "mars":    {"a_km": 227_943_824.0, "period_s": 59_355_072.0},  # 686.971 d
-    "ceres":   {"a_km": 413_767_000.0, "period_s": 145_166_000.0},
-    "vesta":   {"a_km": 353_340_000.0, "period_s": 114_500_000.0},
-    "pallas":  {"a_km": 414_500_000.0, "period_s": 145_700_000.0},
-    "hygiea":  {"a_km": 470_300_000.0, "period_s": 175_400_000.0},
-    "jupiter": {"a_km": 778_570_000.0, "period_s": 374_335_700.0},
-}
-
-# Reference epoch for mean anomaly: game epoch 0 = 2040-01-01T00:00 UTC
-_EPOCH_MEAN_ANOMALY_DEG: Dict[str, float] = {
-    "mercury": 174.796,
-    "venus":   50.115,
-    "earth":   357.529,
-    "mars":    19.373,
-    "ceres":   95.989,
-    "vesta":   149.84,
-    "pallas":  33.2,
-    "hygiea":  98.0,
-    "jupiter": 20.02,
-}
-
-# Which parent body does a location orbit?
-_LOCATION_PARENT_BODY: Dict[str, str] = {
-    "LEO": "earth", "HEO": "earth", "GEO": "earth",
-    "L1": "earth", "L2": "earth", "L3": "earth", "L4": "earth", "L5": "earth",
-    "LLO": "earth", "HLO": "earth",
-    "LUNA_SHACKLETON": "earth", "LUNA_PEARY": "earth", "LUNA_TRANQUILLITATIS": "earth",
-    "LUNA_IMBRIUM": "earth", "LUNA_ANORTHOSITE": "earth", "LUNA_KREEP": "earth",
-    "MERC_ORB": "mercury", "MERC_HEO": "mercury", "MERC_GEO": "mercury",
-    "VEN_ORB": "venus", "VEN_HEO": "venus", "VEN_GEO": "venus", "ZOOZVE": "venus",
-    "LMO": "mars", "HMO": "mars", "MGO": "mars",
-    "PHOBOS": "mars", "DEIMOS": "mars",
-    "CERES_LO": "ceres", "CERES_HO": "ceres",
-    "VESTA_LO": "vesta", "VESTA_HO": "vesta",
-    "PALLAS_LO": "pallas", "PALLAS_HO": "pallas",
-    "HYGIEA_LO": "hygiea", "HYGIEA_HO": "hygiea",
-    "CERES_OCCATOR": "ceres", "CERES_AHUNA": "ceres", "CERES_KERWAN": "ceres",
-    "VESTA_RHEASILVIA": "vesta", "VESTA_MARCIANOVA": "vesta", "VESTA_OPPIA": "vesta",
-    "PALLAS_DIPOLE": "pallas", "PALLAS_EQUATORIAL": "pallas", "PALLAS_PELION": "pallas",
-    "HYGIEA_CENTRAL": "hygiea", "HYGIEA_EASTERN": "hygiea", "HYGIEA_SOUTH": "hygiea",
-    "JUP_LO": "jupiter", "JUP_HO": "jupiter",
-    "IO_LO": "jupiter", "IO_HO": "jupiter",
-    "EUROPA_LO": "jupiter", "EUROPA_HO": "jupiter",
-    "GANYMEDE_LO": "jupiter", "GANYMEDE_HO": "jupiter",
-    "CALLISTO_LO": "jupiter", "CALLISTO_HO": "jupiter",
-    "IO": "jupiter", "EUROPA": "jupiter", "GANYMEDE": "jupiter", "CALLISTO": "jupiter",
-    "SJ_L1": "jupiter", "SJ_L2": "jupiter", "SJ_L3": "jupiter",
-    "SJ_L4": "jupiter", "SJ_L5": "jupiter",
-    "SUN": "sun",
-}
-
-_SUN_MU_KM3_S2 = 1.32712440018e11
-_BODY_CONSTANTS: Dict[str, Dict[str, float]] = {
-    "mercury": {"mu_km3_s2": 22031.86855, "radius_km": 2439.7, "parking_alt_km": 200.0},
-    "venus": {"mu_km3_s2": 324858.592, "radius_km": 6051.8, "parking_alt_km": 250.0},
-    "earth": {"mu_km3_s2": 398600.4418, "radius_km": 6378.137, "parking_alt_km": 400.0},
-    "mars": {"mu_km3_s2": 42828.375214, "radius_km": 3389.5, "parking_alt_km": 250.0},
-    "ceres": {"mu_km3_s2": 62.63, "radius_km": 473.0, "parking_alt_km": 100.0},
-    "vesta": {"mu_km3_s2": 17.29, "radius_km": 262.7, "parking_alt_km": 80.0},
-    "pallas": {"mu_km3_s2": 13.61, "radius_km": 256.0, "parking_alt_km": 80.0},
-    "hygiea": {"mu_km3_s2": 5.56, "radius_km": 217.0, "parking_alt_km": 70.0},
-    "jupiter": {"mu_km3_s2": 126686534.0, "radius_km": 69911.0, "parking_alt_km": 39930000.0},
-}
-
 _ROUTE_CACHE_BUCKET_S = 6.0 * 3600.0
 _ROUTE_CACHE_MAX = 512
 _ROUTE_QUOTE_CACHE: Dict[Tuple[str, str, str, int, int], Dict[str, Any]] = {}
 _TRANSFER_GRAPH_CACHE: Dict[str, Dict[str, List[Tuple[str, float, float]]]] = {}
 
-
-# Cache position lookups bucketed to 5-minute intervals to keep
-# the LRU effective at 48× game speed while staying accurate enough
-# for phase-angle and Hohmann calculations.
+# Position snapshot bucketing for in-transit interpolation
 _DYN_LOC_BUCKET_S = 300  # 5 minutes
 
 
@@ -226,114 +152,6 @@ def _dynamic_locations_by_id(game_time_bucket: int) -> Dict[str, Tuple[float, fl
         cfg, game_time_s=float(game_time_bucket) * _DYN_LOC_BUCKET_S,
     )
     return {str(row[0]): (float(row[5]), float(row[6])) for row in rows}
-
-
-def _body_heliocentric_state(body_id: str, game_time_s: float) -> Optional[Dict[str, float]]:
-    if str(body_id or "").strip().lower() == "sun":
-        return {"r_km": 0.0, "theta_rad": 0.0}
-
-    bucket = int(float(game_time_s) // _DYN_LOC_BUCKET_S)
-    locs = _dynamic_locations_by_id(bucket)
-    sun = locs.get("grp_sun")
-    body = locs.get(f"grp_{body_id}")
-    if not sun or not body:
-        return None
-
-    dx = body[0] - sun[0]
-    dy = body[1] - sun[1]
-    radius_km = max(1e-9, math.hypot(dx, dy))
-    theta_rad = math.atan2(dy, dx) % (2.0 * math.pi)
-    return {"r_km": radius_km, "theta_rad": theta_rad}
-
-
-def _body_phase_solution(from_body: str, to_body: str, game_time_s: float) -> Optional[Dict[str, float]]:
-    from_state = _body_heliocentric_state(from_body, game_time_s)
-    to_state = _body_heliocentric_state(to_body, game_time_s)
-    if not from_state or not to_state:
-        return None
-
-    phase = (to_state["theta_rad"] - from_state["theta_rad"]) % (2.0 * math.pi)
-    r1 = max(1e-9, from_state["r_km"])
-    r2 = max(1e-9, to_state["r_km"])
-    optimal_phase = math.pi * (1.0 - (1.0 / (2.0 ** (2.0 / 3.0))) * ((r1 + r2) / r2) ** (2.0 / 3.0))
-    if r2 < r1:
-        optimal_phase = 2.0 * math.pi - abs(optimal_phase)
-    optimal_phase %= (2.0 * math.pi)
-
-    delta = phase - optimal_phase
-    alignment = (1.0 - math.cos(delta)) / 2.0
-    phase_multiplier = 1.0 + 0.4 * alignment
-
-    return {
-        "r1_km": r1,
-        "r2_km": r2,
-        "phase_angle_deg": float(math.degrees(phase)),
-        "optimal_phase_deg": float(math.degrees(optimal_phase)),
-        "alignment_pct": float(alignment * 100.0),
-        "phase_multiplier": float(phase_multiplier),
-    }
-
-
-def _scan_departure_windows(
-    from_body: str,
-    to_body: str,
-    departure_time_s: float,
-    current_phase_multiplier: float,
-    synodic_period_s: Optional[float],
-) -> List[Dict[str, float]]:
-    if synodic_period_s is None or synodic_period_s <= 0:
-        return []
-
-    horizon_s = max(86400.0, min(float(synodic_period_s), 240.0 * 86400.0))
-    step_s = 86400.0
-    candidates: List[Dict[str, float]] = []
-    samples = int(horizon_s / step_s)
-
-    for idx in range(1, samples + 1):
-        t = float(departure_time_s) + idx * step_s
-        solution = _body_phase_solution(from_body, to_body, t)
-        if not solution:
-            continue
-        multiplier = float(solution["phase_multiplier"])
-        savings_pct = 0.0
-        if current_phase_multiplier > 1e-9:
-            savings_pct = max(0.0, (1.0 - multiplier / current_phase_multiplier) * 100.0)
-        candidates.append(
-            {
-                "departure_time": t,
-                "wait_s": float(t - departure_time_s),
-                "phase_multiplier": multiplier,
-                "phase_angle_deg": float(solution["phase_angle_deg"]),
-                "optimal_phase_deg": float(solution["optimal_phase_deg"]),
-                "alignment_pct": float(solution["alignment_pct"]),
-                "dv_savings_pct": float(savings_pct),
-            }
-        )
-
-    candidates.sort(key=lambda item: (item["phase_multiplier"], item["wait_s"]))
-    return candidates[:3]
-
-
-def _estimate_next_window_s(
-    from_body: str,
-    to_body: str,
-    departure_time_s: float,
-    current_phase_multiplier: float,
-    synodic_period_s: Optional[float],
-) -> Optional[float]:
-    windows = _scan_departure_windows(
-        from_body=from_body,
-        to_body=to_body,
-        departure_time_s=departure_time_s,
-        current_phase_multiplier=current_phase_multiplier,
-        synodic_period_s=synodic_period_s,
-    )
-    if not windows:
-        return None
-    best_wait = float(windows[0]["wait_s"])
-    if float(windows[0]["phase_multiplier"]) >= current_phase_multiplier - 1e-6:
-        return None
-    return best_wait
 
 
 def _clone_json_dict(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -353,17 +171,18 @@ def _edge_hash(conn: sqlite3.Connection) -> str:
     return str(_main().hash_edges(conn))
 
 
-def _get_transfer_graph(conn: sqlite3.Connection, edge_hash: str) -> Dict[str, List[Tuple[str, float, float]]]:
+def _get_transfer_graph(conn: sqlite3.Connection, edge_hash: str) -> Dict[str, List[Tuple[str, float, float, str]]]:
     cached = _TRANSFER_GRAPH_CACHE.get(edge_hash)
     if cached is not None:
         return cached
 
-    rows = conn.execute("SELECT from_id,to_id,dv_m_s,tof_s FROM transfer_edges").fetchall()
-    graph: Dict[str, List[Tuple[str, float, float]]] = {}
+    rows = conn.execute("SELECT from_id,to_id,dv_m_s,tof_s,edge_type FROM transfer_edges").fetchall()
+    graph: Dict[str, List[Tuple[str, float, float, str]]] = {}
     for row in rows:
         src = str(row["from_id"])
         dst = str(row["to_id"])
-        graph.setdefault(src, []).append((dst, float(row["dv_m_s"]), float(row["tof_s"])))
+        etype = str(row["edge_type"] or "local")
+        graph.setdefault(src, []).append((dst, float(row["dv_m_s"]), float(row["tof_s"]), etype))
         graph.setdefault(dst, graph.get(dst, []))
 
     _TRANSFER_GRAPH_CACHE.clear()
@@ -456,7 +275,7 @@ def _solve_dynamic_route(
         if node == to_id:
             break
 
-        for nxt, edge_dv, edge_tof in graph.get(node, []):
+        for nxt, edge_dv, edge_tof, _etype in graph.get(node, []):
             leg_departure = float(departure_time_s) + float(elapsed_s)
             leg = _compute_leg_at_departure(node, nxt, edge_dv, edge_tof, leg_departure, extra_dv_fraction)
 
@@ -640,55 +459,13 @@ def _compute_interplanetary_leg_quote(
     departure_time_s: float,
     extra_dv_fraction: float,
 ) -> Optional[Dict[str, float]]:
-    from_body = _LOCATION_PARENT_BODY.get(from_id, "")
-    to_body = _LOCATION_PARENT_BODY.get(to_id, "")
-    if not from_body or not to_body or from_body == to_body:
-        return None
-    if from_body == "sun" or to_body == "sun":
-        return None
-
-    origin = _BODY_CONSTANTS.get(from_body)
-    destination = _BODY_CONSTANTS.get(to_body)
-    if not origin or not destination:
-        return None
-
-    phase_solution = _body_phase_solution(from_body, to_body, departure_time_s)
-    if not phase_solution:
-        return None
-    from_state = _body_heliocentric_state(from_body, departure_time_s)
-    to_state = _body_heliocentric_state(to_body, departure_time_s)
-    if not from_state or not to_state:
-        return None
-
-    base_dv_m_s, base_tof_s = _main()._hohmann_interplanetary_dv_tof(
-        from_state["r_km"],
-        to_state["r_km"],
-        _SUN_MU_KM3_S2,
-        origin["mu_km3_s2"],
-        origin["radius_km"] + origin["parking_alt_km"],
-        destination["mu_km3_s2"],
-        destination["radius_km"] + destination["parking_alt_km"],
+    """Delegate to transfer_planner (Lambert-based)."""
+    return transfer_planner.compute_interplanetary_leg(
+        from_location=from_id,
+        to_location=to_id,
+        departure_time_s=departure_time_s,
+        extra_dv_fraction=extra_dv_fraction,
     )
-
-    phase_multiplier = float(phase_solution["phase_multiplier"])
-
-    phase_adjusted_dv = base_dv_m_s * phase_multiplier
-    dv_m_s = phase_adjusted_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
-    tof_s = _excess_dv_time_reduction(base_tof_s, phase_adjusted_dv, max(0.0, float(extra_dv_fraction)))
-
-    return {
-        "base_dv_m_s": float(base_dv_m_s),
-        "base_tof_s": float(base_tof_s),
-        "phase_multiplier": float(phase_multiplier),
-        "phase_adjusted_dv_m_s": float(phase_adjusted_dv),
-        "dv_m_s": float(dv_m_s),
-        "tof_s": float(tof_s),
-        "phase_angle_deg": float(phase_solution["phase_angle_deg"]),
-        "optimal_phase_deg": float(phase_solution["optimal_phase_deg"]),
-        "alignment_pct": float(phase_solution["alignment_pct"]),
-        "from_body": from_body,
-        "to_body": to_body,
-    }
 
 
 def _compute_route_quote(
@@ -723,11 +500,7 @@ def _compute_route_quote(
 
 def _is_interplanetary(from_id: str, to_id: str) -> bool:
     """True if the transfer crosses between different heliocentric bodies."""
-    a = _LOCATION_PARENT_BODY.get(from_id, "")
-    b = _LOCATION_PARENT_BODY.get(to_id, "")
-    if not a or not b or a == "sun" or b == "sun":
-        return False
-    return a != b
+    return transfer_planner.is_interplanetary(from_id, to_id)
 
 
 def _excess_dv_time_reduction(base_tof_s: float, base_dv_m_s: float, extra_dv_fraction: float) -> float:
@@ -746,6 +519,90 @@ def _excess_dv_time_reduction(base_tof_s: float, base_dv_m_s: float, extra_dv_fr
     # Using: tof_new = tof_base / (1 + extra_dv_fraction)^0.6
     reduction = 1.0 / ((1.0 + extra_dv_fraction) ** 0.6)
     return max(3600.0, base_tof_s * reduction)  # Never less than 1 hour
+
+
+@router.get("/api/transfer/porkchop")
+def api_transfer_porkchop(
+    from_id: str,
+    to_id: str,
+    request: Request,
+    departure_start: Optional[float] = Query(None, description="Earliest departure game-time (epoch s). Defaults to now."),
+    departure_end: Optional[float] = Query(None, description="Latest departure game-time. Defaults to start + synodic period."),
+    tof_min_days: float = Query(30.0, ge=1.0, le=3650.0, description="Minimum time of flight in days"),
+    tof_max_days: Optional[float] = Query(None, description="Maximum time of flight in days. Auto-computed if omitted."),
+    grid_size: int = Query(40, ge=5, le=100, description="Grid resolution (NxN)"),
+    max_revs: int = Query(0, ge=0, le=3, description="Max Lambert revolution count"),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Compute a porkchop plot for an interplanetary transfer.
+
+    Returns a 2D grid of Δv values indexed by departure time × TOF,
+    plus the top-5 best-Δv solutions with full details.
+    """
+    require_login(conn, request)
+
+    now = game_now_s()
+
+    # Resolve body pair for auto-defaults
+    from_body = transfer_planner.location_parent_body(from_id)
+    to_body = transfer_planner.location_parent_body(to_id)
+    if not from_body or not to_body:
+        raise HTTPException(status_code=400, detail="Unknown location(s)")
+
+    from_helio = transfer_planner._resolve_heliocentric_body(from_body)
+    to_helio = transfer_planner._resolve_heliocentric_body(to_body)
+    if from_helio == to_helio:
+        raise HTTPException(status_code=400, detail="Not an interplanetary transfer")
+
+    # Auto-compute departure window from synodic period
+    synodic = transfer_planner.get_synodic_period_s(from_helio, to_helio)
+    if synodic is None or synodic <= 0:
+        synodic = 365.25 * 86400.0  # fallback: 1 year
+
+    dep_start = departure_start if departure_start is not None else now
+    dep_end = departure_end if departure_end is not None else dep_start + synodic
+
+    if dep_end <= dep_start:
+        raise HTTPException(status_code=400, detail="departure_end must be after departure_start")
+
+    # Auto-compute TOF range from Hohmann estimate
+    cfg = transfer_planner._get_config()
+    mu_sun = celestial_config.get_body_mu(cfg, "sun")
+    try:
+        r1, _ = celestial_config.compute_body_state(cfg, from_helio, dep_start)
+        r2, _ = celestial_config.compute_body_state(cfg, to_helio, dep_start)
+        import math as _math
+        r1_km = _math.sqrt(r1[0]**2 + r1[1]**2 + r1[2]**2)
+        r2_km = _math.sqrt(r2[0]**2 + r2[1]**2 + r2[2]**2)
+        hohmann_tof_s = _math.pi * _math.sqrt(((r1_km + r2_km) / 2.0) ** 3 / mu_sun)
+    except Exception:
+        hohmann_tof_s = 200.0 * 86400.0
+
+    tof_min_s = tof_min_days * 86400.0
+    if tof_max_days is not None:
+        tof_max_s = tof_max_days * 86400.0
+    else:
+        # Default: 0.3× to 2.5× Hohmann TOF, clamped
+        tof_max_s = min(hohmann_tof_s * 2.5, 3650.0 * 86400.0)
+        tof_min_s = max(tof_min_s, hohmann_tof_s * 0.3)
+
+    if tof_max_s <= tof_min_s:
+        tof_max_s = tof_min_s + 30.0 * 86400.0
+
+    result = transfer_planner.compute_porkchop(
+        from_location=from_id,
+        to_location=to_id,
+        departure_start_s=dep_start,
+        departure_end_s=dep_end,
+        tof_min_s=tof_min_s,
+        tof_max_s=tof_max_s,
+        grid_size=grid_size,
+        max_revs=max_revs,
+    )
+    if result is None:
+        raise HTTPException(status_code=400, detail="Cannot compute porkchop for this pair")
+
+    return result
 
 
 @router.get("/api/transfer_quote_advanced")
@@ -796,14 +653,13 @@ def api_transfer_quote_advanced(
     synodic_period_s = None
     next_window_s = None
 
-    if from_body in _BODY_ORBITS and to_body in _BODY_ORBITS:
-        p1 = _BODY_ORBITS[from_body]["period_s"]
-        p2 = _BODY_ORBITS[to_body]["period_s"]
-        if abs((1.0 / p1) - (1.0 / p2)) > 1e-12:
-            synodic_period_s = round(abs(1.0 / (1.0 / p1 - 1.0 / p2)), 0)
-            next_wait = _estimate_next_window_s(
-                from_body=from_body,
-                to_body=to_body,
+    if from_body and to_body:
+        synodic_raw = transfer_planner.get_synodic_period_s(from_body, to_body)
+        if synodic_raw and synodic_raw > 0:
+            synodic_period_s = round(synodic_raw, 0)
+            next_wait = transfer_planner.estimate_next_window_s(
+                from_location=from_id,
+                to_location=to_id,
                 departure_time_s=dep_time,
                 current_phase_multiplier=phase_multiplier,
                 synodic_period_s=synodic_period_s,
@@ -813,9 +669,9 @@ def api_transfer_quote_advanced(
 
     window_suggestions: List[Dict[str, float]] = []
     if from_body and to_body and synodic_period_s:
-        window_suggestions = _scan_departure_windows(
-            from_body=from_body,
-            to_body=to_body,
+        window_suggestions = transfer_planner.scan_departure_windows(
+            from_location=from_id,
+            to_location=to_id,
             departure_time_s=dep_time,
             current_phase_multiplier=phase_multiplier,
             synodic_period_s=float(synodic_period_s),

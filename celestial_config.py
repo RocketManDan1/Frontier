@@ -8,7 +8,7 @@ from db import APP_DIR
 CONFIG_PATH = APP_DIR / "config" / "celestial_config.json"
 
 LocationRow = Tuple[str, str, Optional[str], int, int, float, float]
-EdgeRow = Tuple[str, str, float, float]
+EdgeRow = Tuple[str, str, float, float, str]
 
 
 class CelestialConfigError(ValueError):
@@ -118,6 +118,86 @@ def _compute_keplerian_position(pos: Dict[str, Any], field_prefix: str, game_tim
     x = r11 * x_orb + r12 * y_orb
     y = r21 * x_orb + r22 * y_orb
     return x, y
+
+
+Vec3 = Tuple[float, float, float]
+
+
+def _compute_keplerian_state_3d(
+    pos: Dict[str, Any], field_prefix: str, game_time_s: float,
+) -> Tuple[Vec3, Vec3]:
+    """Compute 3D position (km) and velocity (km/s) from Keplerian elements.
+
+    Returns ((x,y,z), (vx,vy,vz)) in the parent body's reference frame.
+    """
+    a_km = _as_float(pos.get("a_km"), f"{field_prefix}.a_km")
+    if a_km <= 0.0:
+        raise CelestialConfigError(f"{field_prefix}.a_km must be > 0")
+
+    e = _as_float(pos.get("e", 0.0), f"{field_prefix}.e")
+    if e < 0.0 or e >= 1.0:
+        raise CelestialConfigError(f"{field_prefix}.e must be in [0, 1)")
+
+    i_rad = math.radians(_as_float(pos.get("i_deg", 0.0), f"{field_prefix}.i_deg"))
+    omega_big_rad = math.radians(_as_float(pos.get("Omega_deg", 0.0), f"{field_prefix}.Omega_deg"))
+    omega_small_rad = math.radians(_as_float(pos.get("omega_deg", 0.0), f"{field_prefix}.omega_deg"))
+    m0_rad = math.radians(_as_float(pos.get("M0_deg", 0.0), f"{field_prefix}.M0_deg"))
+    epoch_jd = _as_float(pos.get("epoch_jd"), f"{field_prefix}.epoch_jd")
+    period_s = _as_float(pos.get("period_s"), f"{field_prefix}.period_s")
+    if period_s <= 0.0:
+        raise CelestialConfigError(f"{field_prefix}.period_s must be > 0")
+
+    current_jd = _unix_s_to_julian_day(game_time_s)
+    dt_s = (current_jd - epoch_jd) * 86400.0
+    n = (2.0 * math.pi) / period_s          # mean motion (rad/s)
+    mean_anom = m0_rad + n * dt_s
+    mean_anom = math.fmod(mean_anom, 2.0 * math.pi)
+    if mean_anom < 0.0:
+        mean_anom += 2.0 * math.pi
+
+    E = _solve_eccentric_anomaly(mean_anom, e)
+    cos_E = math.cos(E)
+    sin_E = math.sin(E)
+    sqrt_1me2 = math.sqrt(max(0.0, 1.0 - e * e))
+
+    # Position in perifocal (orbital) frame
+    x_orb = a_km * (cos_E - e)
+    y_orb = a_km * sqrt_1me2 * sin_E
+
+    # Velocity in perifocal frame  (km/s)
+    denom = 1.0 - e * cos_E
+    if abs(denom) < 1e-15:
+        denom = 1e-15
+    vx_orb = -n * a_km * sin_E / denom
+    vy_orb = n * a_km * sqrt_1me2 * cos_E / denom
+
+    # 3D rotation matrix (perifocal → inertial)
+    cos_O = math.cos(omega_big_rad)
+    sin_O = math.sin(omega_big_rad)
+    cos_w = math.cos(omega_small_rad)
+    sin_w = math.sin(omega_small_rad)
+    cos_i = math.cos(i_rad)
+    sin_i = math.sin(i_rad)
+
+    r11 = cos_O * cos_w - sin_O * sin_w * cos_i
+    r12 = -cos_O * sin_w - sin_O * cos_w * cos_i
+    r13 = sin_O * sin_i
+    r21 = sin_O * cos_w + cos_O * sin_w * cos_i
+    r22 = -sin_O * sin_w + cos_O * cos_w * cos_i
+    r23 = -cos_O * sin_i
+    r31 = sin_w * sin_i
+    r32 = cos_w * sin_i
+    r33 = cos_i
+
+    rx = r11 * x_orb + r12 * y_orb
+    ry = r21 * x_orb + r22 * y_orb
+    rz = r31 * x_orb + r32 * y_orb
+
+    vx = r11 * vx_orb + r12 * vy_orb
+    vy = r21 * vx_orb + r22 * vy_orb
+    vz = r31 * vx_orb + r32 * vy_orb
+
+    return (rx, ry, rz), (vx, vy, vz)
 
 
 def load_celestial_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
@@ -422,8 +502,8 @@ def build_locations_and_edges(config: Dict[str, Any], game_time_s: Optional[floa
         # Generate bidirectional transfer edges for landing/ascent
         landing_dv = _as_float(site.get("landing_dv_m_s", 1870), f"surface_sites[{sid}].landing_dv_m_s")
         landing_tof = _as_float(site.get("landing_tof_s", 3600), f"surface_sites[{sid}].landing_tof_s")
-        surface_edge_rows.append((orbit_node_id, sid, float(landing_dv), float(landing_tof)))
-        surface_edge_rows.append((sid, orbit_node_id, float(landing_dv), float(landing_tof)))
+        surface_edge_rows.append((orbit_node_id, sid, float(landing_dv), float(landing_tof), "landing"))
+        surface_edge_rows.append((sid, orbit_node_id, float(landing_dv), float(landing_tof), "landing"))
 
     for loc_id, _, parent_id, _, _, _, _ in location_rows:
         if parent_id and parent_id not in location_ids:
@@ -450,7 +530,12 @@ def build_locations_and_edges(config: Dict[str, Any], game_time_s: Optional[floa
             )
         dv_m_s = _as_float(edge.get("dv_m_s"), f"transfer_edges[{src}->{dst}].dv_m_s")
         tof_s = _as_float(edge.get("tof_s"), f"transfer_edges[{src}->{dst}].tof_s")
-        edge_rows.append((src, dst, float(dv_m_s), float(tof_s)))
+        edge_type = edge.get("type", "local")
+        if edge_type not in ("local", "interplanetary", "lagrange"):
+            raise CelestialConfigError(
+                f"transfer_edges[{src}->{dst}].type must be 'local', 'interplanetary', or 'lagrange'; got '{edge_type}'"
+            )
+        edge_rows.append((src, dst, float(dv_m_s), float(tof_s), str(edge_type)))
 
     # Append surface site landing/ascent edges
     edge_rows.extend(surface_edge_rows)
@@ -643,3 +728,152 @@ def build_location_metadata(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
 def load_location_metadata(path: Path = CONFIG_PATH) -> Dict[str, Dict[str, Any]]:
     config = load_celestial_config(path)
     return build_location_metadata(config)
+
+
+# ── Body state vector API ──────────────────────────────────────
+
+def _build_bodies_by_id(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Index config bodies by id."""
+    bodies = config.get("bodies")
+    if not isinstance(bodies, list):
+        return {}
+    return {str(b.get("id", "")).strip(): b for b in bodies if isinstance(b, dict) and b.get("id")}
+
+
+def compute_body_state(
+    config: Dict[str, Any],
+    body_id: str,
+    game_time_s: float,
+) -> Tuple[Vec3, Vec3]:
+    """Compute heliocentric 3D position (km) and velocity (km/s) for a body.
+
+    Resolves the parent chain (e.g. Moon → Earth → Sun) by accumulating
+    positions and velocities up the hierarchy.
+
+    Returns ((x, y, z), (vx, vy, vz)) in heliocentric frame.
+    """
+    bodies_by_id = _build_bodies_by_id(config)
+    return _compute_body_state_recursive(bodies_by_id, body_id, game_time_s)
+
+
+def _compute_body_state_recursive(
+    bodies_by_id: Dict[str, Dict[str, Any]],
+    body_id: str,
+    game_time_s: float,
+) -> Tuple[Vec3, Vec3]:
+    body = bodies_by_id.get(body_id)
+    if not body:
+        raise CelestialConfigError(f"Unknown body_id: {body_id}")
+
+    pos = body.get("position")
+    if not isinstance(pos, dict):
+        raise CelestialConfigError(f"Body {body_id} must define a position object")
+
+    pos_type = str(pos.get("type") or "").strip().lower()
+
+    if pos_type == "fixed":
+        x = _as_float(pos.get("x_km", 0.0), f"bodies[{body_id}].position.x_km")
+        y = _as_float(pos.get("y_km", 0.0), f"bodies[{body_id}].position.y_km")
+        return (x, y, 0.0), (0.0, 0.0, 0.0)
+
+    if pos_type == "polar_from_body":
+        # Static position, zero velocity (belt marker etc.)
+        center_id = str(pos.get("center_body_id") or "").strip()
+        radius_km = _as_float(pos.get("radius_km", 0.0), f"bodies[{body_id}].position.radius_km")
+        angle_rad = math.radians(_as_float(pos.get("angle_deg", 0.0), f"bodies[{body_id}].position.angle_deg"))
+        parent_r, parent_v = _compute_body_state_recursive(bodies_by_id, center_id, game_time_s) if center_id else ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+        return (
+            (parent_r[0] + radius_km * math.cos(angle_rad), parent_r[1] + radius_km * math.sin(angle_rad), parent_r[2]),
+            parent_v,
+        )
+
+    if pos_type == "keplerian":
+        center_id = str(pos.get("center_body_id") or "").strip()
+        local_r, local_v = _compute_keplerian_state_3d(pos, f"bodies[{body_id}].position", game_time_s)
+
+        if center_id:
+            parent_r, parent_v = _compute_body_state_recursive(bodies_by_id, center_id, game_time_s)
+            return (
+                (parent_r[0] + local_r[0], parent_r[1] + local_r[1], parent_r[2] + local_r[2]),
+                (parent_v[0] + local_v[0], parent_v[1] + local_v[1], parent_v[2] + local_v[2]),
+            )
+        return local_r, local_v
+
+    raise CelestialConfigError(f"Body {body_id} has unsupported position.type: {pos_type}")
+
+
+def get_body_mu(config: Dict[str, Any], body_id: str) -> float:
+    """Get gravitational parameter μ (km³/s²) for a body from config."""
+    bodies_by_id = _build_bodies_by_id(config)
+    body = bodies_by_id.get(body_id)
+    if not body:
+        raise CelestialConfigError(f"Unknown body_id: {body_id}")
+    mu = body.get("mu_km3_s2")
+    if mu is None:
+        raise CelestialConfigError(f"Body {body_id} has no mu_km3_s2")
+    return float(mu)
+
+
+def get_body_radius(config: Dict[str, Any], body_id: str) -> float:
+    """Get body radius (km) from config."""
+    bodies_by_id = _build_bodies_by_id(config)
+    body = bodies_by_id.get(body_id)
+    if not body:
+        raise CelestialConfigError(f"Unknown body_id: {body_id}")
+    return float(body.get("radius_km", 0.0))
+
+
+def get_body_soi(config: Dict[str, Any], body_id: str) -> Optional[float]:
+    """Get SOI radius (km) for a body, or None if not defined."""
+    bodies_by_id = _build_bodies_by_id(config)
+    body = bodies_by_id.get(body_id)
+    if not body:
+        return None
+    soi = body.get("soi_radius_km")
+    return float(soi) if soi is not None else None
+
+
+def build_location_parent_body_map(config: Dict[str, Any]) -> Dict[str, str]:
+    """Build location_id → parent_body_id mapping from orbit_nodes, markers, and surface_sites."""
+    result: Dict[str, str] = {}
+
+    for node in (config.get("orbit_nodes") or []):
+        if isinstance(node, dict):
+            nid = node.get("id")
+            bid = node.get("body_id")
+            if nid and bid:
+                result[str(nid)] = str(bid)
+
+    for marker in (config.get("markers") or []):
+        if isinstance(marker, dict):
+            mid = marker.get("id")
+            bid = marker.get("body_id")
+            if mid and bid:
+                result[str(mid)] = str(bid)
+
+    for site in (config.get("surface_sites") or []):
+        if isinstance(site, dict):
+            sid = site.get("id")
+            bid = site.get("body_id")
+            if sid and bid:
+                result[str(sid)] = str(bid)
+
+    # Lagrange points → map to primary body
+    for lsys in (config.get("lagrange_systems") or []):
+        if isinstance(lsys, dict):
+            primary = lsys.get("primary_body_id")
+            for pt in (lsys.get("points") or []):
+                if isinstance(pt, dict) and pt.get("id") and primary:
+                    result[str(pt["id"])] = str(primary)
+
+    return result
+
+
+def get_orbit_node_radius(config: Dict[str, Any], location_id: str) -> Optional[float]:
+    """Get the orbital radius (km from body center) for an orbit_node location."""
+    for node in (config.get("orbit_nodes") or []):
+        if isinstance(node, dict) and str(node.get("id", "")) == location_id:
+            r = node.get("radius_km")
+            if r is not None:
+                return float(r)
+    return None
