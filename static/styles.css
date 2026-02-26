@@ -3248,6 +3248,159 @@ body.fleetPage {
   color: rgba(163, 184, 203, 0.9);
 }
 
+/* ── Shipyard Mode Selector ──────────────────────────────── */
+
+.shipyardModeSelect {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  min-height: 420px;
+}
+
+.shipyardModeTitle {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.shipyardModeCards {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.shipyardModeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 220px;
+  padding: 28px 18px 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(8, 13, 22, 0.7);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 100ms ease;
+  text-align: center;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.shipyardModeCard:hover {
+  border-color: rgba(109, 182, 255, 0.55);
+  background: rgba(14, 26, 42, 0.85);
+  box-shadow: 0 0 14px rgba(79, 195, 247, 0.12);
+  transform: translateY(-2px);
+}
+
+.shipyardModeCard:active {
+  transform: translateY(0);
+}
+
+.shipyardModeCard .modeIcon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.shipyardModeCard .modeLabel {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.shipyardModeCard .modeDesc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* ── Ship Selector (Edit Mode) ───────────────────────────── */
+
+.shipyardShipSelect {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 420px;
+}
+
+.shipyardShipList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.shipyardShipCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: rgba(8, 13, 22, 0.55);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.shipyardShipCard:hover {
+  border-color: rgba(109, 182, 255, 0.5);
+  background: rgba(14, 26, 42, 0.7);
+}
+
+.shipyardShipCard .shipCardName {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.shipyardShipCard .shipCardDetail {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.shipyardShipCardDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Boost cost panel ────────────────────────────────────── */
+
+.shipyardBoostCost {
+  background: rgba(18, 30, 45, 0.8);
+  border: 1px solid rgba(109, 182, 255, 0.2);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.boostCostLine {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.boostCostLine b {
+  font-weight: 600;
+}
+
+.boostCostTotal {
+  border-top: 1px solid rgba(109, 182, 255, 0.15);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.boostCostInsufficient {
+  color: #ff9aa3;
+}
+
 .shipyardPanel {
   display: grid;
   gap: 8px;
@@ -3269,31 +3422,268 @@ body.fleetPage {
 
 .shipyardLayout {
   display: grid;
-  grid-template-columns: 1fr 1fr 300px;
+  grid-template-columns: 340px 1fr 300px;
   gap: 8px;
+  min-height: 520px;
 }
 
 .shipyardColumn {
   min-height: 360px;
 }
 
-.shipyardGarage,
-.shipyardSlots {
-  display: grid;
+/* ── Ship Blueprint (Column 1) ─────────────────────────── */
+
+.shipyardBlueprint {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.blueprintScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 2px;
+}
+
+/* Each category section in the blueprint */
+.bpSection {
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: rgba(8, 13, 22, 0.55);
+  transition: border-color 180ms ease, background 180ms ease;
+  overflow: hidden;
+}
+
+.bpSection.isActive {
+  border-color: rgba(109, 182, 255, 0.5);
+  background: rgba(14, 26, 42, 0.8);
+}
+
+.bpSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+
+.bpSectionHeader:hover {
+  background: rgba(79, 195, 247, 0.06);
+}
+
+.bpSection.isActive .bpSectionHeader {
+  background: rgba(79, 195, 247, 0.08);
+}
+
+.bpSectionColorBar {
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bpSectionLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  flex: 1;
+}
+
+.bpSection.isActive .bpSectionLabel {
+  color: var(--text);
+}
+
+.bpSectionCount {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.6;
+  min-width: 14px;
+  text-align: right;
+}
+
+/* Slot grid within each section */
+.bpSlotRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 8px 8px;
+}
+
+.bpSlotRow:empty {
+  display: none;
+}
+
+/* Individual slot */
+.bpSlot {
+  width: 68px;
+  height: 68px;
+  border-radius: 5px;
+  position: relative;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+/* Empty "add" slot */
+.bpSlotEmpty {
+  border: 1px dashed rgba(109, 182, 255, 0.2);
+  background: rgba(109, 182, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  color: rgba(109, 182, 255, 0.3);
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.bpSlotEmpty:hover {
+  border-color: rgba(109, 182, 255, 0.45);
+  background: rgba(109, 182, 255, 0.07);
+  color: rgba(109, 182, 255, 0.6);
+}
+
+.bpSection.isActive .bpSlotEmpty {
+  border-color: rgba(109, 182, 255, 0.35);
+  background: rgba(109, 182, 255, 0.05);
+}
+
+/* Filled slot - wraps an invCell */
+.bpSlotFilled {
+  border: 1px solid transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.bpSlotFilled:hover {
+  border-color: rgba(255, 120, 120, 0.45);
+  box-shadow: 0 0 6px rgba(255, 80, 80, 0.15);
+}
+
+.bpSlotFilled .invCell {
+  width: 100%;
+  height: 100%;
+}
+
+/* Remove overlay on hover */
+.bpSlotRemove {
+  position: absolute;
+  inset: 0;
+  background: rgba(140, 30, 30, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.bpSlotRemove::after {
+  content: "✕";
+  color: #ff9aa3;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.bpSlotFilled:hover .bpSlotRemove {
+  opacity: 1;
+}
+
+/* Drag-over highlight for slots */
+.bpSlot.dragOver {
+  border-color: rgba(79, 195, 247, 0.7) !important;
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.25);
+  background: rgba(79, 195, 247, 0.08);
+}
+
+/* ── Parts Picker (Column 2) ───────────────────────────── */
+
+.shipyardPicker {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerHeaderBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
   gap: 8px;
 }
 
-.shipyardSlots {
-  min-height: 360px;
+.pickerCategoryBadge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
+  background: rgba(9, 16, 25, 0.76);
+  color: var(--muted);
+}
+
+.pickerCategoryBadge.hasCategory {
+  border-color: rgba(109, 182, 255, 0.4);
+  color: var(--text);
+  background: rgba(47, 99, 161, 0.18);
+}
+
+.pickerGrid {
+  flex: 1 1 0;
+  min-height: 120px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 76px);
+  gap: 4px;
+  justify-content: start;
   align-content: start;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+/* When fuel section is visible, constrain parts grid to ~half */
+.shipyardPicker.hasFuel .pickerGrid {
+  flex: 0 1 50%;
+}
+
+.pickerEmpty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pickerItemCell {
+  position: relative;
+}
+
+.pickerItemCell.isDraggable {
+  cursor: pointer;
+}
+
+.pickerItemCell.isDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* ── Fuel Loading Section ────────────────────────────────── */
 
 .shipyardFuelSection {
+  flex: 0 0 auto;
   border-top: 1px solid var(--border-soft);
   padding-top: 10px;
   margin-top: 10px;
+  overflow-y: auto;
 }
 
 .shipyardFuelHeader {
@@ -3368,6 +3758,8 @@ body.fleetPage {
   color: var(--text);
   border-color: #4fc3f7;
 }
+
+/* ── Legacy shipyard classes (kept for compatibility) ──── */
 
 .shipyardCardStrip {
   max-height: 260px;
@@ -3471,6 +3863,10 @@ body.fleetPage {
 
 .shipyardStats {
   margin-top: 0;
+}
+
+.shipyardStatsCol {
+  overflow-y: auto;
 }
 
 .shipyardBuildBar {

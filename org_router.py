@@ -51,6 +51,7 @@ class BoostRequest(BaseModel):
     item_id: Optional[str] = None
     quantity: float = 1.0
     items: list[BoostLineItemRequest] = []
+    fuel_kg: Optional[float] = None
 
 class BoostCostRequest(BaseModel):
     mass_kg: float
@@ -201,7 +202,7 @@ def api_boost_to_leo(
                 raise ValueError("No boost items selected")
             manifest = [{"item_id": str(body.item_id), "quantity": float(body.quantity)}]
 
-        result = org_service.boost_manifest_to_leo(conn, org_id, manifest, corp_id=corp_id or "")
+        result = org_service.boost_manifest_to_leo(conn, org_id, manifest, corp_id=corp_id or "", fuel_kg=body.fuel_kg)
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

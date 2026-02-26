@@ -104,6 +104,7 @@ class ShipyardPreviewReq(BaseModel):
     parts: List[Any] = Field(default_factory=list)
     source_location_id: Optional[str] = None
     fuel_kg: Optional[float] = None
+    unlimited_fuel: bool = False
 
 
 class ShipyardBuildReq(BaseModel):
@@ -136,7 +137,11 @@ def api_shipyard_preview(req: ShipyardPreviewReq, request: Request, conn: sqlite
     fuel_capacity_kg = base_stats.get("fuel_capacity_kg", 0.0)
 
     # Determine available water at location
-    available_fuel_kg = _get_available_water_kg(conn, source_location_id, corp_id=corp_id or "")
+    if req.unlimited_fuel:
+        # Boost mode: unlimited water (will be boosted from Earth)
+        available_fuel_kg = fuel_capacity_kg
+    else:
+        available_fuel_kg = _get_available_water_kg(conn, source_location_id, corp_id=corp_id or "")
 
     # Apply requested fuel level
     requested_fuel = req.fuel_kg

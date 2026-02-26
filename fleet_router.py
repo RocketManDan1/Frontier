@@ -148,6 +148,7 @@ _BODY_ORBITS: Dict[str, Dict[str, float]] = {
     "vesta":   {"a_km": 353_340_000.0, "period_s": 114_500_000.0},
     "pallas":  {"a_km": 414_500_000.0, "period_s": 145_700_000.0},
     "hygiea":  {"a_km": 470_300_000.0, "period_s": 175_400_000.0},
+    "jupiter": {"a_km": 778_570_000.0, "period_s": 374_335_700.0},
 }
 
 # Reference epoch for mean anomaly: game epoch 0 = 2040-01-01T00:00 UTC
@@ -160,6 +161,7 @@ _EPOCH_MEAN_ANOMALY_DEG: Dict[str, float] = {
     "vesta":   149.84,
     "pallas":  33.2,
     "hygiea":  98.0,
+    "jupiter": 20.02,
 }
 
 # Which parent body does a location orbit?
@@ -181,6 +183,14 @@ _LOCATION_PARENT_BODY: Dict[str, str] = {
     "VESTA_RHEASILVIA": "vesta", "VESTA_MARCIANOVA": "vesta", "VESTA_OPPIA": "vesta",
     "PALLAS_DIPOLE": "pallas", "PALLAS_EQUATORIAL": "pallas", "PALLAS_PELION": "pallas",
     "HYGIEA_CENTRAL": "hygiea", "HYGIEA_EASTERN": "hygiea", "HYGIEA_SOUTH": "hygiea",
+    "JUP_LO": "jupiter", "JUP_HO": "jupiter",
+    "IO_LO": "jupiter", "IO_HO": "jupiter",
+    "EUROPA_LO": "jupiter", "EUROPA_HO": "jupiter",
+    "GANYMEDE_LO": "jupiter", "GANYMEDE_HO": "jupiter",
+    "CALLISTO_LO": "jupiter", "CALLISTO_HO": "jupiter",
+    "IO": "jupiter", "EUROPA": "jupiter", "GANYMEDE": "jupiter", "CALLISTO": "jupiter",
+    "SJ_L1": "jupiter", "SJ_L2": "jupiter", "SJ_L3": "jupiter",
+    "SJ_L4": "jupiter", "SJ_L5": "jupiter",
     "SUN": "sun",
 }
 
@@ -194,6 +204,7 @@ _BODY_CONSTANTS: Dict[str, Dict[str, float]] = {
     "vesta": {"mu_km3_s2": 17.29, "radius_km": 262.7, "parking_alt_km": 80.0},
     "pallas": {"mu_km3_s2": 13.61, "radius_km": 256.0, "parking_alt_km": 80.0},
     "hygiea": {"mu_km3_s2": 5.56, "radius_km": 217.0, "parking_alt_km": 70.0},
+    "jupiter": {"mu_km3_s2": 126686534.0, "radius_km": 69911.0, "parking_alt_km": 39930000.0},
 }
 
 _ROUTE_CACHE_BUCKET_S = 6.0 * 3600.0

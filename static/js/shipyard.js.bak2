@@ -1,27 +1,20 @@
 /**
- * Shipyard — 3-Mode Slot-Based Ship Designer
- *
- * Modes:
- *   "boost" — Build to Boost: purchase parts from Earth catalog, boost to LEO.
- *             No inventory needed. Costs $100M + $5K/kg. Parts limited to TL 1-2.5.
- *   "site"  — Build from Site: consume parts from a location's existing inventory.
- *   "edit"  — Edit Ship: select a docked ship, add/remove parts from local inventory.
- *             Under the hood: deconstruct old ship + rebuild new.
+ * Shipyard — Slot-Based Ship Designer
  *
  * Layout: 3-column
  *   Left:   Ship Blueprint — vertical category sections, each with filled slots + empty "add" slot
- *   Center: Parts Picker — filtered to the active category
- *   Right:  Stats — delta-v, power balance, mass budget, boost cost (boost mode)
+ *   Center: Parts Picker — filtered to the active category, click/drag to add
+ *   Right:  Stats — delta-v, power balance, mass budget
+ *
+ * Interaction:
+ *   - Click a category header or empty slot → sets activeCategory, Picker shows those parts
+ *   - Click a part in the Picker → adds it to the active category slots
+ *   - Drag from Picker → drop on any slot or section
+ *   - Click a filled slot → removes that part
+ *   - Each category always shows one trailing empty "+" slot
  */
 (function () {
-  /* ── Screen refs ──────────────────────────────────────── */
-  const modeSelectEl = document.getElementById("shipyardModeSelect");
-  const shipSelectEl = document.getElementById("shipyardShipSelect");
-  const shipListEl = document.getElementById("shipyardShipList");
-  const backToModesBtn = document.getElementById("shipyardBackToModes");
-  const designerEl = document.getElementById("shipyardDesigner");
-
-  /* ── Designer DOM refs ────────────────────────────────── */
+  /* ── DOM refs ─────────────────────────────────────────── */
   const blueprintEl = document.getElementById("shipyardBlueprint");
   const pickerEl = document.getElementById("shipyardPicker");
   const pickerLabelEl = document.getElementById("pickerCategoryLabel");
@@ -31,9 +24,6 @@
   const shipNameEl = document.getElementById("shipyardName");
   const sourceLocationEl = document.getElementById("shipyardSourceLocation");
   const sourceHintEl = document.getElementById("shipyardSourceHint");
-  const sourceFieldEl = document.getElementById("shipyardSourceField");
-  const modeBackBtn = document.getElementById("shipyardModeBack");
-  const boostCostEl = document.getElementById("shipyardBoostCost");
   const itemDisplay = window.ItemDisplay || null;
 
   // Fuel loading elements
@@ -45,40 +35,28 @@
   const fuelLabelEl = document.getElementById("shipyardFuelLabel");
   const fuelFillBtn = document.getElementById("shipyardFuelFillBtn");
   const fuelEmptyBtn = document.getElementById("shipyardFuelEmptyBtn");
-  const pickerSectionEl = fuelSectionEl ? fuelSectionEl.closest(".shipyardPicker") : document.querySelector(".shipyardPicker");
 
   const SHIPYARD_DRAG_MIME = "application/x-earthmoon-shipyard-item";
 
   /* ── State ────────────────────────────────────────────── */
-  let currentMode = "";             // "boost" | "site" | "edit"
   let buildLocationId = "";
   let catalogParts = [];
-  let garageParts = [];             // inventory parts at current source (site/edit) or boostable items (boost)
-  let selectedItemIds = [];         // flat array of selected item_id (order preserved for API)
+  let garageParts = [];           // inventory parts at current source
+  let selectedItemIds = [];       // flat array of selected item_id (order preserved for API)
   let buildSourceLocations = [];
   let sourceRefreshTimer = null;
   let lastCatalogHash = "";
 
   // Slot UI state
-  let activeCategory = "";          // which section is currently selected for the picker
+  let activeCategory = "";        // which section is currently selected for the picker
 
   // Fuel loading state
   let fuelCapacityKg = 0;
   let availableFuelKg = 0;
   let requestedFuelKg = 0;
 
-  // Boost mode state
-  let boostBaseCost = 100000000;
-  let boostCostPerKg = 5000;
-  let orgBalanceUsd = 0;
-
-  // Edit mode state
-  let editShipId = "";
-  let editShipOriginalParts = [];   // original part item_ids before editing
-  let editShipLocationId = "";
-  let allFleetShips = [];
-
   /* ── Category definitions ─────────────────────────────── */
+  // Order = top-to-bottom (robonauts at top, thrusters at bottom)
   const SLOT_CATEGORIES = [
     { id: "robonauts",    label: "Robonauts",     catId: "robonaut",    hue: 310, tooltip: "Automated systems that prospect celestial sites and enable refueling." },
     { id: "refineries",   label: "Refineries",    catId: "refinery",    hue: 340, tooltip: "Processes raw feedstock into refined industrial resources." },
@@ -110,28 +88,6 @@
 
   function fmtMs(v) { return `${Math.max(0, Number(v) || 0).toFixed(0)} m/s`; }
   function fmtGs(v) { return `${Math.max(0, Number(v) || 0).toFixed(3)} g`; }
-  function fmtUsd(v) { return `$${Math.round(Number(v) || 0).toLocaleString("en-US")}`; }
-
-  /* ── Screen management ────────────────────────────────── */
-  function showScreen(screen) {
-    modeSelectEl.style.display = screen === "modes" ? "" : "none";
-    shipSelectEl.style.display = screen === "shipSelect" ? "" : "none";
-    designerEl.style.display = screen === "designer" ? "" : "none";
-  }
-
-  function resetDesignerState() {
-    selectedItemIds = [];
-    activeCategory = "";
-    requestedFuelKg = 0;
-    fuelCapacityKg = 0;
-    availableFuelKg = 0;
-    editShipId = "";
-    editShipOriginalParts = [];
-    editShipLocationId = "";
-    shipNameEl.value = "";
-    setMsg("", false);
-    if (boostCostEl) boostCostEl.style.display = "none";
-  }
 
   /* ── Source location management ───────────────────────── */
   function sourceOptionLabel(loc) {
@@ -174,14 +130,6 @@
 
   function updateSourceHint() {
     if (!sourceHintEl) return;
-    if (currentMode === "boost") {
-      sourceHintEl.innerHTML = `Parts boosted from Earth to <b>LEO</b> — cost deducted from org funds`;
-      return;
-    }
-    if (currentMode === "edit") {
-      sourceHintEl.innerHTML = `Editing at <b>${editShipLocationId || buildLocationId}</b> — parts from local inventory`;
-      return;
-    }
     const selected = buildSourceLocations.find((x) => String(x?.id || "") === String(buildLocationId)) || null;
     const sourceCount = Array.isArray(buildSourceLocations) ? buildSourceLocations.length : 0;
     if (!selected) {
@@ -246,7 +194,7 @@
     return Number(part?.volume_m3 || 0);
   }
 
-  /* ── Inventory / garage helpers ───────────────────────── */
+  /* ── Inventory helpers ────────────────────────────────── */
   function mapInventoryPartToGaragePart(stackPart) {
     const payload = (stackPart && typeof stackPart.part === "object" && stackPart.part) ? stackPart.part : {};
     const itemId = String(payload.item_id || stackPart?.item_id || "").trim();
@@ -260,66 +208,13 @@
     };
   }
 
-  function mapBoostableToGaragePart(item) {
-    return {
-      item_id: String(item.item_id || ""),
-      name: String(item.name || item.item_id || ""),
-      type: String(item.type || ""),
-      category_id: String(item.type || ""),
-      mass_kg: Number(item.mass_per_unit_kg || 0),
-      tech_level: Number(item.tech_level || 1),
-      available_qty: Infinity,
-      source_kind: "boost",
-    };
-  }
-
   async function loadGarageForCurrentSource() {
-    if (currentMode === "boost") {
-      // Load boostable items from org endpoint
-      try {
-        const data = await fetchJson("/api/org/boostable-items", { cache: "no-store" });
-        boostBaseCost = Number(data.base_cost_usd || 100000000);
-        boostCostPerKg = Number(data.cost_per_kg_usd || 5000);
-        const items = Array.isArray(data.items) ? data.items : [];
-
-        // Also load full catalog for detailed part info (thrust, ISP, etc.)
-        const catData = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
-        const catParts = Array.isArray(catData?.parts) ? catData.parts : [];
-        const catById = new Map(catParts.map((p) => [String(p.item_id || ""), p]));
-
-        garageParts = items
-          .map((item) => {
-            const base = mapBoostableToGaragePart(item);
-            // Merge in full catalog data if available (for tooltip stats)
-            const full = catById.get(base.item_id);
-            if (full) {
-              return {
-                ...full,
-                ...base,
-                mass_kg: Number(full.mass_kg || base.mass_kg || 0),
-              };
-            }
-            return base;
-          })
-          .filter((p) => !!p.item_id);
-      } catch (err) {
-        garageParts = [];
-        setMsg("Failed to load boostable items: " + (err?.message || ""), true);
-      }
-      return;
-    }
-
-    // site / edit mode: load inventory from location
     if (!buildLocationId) { garageParts = []; return; }
-    try {
-      const inv = await fetchJson(`/api/inventory/location/${encodeURIComponent(buildLocationId)}`, { cache: "no-store" });
-      const invParts = Array.isArray(inv?.parts) ? inv.parts : [];
-      garageParts = invParts
-        .map(mapInventoryPartToGaragePart)
-        .filter((part) => !!String(part.item_id || "").trim() && Number(part.available_qty || 0) > 0);
-    } catch {
-      garageParts = [];
-    }
+    const inv = await fetchJson(`/api/inventory/location/${encodeURIComponent(buildLocationId)}`, { cache: "no-store" });
+    const invParts = Array.isArray(inv?.parts) ? inv.parts : [];
+    garageParts = invParts
+      .map(mapInventoryPartToGaragePart)
+      .filter((part) => !!String(part.item_id || "").trim() && Number(part.available_qty || 0) > 0);
   }
 
   function selectedCountByItemId(itemId) {
@@ -459,7 +354,7 @@
             removeSelectedPartAt(globalIdx);
           });
 
-          // Drag from filled slot
+          // Drag from filled slot (reorder support)
           slot.draggable = true;
           slot.addEventListener("dragstart", (e) => {
             if (!e.dataTransfer) return;
@@ -570,11 +465,7 @@
     if (!partsForCategory.length) {
       const hint = document.createElement("div");
       hint.className = "pickerEmpty";
-      if (currentMode === "boost") {
-        hint.textContent = `No boostable ${catDef ? catDef.label.toLowerCase() : "parts"} unlocked. Research higher tech levels.`;
-      } else {
-        hint.textContent = `No ${catDef ? catDef.label.toLowerCase() : "parts"} available at this location.`;
-      }
+      hint.textContent = `No ${catDef ? catDef.label.toLowerCase() : "parts"} available at this location.`;
       pickerEl.appendChild(hint);
       return;
     }
@@ -633,6 +524,7 @@
     const id = String(itemId || "").trim();
     if (!id) return;
 
+    // Auto-select the category this part belongs to
     const part = findPart(id);
     if (part) {
       const folder = partFolderId(part);
@@ -685,7 +577,7 @@
     } catch { return null; }
   }
 
-  /* ── Stats rendering ──────────────────────────────────── */
+  /* ── Stats rendering (unchanged logic) ────────────────── */
 
   function fmtPct(v) { return `${(Math.max(0, Math.min(1, Number(v) || 0)) * 100).toFixed(0)}%`; }
   function balanceClass(surplus) { const v = Number(surplus) || 0; return v > 0 ? "pbPositive" : v < 0 ? "pbNegative" : "pbNeutral"; }
@@ -789,74 +681,23 @@
     statsEl.innerHTML = renderDeltaVPanel(stats) + renderPowerBalance(powerBalance);
   }
 
-  /* ── Boost cost rendering ─────────────────────────────── */
-
-  function computeSelectedTotalMassKg() {
-    let total = 0;
-    for (const itemId of selectedItemIds) {
-      const part = findPart(itemId);
-      if (part) total += Number(part.mass_kg || 0);
-    }
-    return total;
-  }
-
-  function renderBoostCost() {
-    if (currentMode !== "boost" || !boostCostEl) {
-      if (boostCostEl) boostCostEl.style.display = "none";
-      return;
-    }
-
-    if (selectedItemIds.length === 0) {
-      boostCostEl.style.display = "none";
-      return;
-    }
-
-    const partsMassKg = computeSelectedTotalMassKg();
-    const fuelMassKg = requestedFuelKg;
-    const totalMassKg = partsMassKg + fuelMassKg;
-    const totalCost = boostBaseCost + (boostCostPerKg * totalMassKg);
-    const insufficient = totalCost > orgBalanceUsd;
-
-    boostCostEl.style.display = "";
-    boostCostEl.innerHTML = `
-      <div class="boostCostLine"><span>Parts count</span><span><b>${selectedItemIds.length}</b></span></div>
-      <div class="boostCostLine"><span>Parts mass</span><span><b>${fmtMassKg(partsMassKg)}</b></span></div>
-      ${fuelMassKg > 0 ? `<div class="boostCostLine"><span>Water (fuel)</span><span><b>${fmtMassKg(fuelMassKg)}</b></span></div>` : ''}
-      <div class="boostCostLine"><span>Total payload</span><span><b>${fmtMassKg(totalMassKg)}</b></span></div>
-      <div class="boostCostLine"><span>Base launch cost</span><span>${fmtUsd(boostBaseCost)}</span></div>
-      <div class="boostCostLine"><span>Mass cost (${fmtUsd(boostCostPerKg)}/kg)</span><span>${fmtUsd(boostCostPerKg * totalMassKg)}</span></div>
-      <div class="boostCostLine boostCostTotal${insufficient ? ' boostCostInsufficient' : ''}">
-        <span><b>Total boost cost</b></span><span><b>${fmtUsd(totalCost)}</b></span>
-      </div>
-      <div class="boostCostLine"><span>Org balance</span><span${insufficient ? ' class="boostCostInsufficient"' : ''}>${fmtUsd(orgBalanceUsd)}</span></div>
-      ${insufficient ? '<div class="boostCostLine boostCostInsufficient" style="justify-content:center;margin-top:4px;"><b>⚠ Insufficient funds</b></div>' : ''}
-    `;
-  }
-
-  /* ── Fuel UI ──────────────────────────────────────────── */
+  /* ── Fuel UI (unchanged logic) ────────────────────────── */
 
   function updateFuelUI() {
+    const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
     const hasFuelCapacity = fuelCapacityKg > 0;
-
-    // Toggle hasFuel class on the picker section to split the layout
-    if (pickerSectionEl) pickerSectionEl.classList.toggle("hasFuel", hasFuelCapacity);
-
     if (fuelSectionEl) fuelSectionEl.style.display = hasFuelCapacity ? "" : "none";
     if (!hasFuelCapacity) return;
-
-    // In boost mode, water is unlimited (launched from Earth)
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
 
     requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
     if (fuelSliderEl) { fuelSliderEl.max = String(Math.floor(maxFuel)); fuelSliderEl.value = String(Math.floor(requestedFuelKg)); }
     if (fuelInputEl) { fuelInputEl.max = String(Math.floor(maxFuel)); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
-    if (fuelAvailEl) fuelAvailEl.textContent = currentMode === "boost" ? "Unlimited water (boosted from Earth)" : `${fmtMassKg(availableFuelKg)} water at site`;
+    if (fuelAvailEl) fuelAvailEl.textContent = `${fmtMassKg(availableFuelKg)} water at site`;
     if (fuelBarFillEl) { const pct = fuelCapacityKg > 0 ? Math.min(100, (requestedFuelKg / fuelCapacityKg) * 100) : 0; fuelBarFillEl.style.width = `${pct.toFixed(1)}%`; }
     if (fuelLabelEl) { const pct = fuelCapacityKg > 0 ? (requestedFuelKg / fuelCapacityKg) * 100 : 0; fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} / ${fmtMassKg(fuelCapacityKg)} (${pct.toFixed(0)}%)`; }
   }
 
-  /* ── Preview ──────────────────────────────────────────── */
+  /* ── Preview & Build ──────────────────────────────────── */
 
   let previewTimer = null;
   async function refreshPreview() {
@@ -865,103 +706,30 @@
   }
 
   async function doRefreshPreview() {
-    // For boost mode, use LEO as the preview location
-    const locationForPreview = currentMode === "boost" ? "LEO" : buildLocationId;
-
     try {
       const data = await fetchJson("/api/shipyard/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           parts: selectedItemIds,
-          source_location_id: locationForPreview,
+          source_location_id: buildLocationId,
           fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
-          unlimited_fuel: currentMode === "boost",
         }),
       });
       const stats = data.stats || {};
       fuelCapacityKg = Number(stats.fuel_capacity_kg || 0);
       availableFuelKg = Number(data.available_fuel_kg || 0);
-
-      // In boost mode, water is unlimited (boosted from Earth)
-      const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-      const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
+      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
       requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
       updateFuelUI();
       renderStats(stats, data.power_balance || null);
-      renderBoostCost();
     } catch (err) {
       renderStats({}, null);
-      renderBoostCost();
       setMsg(err?.message || "Failed to refresh preview", true);
     }
   }
 
-  /* ── Build actions ────────────────────────────────────── */
-
-  async function buildShipBoost() {
-    const name = String(shipNameEl.value || "").trim();
-    if (!name) { setMsg("Ship name is required.", true); return; }
-    if (!selectedItemIds.length) { setMsg("Add at least one part before building.", true); return; }
-
-    // Check cost client-side (parts + fuel water)
-    const partsMassKg = computeSelectedTotalMassKg();
-    const fuelMassKg = requestedFuelKg;
-    const totalMassKg = partsMassKg + fuelMassKg;
-    const totalCost = boostBaseCost + (boostCostPerKg * totalMassKg);
-    if (totalCost > orgBalanceUsd) {
-      setMsg(`Insufficient funds. Need ${fmtUsd(totalCost)}, have ${fmtUsd(orgBalanceUsd)}.`, true);
-      return;
-    }
-
-    buildBtn.disabled = true;
-    try {
-      // Step 1: Boost all parts to LEO
-      // Build manifest: count quantities per item_id
-      const qtyMap = {};
-      for (const itemId of selectedItemIds) {
-        qtyMap[itemId] = (qtyMap[itemId] || 0) + 1;
-      }
-      const manifest = Object.entries(qtyMap).map(([item_id, quantity]) => ({ item_id, quantity }));
-
-      await fetchJson("/api/org/boost", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: manifest, fuel_kg: fuelMassKg > 0 ? fuelMassKg : null }),
-      });
-
-      // Step 2: Build ship at LEO using newly-boosted inventory
-      const data = await fetchJson("/api/shipyard/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          parts: selectedItemIds,
-          source_location_id: "LEO",
-          fuel_kg: fuelMassKg > 0 ? fuelMassKg : null,
-        }),
-      });
-
-      const ship = data.ship || {};
-      setMsg(`Built ${ship.name || "ship"} at LEO via boost. Cost: ${fmtUsd(totalCost)}.`, false);
-
-      // Refresh org balance
-      await loadOrgBalance();
-
-      resetDesignerState();
-      await loadGarageForCurrentSource();
-      renderBlueprint();
-      renderPicker();
-      renderBoostCost();
-      await refreshPreview();
-    } catch (err) {
-      setMsg(err?.message || "Build failed.", true);
-    } finally {
-      buildBtn.disabled = false;
-    }
-  }
-
-  async function buildShipSite() {
+  async function buildShip() {
     const name = String(shipNameEl.value || "").trim();
     if (!name) { setMsg("Ship name is required.", true); return; }
     if (!selectedItemIds.length) { setMsg("Add at least one part before building.", true); return; }
@@ -998,78 +766,9 @@
     }
   }
 
-  async function buildShipEdit() {
-    const name = String(shipNameEl.value || "").trim();
-    if (!name) { setMsg("Ship name is required.", true); return; }
-    if (!selectedItemIds.length) { setMsg("Add at least one part.", true); return; }
-    if (!editShipId) { setMsg("No ship selected for editing.", true); return; }
-
-    buildBtn.disabled = true;
-    try {
-      // Step 1: Deconstruct the old ship (parts return to location inventory)
-      await fetchJson(`/api/ships/${encodeURIComponent(editShipId)}/deconstruct`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keep_ship_record: false }),
-      });
-
-      // Step 2: Build the new ship from the location inventory (which now has old + new parts)
-      const data = await fetchJson("/api/shipyard/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          parts: selectedItemIds,
-          source_location_id: editShipLocationId,
-          fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
-        }),
-      });
-
-      const ship = data.ship || {};
-      const fuelNote = (Number(ship.fuel_kg) || 0) > 0 ? ` with ${fmtMassKg(ship.fuel_kg)} fuel` : "";
-      setMsg(`Rebuilt ${ship.name || "ship"} at ${ship.location_id || editShipLocationId}${fuelNote}.`, false);
-
-      selectedItemIds = [];
-      requestedFuelKg = 0;
-      fuelCapacityKg = 0;
-      availableFuelKg = 0;
-      editShipId = "";
-      editShipOriginalParts = [];
-      shipNameEl.value = "";
-      updateFuelUI();
-      await loadGarageForCurrentSource();
-      renderBlueprint();
-      renderPicker();
-      await refreshPreview();
-    } catch (err) {
-      setMsg(err?.message || "Rebuild failed.", true);
-    } finally {
-      buildBtn.disabled = false;
-    }
-  }
-
-  function buildShip() {
-    if (currentMode === "boost") return buildShipBoost();
-    if (currentMode === "edit") return buildShipEdit();
-    return buildShipSite();
-  }
-
-  /* ── Org balance (for boost mode) ─────────────────────── */
-
-  async function loadOrgBalance() {
-    try {
-      const data = await fetchJson("/api/org", { cache: "no-store" });
-      orgBalanceUsd = Number(data?.org?.balance_usd || 0);
-    } catch {
-      orgBalanceUsd = 0;
-    }
-  }
-
   /* ── Source refresh ───────────────────────────────────── */
 
   async function refreshSourcesOnly() {
-    if (currentMode === "boost") return;
-
     const before = String(buildLocationId || "");
     const data = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
     const hash = computeCatalogHash(data);
@@ -1084,192 +783,16 @@
     renderPicker();
   }
 
-  /* ── Fleet loading (for edit mode) ────────────────────── */
+  /* ── Init ─────────────────────────────────────────────── */
 
-  async function loadFleet() {
+  async function init() {
     try {
-      const data = await fetchJson("/api/state", { cache: "no-store" });
-      allFleetShips = Array.isArray(data?.ships) ? data.ships : [];
-      return allFleetShips;
-    } catch {
-      allFleetShips = [];
-      return [];
-    }
-  }
-
-  function renderShipSelector() {
-    if (!shipListEl) return;
-    shipListEl.innerHTML = "";
-
-    const docked = allFleetShips.filter((s) => s.is_own && s.status === "docked" && s.location_id);
-    const inTransit = allFleetShips.filter((s) => s.is_own && s.status === "transit");
-
-    if (!docked.length && !inTransit.length) {
-      shipListEl.innerHTML = '<div class="pickerEmpty">No ships in your fleet.</div>';
-      return;
-    }
-
-    // Docked ships (clickable)
-    docked.forEach((ship) => {
-      const card = document.createElement("div");
-      card.className = "shipyardShipCard";
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "shipCardName";
-      nameEl.textContent = ship.name || ship.id;
-      card.appendChild(nameEl);
-
-      const detailEl = document.createElement("span");
-      detailEl.className = "shipCardDetail";
-      const partCount = Array.isArray(ship.parts) ? ship.parts.length : 0;
-      detailEl.textContent = `${ship.location_id} · ${partCount} parts · ${fmtMassKg(ship.dry_mass_kg || 0)}`;
-      card.appendChild(detailEl);
-
-      card.addEventListener("click", () => {
-        selectShipForEdit(ship);
-      });
-
-      shipListEl.appendChild(card);
-    });
-
-    // In-transit ships (disabled)
-    inTransit.forEach((ship) => {
-      const card = document.createElement("div");
-      card.className = "shipyardShipCard shipyardShipCardDisabled";
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "shipCardName";
-      nameEl.textContent = ship.name || ship.id;
-      card.appendChild(nameEl);
-
-      const detailEl = document.createElement("span");
-      detailEl.className = "shipCardDetail";
-      detailEl.textContent = `In transit (${ship.from_location_id} → ${ship.to_location_id})`;
-      card.appendChild(detailEl);
-
-      shipListEl.appendChild(card);
-    });
-  }
-
-  async function selectShipForEdit(ship) {
-    editShipId = ship.id;
-    editShipLocationId = ship.location_id;
-    buildLocationId = ship.location_id;
-
-    // Extract part item_ids from parts array
-    const parts = Array.isArray(ship.parts) ? ship.parts : [];
-    editShipOriginalParts = parts.map((p) => String(p.item_id || "")).filter(Boolean);
-
-    // Load inventory at this location (for additional parts)
-    await loadGarageForCurrentSource();
-
-    // Pre-populate the blueprint with the ship's current parts
-    // The ship's own parts count as available since deconstruct will return them
-    augmentGarageWithShipParts(parts);
-
-    selectedItemIds = [...editShipOriginalParts];
-    shipNameEl.value = ship.name || "";
-
-    // Configure designer for edit
-    configureDesignerForMode();
-    showScreen("designer");
-
-    // Auto-select first category with parts
-    const firstWithParts = SLOT_CATEGORIES.find((cat) =>
-      selectedItemIds.some((id) => {
-        const p = findPart(id);
-        return p && partFolderId(p) === cat.id;
-      })
-    );
-    activeCategory = firstWithParts ? firstWithParts.id : SLOT_CATEGORIES[0].id;
-
-    renderBlueprint();
-    renderPicker();
-    await refreshPreview();
-  }
-
-  function augmentGarageWithShipParts(shipParts) {
-    // Add the ship's own parts as available (since deconstruct will release them)
-    const shipPartCounts = {};
-    for (const part of shipParts) {
-      const id = String(part.item_id || "");
-      if (!id) continue;
-      shipPartCounts[id] = (shipPartCounts[id] || 0) + 1;
-    }
-
-    for (const [itemId, count] of Object.entries(shipPartCounts)) {
-      const existing = garageParts.find((p) => String(p.item_id || "") === itemId);
-      if (existing) {
-        // Add ship's count to existing garage quantity
-        existing.available_qty = (existing.available_qty || 0) + count;
-      } else {
-        // Create new garage entry from the ship's part data
-        const shipPart = shipParts.find((p) => String(p.item_id || "") === itemId);
-        if (shipPart) {
-          garageParts.push({
-            ...shipPart,
-            available_qty: count,
-            source_kind: "ship_disassembly",
-          });
-        }
-      }
-    }
-  }
-
-  /* ── Mode initialization ──────────────────────────────── */
-
-  function configureDesignerForMode() {
-    // Source location selector: hide in boost and edit modes
-    if (sourceFieldEl) {
-      sourceFieldEl.style.display = (currentMode === "site") ? "" : "none";
-    }
-
-    // Build button label
-    if (currentMode === "boost") {
-      buildBtn.textContent = "Boost & Build";
-    } else if (currentMode === "edit") {
-      buildBtn.textContent = "Rebuild Ship";
-    } else {
-      buildBtn.textContent = "Build Ship";
-    }
-
-    // Source hint
-    updateSourceHint();
-  }
-
-  async function enterMode(mode) {
-    currentMode = mode;
-    resetDesignerState();
-
-    if (mode === "boost") {
-      // Load boostable items + org balance
-      await Promise.all([loadGarageForCurrentSource(), loadOrgBalance()]);
-
-      buildLocationId = "LEO";
-      configureDesignerForMode();
-      showScreen("designer");
-
-      // Auto-select first category with boostable parts
-      const firstWithParts = SLOT_CATEGORIES.find((cat) =>
-        garageParts.some((p) => partFolderId(p) === cat.id)
-      );
-      activeCategory = firstWithParts ? firstWithParts.id : SLOT_CATEGORIES[0].id;
-
-      renderBlueprint();
-      renderPicker();
-      renderBoostCost();
-      await refreshPreview();
-
-    } else if (mode === "site") {
-      // Load catalog with source locations
       const data = await fetchJson("/api/shipyard/catalog", { cache: "no-store" });
       applyCatalogData(data, false);
       renderSourceLocations();
       await loadGarageForCurrentSource();
 
-      configureDesignerForMode();
-      showScreen("designer");
-
+      // Auto-select first category that has parts
       const firstWithParts = SLOT_CATEGORIES.find((cat) =>
         garageParts.some((p) => partFolderId(p) === cat.id)
       );
@@ -1279,42 +802,16 @@
       renderPicker();
       await refreshPreview();
 
-      // Start auto-refresh for inventory changes
       if (sourceRefreshTimer) clearInterval(sourceRefreshTimer);
       sourceRefreshTimer = setInterval(() => {
         refreshSourcesOnly().catch(() => {});
       }, 30000);
-
-    } else if (mode === "edit") {
-      // Load fleet, show ship selector
-      await loadFleet();
-      renderShipSelector();
-      showScreen("shipSelect");
+    } catch (err) {
+      setMsg(err?.message || "Failed to load shipyard catalog.", true);
+      renderBlueprint();
+      renderPicker();
+      renderStats({});
     }
-  }
-
-  /* ── Mode selector click handlers ─────────────────────── */
-
-  function setupModeSelectors() {
-    const cards = modeSelectEl?.querySelectorAll(".shipyardModeCard") || [];
-    cards.forEach((card) => {
-      card.addEventListener("click", () => {
-        const mode = card.dataset.mode;
-        if (mode) enterMode(mode);
-      });
-    });
-
-    // Back buttons
-    backToModesBtn?.addEventListener("click", () => {
-      if (sourceRefreshTimer) clearInterval(sourceRefreshTimer);
-      showScreen("modes");
-    });
-
-    modeBackBtn?.addEventListener("click", () => {
-      if (sourceRefreshTimer) clearInterval(sourceRefreshTimer);
-      resetDesignerState();
-      showScreen("modes");
-    });
   }
 
   /* ── Event listeners ──────────────────────────────────── */
@@ -1335,42 +832,28 @@
   fuelSliderEl?.addEventListener("input", () => {
     requestedFuelKg = Number(fuelSliderEl.value || 0);
     updateFuelUI();
-    renderBoostCost();
     refreshPreview();
   });
 
   fuelInputEl?.addEventListener("change", () => {
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
+    const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
     requestedFuelKg = Math.max(0, Math.min(Number(fuelInputEl.value || 0), maxFuel));
     updateFuelUI();
-    renderBoostCost();
     refreshPreview();
   });
 
   fuelFillBtn?.addEventListener("click", () => {
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    requestedFuelKg = Math.min(fuelCapacityKg, effectiveAvail);
+    requestedFuelKg = Math.min(fuelCapacityKg, availableFuelKg);
     updateFuelUI();
-    renderBoostCost();
     refreshPreview();
   });
 
   fuelEmptyBtn?.addEventListener("click", () => {
     requestedFuelKg = 0;
     updateFuelUI();
-    renderBoostCost();
     refreshPreview();
   });
 
   buildBtn?.addEventListener("click", buildShip);
-
-  /* ── Init ─────────────────────────────────────────────── */
-
-  function init() {
-    setupModeSelectors();
-    showScreen("modes");
-  }
-
   init();
 })();

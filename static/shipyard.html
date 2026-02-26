@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Frontier: Sol 2000 — Shipyard</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout32" />
+    <link rel="stylesheet" href="/static/styles.css?v=layout35" />
   </head>
 
   <body>
@@ -27,28 +27,66 @@
         </div>
       </div>
 
-      <div class="panel pagePanel shipyardPanel">
+      <!-- ── Mode Selector (landing screen) ──────────────── -->
+      <div id="shipyardModeSelect" class="panel pagePanel shipyardModeSelect">
+        <div class="shipyardModeTitle">Choose Build Mode</div>
+        <div class="shipyardModeCards">
+          <button class="shipyardModeCard" data-mode="boost">
+            <span class="modeIcon">🚀</span>
+            <span class="modeLabel">Build to Boost</span>
+            <span class="modeDesc">Purchase parts from Earth and boost them to LEO. Costs money — no inventory needed.</span>
+          </button>
+          <button class="shipyardModeCard" data-mode="site">
+            <span class="modeIcon">🏗️</span>
+            <span class="modeLabel">Build from Site</span>
+            <span class="modeDesc">Assemble a ship from parts already in a location's inventory.</span>
+          </button>
+          <button class="shipyardModeCard" data-mode="edit">
+            <span class="modeIcon">🔧</span>
+            <span class="modeLabel">Edit Ship</span>
+            <span class="modeDesc">Modify a docked ship — add or remove parts from local inventory.</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Ship Selector (Edit mode only) ──────────────── -->
+      <div id="shipyardShipSelect" class="panel pagePanel shipyardShipSelect" style="display:none;">
+        <div class="shipyardModeTitle">Select a Ship to Edit</div>
+        <div id="shipyardShipList" class="shipyardShipList"></div>
+        <button id="shipyardBackToModes" class="btnSmall" type="button">← Back</button>
+      </div>
+
+      <!-- ── Designer (hidden until mode chosen) ─────────── -->
+      <div id="shipyardDesigner" class="panel pagePanel shipyardPanel" style="display:none;">
         <div class="shipyardHeader">
           <div class="field">
             <label for="shipyardName">Ship Name</label>
             <input id="shipyardName" type="text" placeholder="New Vessel" />
           </div>
-          <div class="field">
+          <div class="field" id="shipyardSourceField">
             <label for="shipyardSourceLocation">Part Source</label>
             <select id="shipyardSourceLocation"></select>
           </div>
           <div id="shipyardSourceHint" class="muted small">Part source: <b>LEO</b> (catalog supply)</div>
+          <button id="shipyardModeBack" class="btnSmall" type="button">← Change Mode</button>
         </div>
 
         <div class="shipyardLayout">
-          <section class="shipyardColumn panel">
-            <div class="titleSmall">Parts Garage</div>
-            <div id="shipyardGarage" class="shipyardGarage"></div>
+          <!-- Column 1: Ship Blueprint — vertical slot-based ship view -->
+          <section class="shipyardBlueprint panel">
+            <div class="titleSmall">Ship Blueprint</div>
+            <div id="shipyardBlueprint" class="blueprintScroll"></div>
           </section>
 
-          <section class="shipyardColumn panel">
-            <div class="titleSmall">Ship Stack</div>
-            <div id="shipyardSlots" class="shipyardSlots"></div>
+          <!-- Column 2: Parts Picker — filtered by selected slot category -->
+          <section class="shipyardPicker panel">
+            <div class="pickerHeaderBar">
+              <span class="titleSmall">Available Parts</span>
+              <span id="pickerCategoryLabel" class="pickerCategoryBadge">Select a slot</span>
+            </div>
+            <div id="shipyardPicker" class="pickerGrid"></div>
+
+            <!-- Fuel loading (shown when ship has fuel capacity) -->
             <div id="shipyardFuelSection" class="shipyardFuelSection" style="display:none;">
               <div class="shipyardFuelHeader">
                 <span class="titleSmall">Fuel Loading</span>
@@ -70,8 +108,10 @@
             </div>
           </section>
 
-          <section class="shipyardColumn panel">
+          <!-- Column 3: Derived Stats -->
+          <section class="shipyardColumn shipyardStatsCol panel">
             <div class="titleSmall">Derived Stats</div>
+            <div id="shipyardBoostCost" class="shipyardBoostCost" style="display:none;"></div>
             <ul id="shipyardStats" class="infoList shipyardStats"></ul>
           </section>
         </div>
@@ -87,6 +127,6 @@
     <script src="/static/js/clock.js?v=ti3"></script>
     <script src="/static/js/item_display.js?v=id4"></script>
     <script src="/static/js/item_info.js?v=ii2"></script>
-    <script src="/static/js/shipyard.js?v=sy16"></script>
+    <script src="/static/js/shipyard.js?v=sy19"></script>
   </body>
 </html>

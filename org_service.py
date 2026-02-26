@@ -899,10 +899,13 @@ def boost_manifest_to_leo(
     items: List[Dict[str, Any]],
     *,
     corp_id: str = "",
+    fuel_kg: float | None = None,
 ) -> Dict[str, Any]:
     """
     Boost multiple items from Earth to LEO in a single launch.
     One base launch cost is charged for the combined payload mass.
+    If fuel_kg is provided, water is also added to the destination and its
+    mass is included in the total cost.
     """
     settle_org(conn, org_id)
 
@@ -939,6 +942,11 @@ def boost_manifest_to_leo(
         )
 
     total_mass_kg = sum(float(line["mass_kg"]) for line in launch_lines)
+
+    # Include fuel (water) mass in the boost cost if requested
+    boost_fuel_kg = max(0.0, float(fuel_kg or 0.0))
+    total_mass_kg += boost_fuel_kg
+
     total_cost = calculate_boost_cost(total_mass_kg)
 
     org = conn.execute("SELECT balance_usd FROM organizations WHERE id = ?", (org_id,)).fetchone()
@@ -998,11 +1006,36 @@ def boost_manifest_to_leo(
             corp_id=corp_id,
         )
 
+    # If fuel (water) was requested, add it to the destination inventory
+    if boost_fuel_kg > 0.0:
+        import main as _main_mod
+        resources = _main_mod.load_resource_catalog()
+        water_res = resources.get("water") or {}
+        water_name = str(water_res.get("name") or "Water")
+        water_density = max(0.0, float(water_res.get("mass_per_m3_kg") or 1000.0))
+        water_volume_m3 = (boost_fuel_kg / water_density) if water_density > 0.0 else 0.0
+        import json as _json
+        water_payload = _json.dumps({"resource_id": "water"}, sort_keys=True, separators=(",", ":"))
+        _main_mod._upsert_inventory_stack(
+            conn,
+            location_id=dest_location_id,
+            stack_type="resource",
+            stack_key="water",
+            item_id="water",
+            name=water_name,
+            quantity_delta=boost_fuel_kg,
+            mass_delta_kg=boost_fuel_kg,
+            volume_delta_m3=water_volume_m3,
+            payload_json=water_payload,
+            corp_id=corp_id,
+        )
+
     conn.commit()
 
     result: Dict[str, Any] = {
         "destination": dest_location_id,
         "mass_kg": total_mass_kg,
+        "fuel_kg": boost_fuel_kg,
         "cost_usd": total_cost,
         "item_count": len(launch_lines),
         "items": [

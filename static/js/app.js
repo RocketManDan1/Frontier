@@ -1037,6 +1037,7 @@
     world.y += dy;
     nudgeStageParallax(-dx * PARALLAX_PAN_FACTOR, -dy * PARALLAX_PAN_FACTOR);
     registerCameraMotion(dx, dy);
+    markOrbitsDirty();
     last = { x: e.clientX, y: e.clientY };
   });
 
@@ -1065,6 +1066,7 @@
 
       nudgeStageParallax((e.deltaX || 0) * PARALLAX_WHEEL_FACTOR, wheelDeltaY * PARALLAX_WHEEL_FACTOR);
       registerCameraMotion((e.deltaX || 0) * 0.28, wheelDeltaY * 0.28);
+      markOrbitsDirty();
       refreshZoomScaledTextResolution();
       applyZoomDetailVisibility();
     },
@@ -1091,6 +1093,19 @@
   let treeCache = null;
   let mapOverviewRenderKey = "";
   const mapOverviewOpenState = new Map();
+
+  // Smooth celestial interpolation state
+  const locLerp = new Map();     // id -> { fromRx, fromRy, toRx, toRy }
+  let locLerpStartMs = 0;        // performance.now() when last sync arrived
+  const LOC_LERP_DURATION_MS = 5000; // matches the 5 s poll interval
+
+  // --- Performance: dirty flags & throttle counters ---
+  let orbitRingsDirty = true;          // redraw orbit rings only when needed
+  let lastOrbitZoom = -1;              // track zoom to detect changes
+  let tickCounter = 0;                 // frame counter for throttling
+  const TEXT_CULL_EVERY_N = 6;         // run text collision culling every N frames
+  const OVERVIEW_EVERY_N = 10;         // run map overview rebuild every N frames
+  function markOrbitsDirty() { orbitRingsDirty = true; }
 
   const locGfx = new Map();   // id -> {dot,label,kind,hovered}
   const shipGfx = new Map();  // id -> {ship,container,slot}
@@ -1491,6 +1506,7 @@
       registerCameraMotion(nextX - world.x, nextY - world.y);
       world.x = nextX;
       world.y = nextY;
+      markOrbitsDirty();
       if (t < 1) requestAnimationFrame(tick);
     }
 
@@ -2491,6 +2507,14 @@
   const VESTA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const PALLAS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const HYGIEA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const PHOBOS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const DEIMOS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const ZOOZVE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const JUPITER_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const IO_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const EUROPA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const GANYMEDE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const CALLISTO_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const FIT_VIEW_SCALE = 0.86;
   const MAP_SCREEN_SPREAD_MULT = 10;
   const MAX_INITIAL_SCALE = CAMERA_MAX_SCALE;
@@ -2540,6 +2564,7 @@
   const BODY_HOVER_SCALE_MULT = 1.16;
   const BODY_BASE_GLYPH_ALPHA = 0.9;
   const BODY_BASE_LABEL_ALPHA = 0.9;
+  const CELESTIAL_BASE_LABEL_ALPHA = 0.7;
   const MOONLET_HOVER_SCALE_MULT = 1.16;
   const ASTEROID_HOVER_SCALE_MULT = 1.16;
   const SOLAR_RING_MULT = 0.72;
@@ -2548,8 +2573,10 @@
   const TEXT_COLLISION_PADDING_PX = 6;
   const PLANET_ICON_SCREEN_MULT = 1.5;
   const MOON_ICON_SCREEN_PX = 16;
+  const JOVIAN_MOON_ICON_SCREEN_PX = 18;
+  const SUN_ICON_SCREEN_PX = 28;
   const ASTEROID_ICON_SCREEN_PX = 16;
-  const ASTEROID_HINTS = ["asteroid", "zoozve", "ceres", "vesta", "pallas", "hygiea"];
+  const ASTEROID_HINTS = ["asteroid", "zoozve", "ceres", "vesta", "pallas", "hygiea", "io", "europa", "ganymede", "callisto", "trojan", "greek"];
   const PLANET_ICON_ZOOM_COMP_MAX = 320;
   const PLANET_LABEL_ZOOM_COMP_MAX = 42;
 
@@ -2564,8 +2591,16 @@
     "VESTA_LO", "VESTA_HO",
     "PALLAS_LO", "PALLAS_HO",
     "HYGIEA_LO", "HYGIEA_HO",
+    "PHOBOS_LO", "DEIMOS_LO", "ZOOZVE_LO",
+    "JUP_LO", "JUP_HO",
+    "IO_LO", "IO_HO",
+    "EUROPA_LO", "EUROPA_HO",
+    "GANYMEDE_LO", "GANYMEDE_HO",
+    "CALLISTO_LO", "CALLISTO_HO",
   ]);
-  const LPOINT_IDS = new Set(["L1", "L2", "L3", "L4", "L5"]);
+  const LPOINT_IDS = new Set(["L1", "L2", "L3", "L4", "L5", "SJ_L1", "SJ_L2", "SJ_L3", "SJ_L4", "SJ_L5"]);
+  // Jupiter L4 (Greeks) and L5 (Trojans) stay visible at all zoom levels
+  const ALWAYS_VISIBLE_LPOINTS = new Set(["SJ_L4", "SJ_L5"]);
 
   // orbitInfo: orbitId -> {cx,cy,radius,baseAngle,period_s}
   const orbitInfo = new Map();
@@ -2732,6 +2767,69 @@
     selectionBox.lineTo(bracketInset - bracketDepth, bracketHeight * 0.5);
   }
 
+  function makeSunGlyph(sizePx = SUN_ICON_SCREEN_PX) {
+    const s = Math.max(12, Number(sizePx) || SUN_ICON_SCREEN_PX);
+    const c = new PIXI.Container();
+
+    // Outer soft glow halo
+    const glowOuter = new PIXI.Graphics();
+    glowOuter.beginFill(0xffa500, 0.06);
+    glowOuter.drawCircle(0, 0, s * 1.2);
+    glowOuter.endFill();
+    glowOuter.beginFill(0xffcc33, 0.10);
+    glowOuter.drawCircle(0, 0, s * 0.85);
+    glowOuter.endFill();
+    glowOuter.beginFill(0xffdd55, 0.15);
+    glowOuter.drawCircle(0, 0, s * 0.6);
+    glowOuter.endFill();
+
+    // Long rays (8 cardinal + diagonal)
+    const rays = new PIXI.Graphics();
+    const rayCount = 8;
+    for (let i = 0; i < rayCount; i++) {
+      const angle = (i / rayCount) * Math.PI * 2;
+      const isCardinal = i % 2 === 0;
+      const rayLen = isCardinal ? s * 1.1 : s * 0.7;
+      const rayWidth = isCardinal ? s * 0.035 : s * 0.025;
+      rays.beginFill(0xffffff, isCardinal ? 0.5 : 0.3);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const perpCos = Math.cos(angle + Math.PI / 2);
+      const perpSin = Math.sin(angle + Math.PI / 2);
+      rays.moveTo(perpCos * rayWidth, perpSin * rayWidth);
+      rays.lineTo(cos * rayLen, sin * rayLen);
+      rays.lineTo(-perpCos * rayWidth, -perpSin * rayWidth);
+      rays.closePath();
+      rays.endFill();
+    }
+
+    // Fine secondary rays (16 thin spikes)
+    const fineRays = new PIXI.Graphics();
+    const fineCount = 16;
+    for (let i = 0; i < fineCount; i++) {
+      const angle = (i / fineCount) * Math.PI * 2 + Math.PI / fineCount;
+      const rayLen = s * (0.35 + (i % 3) * 0.1);
+      fineRays.lineStyle(0.6, 0xffffff, 0.2);
+      fineRays.moveTo(0, 0);
+      fineRays.lineTo(Math.cos(angle) * rayLen, Math.sin(angle) * rayLen);
+    }
+
+    // Inner bright core
+    const coreOuter = new PIXI.Graphics();
+    coreOuter.beginFill(0xfff8e0, 0.7);
+    coreOuter.drawCircle(0, 0, s * 0.22);
+    coreOuter.endFill();
+
+    const coreInner = new PIXI.Graphics();
+    coreInner.beginFill(0xffffff, 0.95);
+    coreInner.drawCircle(0, 0, s * 0.11);
+    coreInner.endFill();
+
+    c.addChild(glowOuter, fineRays, rays, coreOuter, coreInner);
+    c.__baseSizePx = s;
+    return c;
+  }
+
   function makeMoonIconGlyph(sizePx = MOON_ICON_SCREEN_PX) {
     const s = Math.max(8, Number(sizePx) || MOON_ICON_SCREEN_PX);
     const r = s * 0.5;
@@ -2757,6 +2855,93 @@
     crater.endFill();
 
     c.addChild(disk, crescent, crater);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeJovianMoonIconGlyph(moonId, sizePx = JOVIAN_MOON_ICON_SCREEN_PX) {
+    const s = Math.max(7, Number(sizePx) || JOVIAN_MOON_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const id = String(moonId || "").toUpperCase();
+    const paletteByMoon = {
+      IO: { base: 0xf2c95f, stroke: 0xf9e2a8, accentA: 0xb85b1f, accentB: 0xe58d2e, accentC: 0x8d3f17 },
+      EUROPA: { base: 0xe3d8c2, stroke: 0xf3ead8, accentA: 0x9a6742, accentB: 0xc38b61, accentC: 0x7e5539 },
+      GANYMEDE: { base: 0x9c8974, stroke: 0xcfbea6, accentA: 0x6c5a49, accentB: 0xb19678, accentC: 0x4b3e34 },
+      CALLISTO: { base: 0x776857, stroke: 0xa18f77, accentA: 0x4f4338, accentB: 0x8d7761, accentC: 0x352d25 },
+    };
+    const palette = paletteByMoon[id] || paletteByMoon.CALLISTO;
+
+    const c = new PIXI.Container();
+
+    const disk = new PIXI.Graphics();
+    disk.beginFill(palette.base, 0.96);
+    disk.lineStyle(Math.max(0.75, s * 0.07), palette.stroke, 0.86);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    if (id === "IO") {
+      const plumeA = new PIXI.Graphics();
+      plumeA.beginFill(palette.accentA, 0.82);
+      plumeA.drawCircle(-s * 0.19, -s * 0.12, Math.max(0.65, s * 0.075));
+      plumeA.endFill();
+      const plumeB = new PIXI.Graphics();
+      plumeB.beginFill(palette.accentB, 0.74);
+      plumeB.drawCircle(s * 0.2, s * 0.1, Math.max(0.6, s * 0.07));
+      plumeB.endFill();
+      const caldera = new PIXI.Graphics();
+      caldera.beginFill(palette.accentC, 0.66);
+      caldera.drawCircle(s * 0.02, -s * 0.02, Math.max(0.5, s * 0.055));
+      caldera.endFill();
+      c.addChild(disk, plumeA, plumeB, caldera);
+    } else if (id === "EUROPA") {
+      const cracks = new PIXI.Graphics();
+      cracks.lineStyle(Math.max(0.45, s * 0.045), palette.accentA, 0.7);
+      cracks.moveTo(-s * 0.34, -s * 0.18);
+      cracks.lineTo(-s * 0.1, -s * 0.02);
+      cracks.lineTo(s * 0.26, s * 0.08);
+      cracks.lineStyle(Math.max(0.4, s * 0.04), palette.accentB, 0.62);
+      cracks.moveTo(-s * 0.25, s * 0.26);
+      cracks.lineTo(s * 0.03, s * 0.05);
+      cracks.lineTo(s * 0.28, -s * 0.12);
+      const pit = new PIXI.Graphics();
+      pit.beginFill(palette.accentC, 0.32);
+      pit.drawCircle(s * 0.14, s * 0.14, Math.max(0.45, s * 0.045));
+      pit.endFill();
+      c.addChild(disk, cracks, pit);
+    } else if (id === "GANYMEDE") {
+      const terrainA = new PIXI.Graphics();
+      terrainA.beginFill(palette.accentB, 0.42);
+      terrainA.drawCircle(-s * 0.17, -s * 0.08, Math.max(0.7, s * 0.09));
+      terrainA.endFill();
+      const terrainB = new PIXI.Graphics();
+      terrainB.beginFill(palette.accentA, 0.5);
+      terrainB.drawCircle(s * 0.16, s * 0.14, Math.max(0.65, s * 0.08));
+      terrainB.endFill();
+      const ridge = new PIXI.Graphics();
+      ridge.lineStyle(Math.max(0.42, s * 0.043), palette.accentC, 0.58);
+      ridge.moveTo(-s * 0.3, s * 0.02);
+      ridge.lineTo(-s * 0.05, s * 0.08);
+      ridge.lineTo(s * 0.24, s * 0.24);
+      c.addChild(disk, terrainA, terrainB, ridge);
+    } else {
+      const craterA = new PIXI.Graphics();
+      craterA.beginFill(palette.accentA, 0.64);
+      craterA.drawCircle(-s * 0.2, -s * 0.13, Math.max(0.58, s * 0.065));
+      craterA.endFill();
+      const craterB = new PIXI.Graphics();
+      craterB.beginFill(palette.accentB, 0.58);
+      craterB.drawCircle(s * 0.07, s * 0.18, Math.max(0.6, s * 0.068));
+      craterB.endFill();
+      const craterC = new PIXI.Graphics();
+      craterC.beginFill(palette.accentC, 0.7);
+      craterC.drawCircle(s * 0.2, -s * 0.15, Math.max(0.5, s * 0.055));
+      craterC.endFill();
+      const ring = new PIXI.Graphics();
+      ring.lineStyle(Math.max(0.36, s * 0.04), palette.accentC, 0.46);
+      ring.drawCircle(-s * 0.2, -s * 0.13, Math.max(0.8, s * 0.09));
+      c.addChild(disk, craterA, craterB, craterC, ring);
+    }
+
     c.__baseSizePx = s;
     return c;
   }
@@ -2943,9 +3128,16 @@
   /**
    * Compute a Hohmann transfer arc (half-ellipse) between two positions
    * around a central focus (the Sun). Returns a polyline curve object.
-   * The radial profile follows the Hohmann ellipse r(ν) equation;
-   * the angular sweep is linearly interpolated from θ₁→θ₂ to
-   * guarantee the arc passes through both exact endpoint positions.
+   *
+   * The radial profile follows the Hohmann ellipse r(ν) equation so
+   * the arc always transitions smoothly from r₁ to r₂ with the
+   * characteristic outward (or inward) bulge.
+   *
+   * The angular sweep always takes the **shorter** path around the Sun
+   * (≤ π radians), so arcs never loop more than halfway around.
+   * This is decoupled from the true-anomaly sweep (which always covers
+   * a full half-ellipse, 0→π or π→2π) so both endpoints hit the correct
+   * radii regardless of the angular separation.
    */
   function computeHohmannArc(sunX, sunY, fromX, fromY, toX, toY) {
     const r1 = Math.max(1e-6, Math.hypot(fromX - sunX, fromY - sunY));
@@ -2953,17 +3145,19 @@
     const theta1 = Math.atan2(fromY - sunY, fromX - sunX);
     const theta2raw = Math.atan2(toY - sunY, toX - sunX);
 
-    // Compute CCW (prograde) angular sweep from θ₁ to θ₂
-    let sweep = ((theta2raw - theta1) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-    // Hohmann sweeps ~π rad; if sweep is very small, add 2π to avoid zero-length arc
-    if (sweep < Math.PI * 0.15) sweep += 2 * Math.PI;
+    // CCW (prograde) angular sweep in [0, 2π)
+    const ccw = ((theta2raw - theta1) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    // Pick the shorter path (≤ π).  Positive = CCW, negative = CW.
+    let sweep = (ccw <= Math.PI) ? ccw : -(2 * Math.PI - ccw);
+    // Tiny minimum so nearly-aligned endpoints still produce a visible arc
+    if (Math.abs(sweep) < 0.05) sweep = Math.sign(sweep || 1) * 0.05;
 
     // Hohmann ellipse parameters
     const a = (r1 + r2) / 2;                   // semi-major axis
     const e = Math.abs(r2 - r1) / (r1 + r2);   // eccentricity
     const p = a * (1 - e * e);                  // semi-latus rectum = 2·r1·r2/(r1+r2)
 
-    // True anomaly range: periapsis→apoapsis (inner→outer) or apoapsis→periapsis (outer→inner)
+    // True anomaly: full half-ellipse so radius transitions from r1 → r2
     const nuStart = (r1 <= r2) ? 0 : Math.PI;
     const nuEnd   = (r1 <= r2) ? Math.PI : 2 * Math.PI;
 
@@ -2975,7 +3169,7 @@
       // Radius from the Hohmann ellipse equation
       const nu = nuStart + (nuEnd - nuStart) * t;
       const r = p / (1 + e * Math.cos(nu));
-      // Angle: linearly sweep from θ₁ to θ₂
+      // Angle: sweep from θ₁ toward θ₂ via the shorter path
       const angle = theta1 + sweep * t;
       const x = sunX + r * Math.cos(angle);
       const y = sunY + r * Math.sin(angle);
@@ -3005,16 +3199,177 @@
     return { x: p2.x - p1.x, y: p2.y - p1.y };
   }
 
-  /** Unified curve position: dispatches between Bézier and arc polyline. */
+  /** Unified curve position: dispatches between Bézier, arc, and composite. */
   function curvePoint(curve, t) {
+    if (curve.type === "composite") return compositePoint(curve, t);
     if (curve.type === "arc") return arcPoint(curve, t);
     return cubicPoint(curve, t);
   }
 
-  /** Unified curve tangent: dispatches between Bézier and arc polyline. */
+  /** Unified curve tangent: dispatches between Bézier, arc, and composite. */
   function curveTangent(curve, t) {
+    if (curve.type === "composite") return compositeTangent(curve, t);
     if (curve.type === "arc") return arcTangent(curve, t);
     return cubicTangent(curve, t);
+  }
+
+  /**
+   * Build a composite curve from multiple transfer legs, stitched into one
+   * continuous polyline. Each leg is weighted by its time-of-flight so the
+   * ship moves at a pace proportional to real transfer time.
+   */
+  function buildCompositeCurve(legs) {
+    if (!legs || !legs.length) return null;
+
+    const totalTof = legs.reduce((s, l) => s + Math.max(1, Number(l.tof_s) || (Number(l.arrival_time) - Number(l.departure_time))), 0);
+    const allPoints = [];
+    const legBounds = []; // { startFrac, endFrac } in [0,1] for each leg
+    let timeSoFar = 0;
+    let firstLegTrack = null;
+    let lastLegTrack = null;
+
+    for (let i = 0; i < legs.length; i++) {
+      const leg = legs[i];
+      const fromId = String(leg.from_id || "");
+      const toId = String(leg.to_id || "");
+      const depTime = Number(leg.departure_time);
+      const arrTime = Number(leg.arrival_time);
+      const isIP = !!(leg.is_interplanetary);
+      const tof = Math.max(1, Number(leg.tof_s) || (arrTime - depTime));
+
+      const fromAnchor = getTransitAnchorWorld(fromId, depTime);
+      const fromLive = locationsById.get(fromId);
+      const fromLoc = fromAnchor || fromLive;
+      const toAnchor = getTransitAnchorWorld(toId, arrTime);
+      const toLive = locationsById.get(toId);
+      const toLoc = toAnchor || toLive;
+      if (!fromLoc || !toLoc) continue;
+
+      const legCurve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isIP, depTime, arrTime);
+      if (!legCurve) continue;
+
+      // Capture tracking from first and last legs for composite warp
+      if (!firstLegTrack && legCurve.trackStartId) {
+        firstLegTrack = { id: legCurve.trackStartId, orig: legCurve.trackStartOrig };
+      }
+      if (legCurve.trackEndId) {
+        lastLegTrack = { id: legCurve.trackEndId, orig: legCurve.trackEndOrig };
+      }
+
+      // Sample this leg's curve into points
+      let pts;
+      if (legCurve.type === "arc") {
+        pts = legCurve.points;
+      } else {
+        pts = [];
+        for (let s = 0; s <= 64; s++) pts.push(cubicPoint(legCurve, s / 64));
+      }
+
+      const startFrac = timeSoFar / totalTof;
+      timeSoFar += tof;
+      const endFrac = timeSoFar / totalTof;
+      legBounds.push({ startFrac, endFrac });
+
+      // Append points (skip first point of subsequent legs to avoid duplicates)
+      const startIdx = (allPoints.length > 0) ? 1 : 0;
+      for (let j = startIdx; j < pts.length; j++) {
+        allPoints.push({ x: pts[j].x, y: pts[j].y, frac: startFrac + (endFrac - startFrac) * (j / (pts.length - 1)) });
+      }
+    }
+
+    if (allPoints.length < 2) return null;
+
+    // Build cumulative distances
+    const cumDist = [0];
+    for (let i = 1; i < allPoints.length; i++) {
+      const dx = allPoints[i].x - allPoints[i - 1].x;
+      const dy = allPoints[i].y - allPoints[i - 1].y;
+      cumDist.push(cumDist[i - 1] + Math.hypot(dx, dy));
+    }
+
+    const composite = { type: "composite", points: allPoints, cumDist, legBounds };
+    if (firstLegTrack) { composite.trackStartId = firstLegTrack.id; composite.trackStartOrig = firstLegTrack.orig; }
+    if (lastLegTrack) { composite.trackEndId = lastLegTrack.id; composite.trackEndOrig = lastLegTrack.orig; }
+    return composite;
+  }
+
+  /** Map overall t ∈ [0,1] to a distance along the composite polyline,
+   *  respecting per-leg time weighting. */
+  function compositeDistAtT(curve, t) {
+    const tc = Math.max(0, Math.min(1, t));
+    // Find the polyline point whose frac is closest
+    const pts = curve.points;
+    if (tc <= 0) return 0;
+    if (tc >= 1) return curve.cumDist[curve.cumDist.length - 1];
+    // Binary search for the segment spanning tc
+    let lo = 0, hi = pts.length - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].frac <= tc) lo = mid; else hi = mid;
+    }
+    const segFrac = pts[hi].frac - pts[lo].frac;
+    const localT = segFrac > 1e-9 ? (tc - pts[lo].frac) / segFrac : 0;
+    return curve.cumDist[lo] + (curve.cumDist[hi] - curve.cumDist[lo]) * localT;
+  }
+
+  function compositePoint(curve, t) {
+    const d = compositeDistAtT(curve, t);
+    return pointOnPolyline(curve.points, curve.cumDist, d);
+  }
+
+  function compositeTangent(curve, t) {
+    const dt = 0.003;
+    const p1 = compositePoint(curve, Math.max(0, t - dt));
+    const p2 = compositePoint(curve, Math.min(1, t + dt));
+    return { x: p2.x - p1.x, y: p2.y - p1.y };
+  }
+
+  /**
+   * Compute a linear warp that adjusts a transit curve's endpoints
+   * to track the current live positions of departure/arrival bodies.
+   * Each point on the curve at fraction t gets shifted by:
+   *   delta = (1-t)*startDelta + t*endDelta
+   * Returns null if no warp is needed (positions unchanged).
+   */
+  function computeCurveWarp(curve) {
+    if (!curve || (!curve.trackStartId && !curve.trackEndId)) return null;
+    const fromLive = curve.trackStartId ? locationsById.get(curve.trackStartId) : null;
+    const toLive = curve.trackEndId ? locationsById.get(curve.trackEndId) : null;
+    const dxS = fromLive && curve.trackStartOrig ? fromLive.rx - curve.trackStartOrig.x : 0;
+    const dyS = fromLive && curve.trackStartOrig ? fromLive.ry - curve.trackStartOrig.y : 0;
+    const dxE = toLive && curve.trackEndOrig ? toLive.rx - curve.trackEndOrig.x : 0;
+    const dyE = toLive && curve.trackEndOrig ? toLive.ry - curve.trackEndOrig.y : 0;
+    if (Math.abs(dxS) + Math.abs(dyS) + Math.abs(dxE) + Math.abs(dyE) < 0.01) return null;
+    return { dxS, dyS, dxE, dyE };
+  }
+
+  /** Apply warp displacement at fraction t ∈ [0,1] along the curve. */
+  function warpXY(x, y, t, w) {
+    if (!w) return { x, y };
+    const u = 1 - t;
+    return { x: x + u * w.dxS + t * w.dxE, y: y + u * w.dyS + t * w.dyE };
+  }
+
+  /**
+   * Create warped copies of a polyline's points and cumulative distances.
+   * The warp linearly interpolates a start-displacement and end-displacement
+   * based on each point's fractional position along the path.
+   */
+  function warpPolyline(points, cumDist, warp) {
+    if (!warp) return { points, cumDist };
+    const total = cumDist[cumDist.length - 1] || 1;
+    const wp = points.map((p, i) => {
+      const frac = cumDist[i] / total;
+      const u = 1 - frac;
+      return { x: p.x + u * warp.dxS + frac * warp.dxE, y: p.y + u * warp.dyS + frac * warp.dyE, frac: p.frac };
+    });
+    const wc = [0];
+    for (let i = 1; i < wp.length; i++) {
+      const dx = wp[i].x - wp[i - 1].x;
+      const dy = wp[i].y - wp[i - 1].y;
+      wc.push(wc[i - 1] + Math.hypot(dx, dy));
+    }
+    return { points: wp, cumDist: wc };
   }
 
   function computeTransitCurve(fromLocId, toLocId, fromLoc, toLoc, isInterplanetary, legDeparture, legArrival) {
@@ -3058,7 +3413,29 @@
           const arcToBody = snapToRingRadius(toBodyFuture, toBodyLive, sun);
           const arcFrom = arcFromBody ? { x: arcFromBody.rx, y: arcFromBody.ry } : p0;
           const arcTo = arcToBody ? { x: arcToBody.rx, y: arcToBody.ry } : p3;
-          return computeHohmannArc(sun.rx, sun.ry, arcFrom.x, arcFrom.y, arcTo.x, arcTo.y);
+
+          // For orbit nodes with significant radius (e.g. JUP_HO at 40M km),
+          // extend the arc endpoint outward from the planet center along the
+          // Sun→planet direction so the path visually reaches the orbit ring.
+          function offsetByOrbitRadius(pt, locId) {
+            const oi = orbitInfo.get(locId);
+            if (!oi || oi.radius <= 0) return;
+            const dx = pt.x - sun.rx;
+            const dy = pt.y - sun.ry;
+            const d = Math.hypot(dx, dy);
+            if (d > 1e-6) {
+              pt.x += (dx / d) * oi.radius;
+              pt.y += (dy / d) * oi.radius;
+            }
+          }
+          offsetByOrbitRadius(arcFrom, fromLocId);
+          offsetByOrbitRadius(arcTo, toLocId);
+
+          const arc = computeHohmannArc(sun.rx, sun.ry, arcFrom.x, arcFrom.y, arcTo.x, arcTo.y);
+          // Track solar body positions so the arc endpoints follow planet movement
+          if (fromBodyLive) { arc.trackStartId = fromSolar; arc.trackStartOrig = { x: fromBodyLive.rx, y: fromBodyLive.ry }; }
+          if (toBodyLive) { arc.trackEndId = toSolar; arc.trackEndOrig = { x: toBodyLive.rx, y: toBodyLive.ry }; }
+          return arc;
         }
       }
     }
@@ -3104,7 +3481,15 @@
       y: p3.y - arriveTan.y * c2Dist + bendVec.y * 0.35,
     };
 
-    return { p0, c1, c2, p3 };
+    // Track solar-group body positions so Bézier endpoints follow planet movement
+    const bezier = { p0, c1, c2, p3 };
+    const fromTrackId = getLocationSolarGroup(fromLocId) || fromLocId;
+    const toTrackId = getLocationSolarGroup(toLocId) || toLocId;
+    const fromTrack = locationsById.get(fromTrackId);
+    const toTrack = locationsById.get(toTrackId);
+    if (fromTrack) { bezier.trackStartId = fromTrackId; bezier.trackStartOrig = { x: fromTrack.rx, y: fromTrack.ry }; }
+    if (toTrack) { bezier.trackEndId = toTrackId; bezier.trackEndOrig = { x: toTrack.rx, y: toTrack.ry }; }
+    return bezier;
   }
 
   function cubicPoint(curve, t) {
@@ -3134,41 +3519,58 @@
   function pointOnPolyline(points, cumulative, targetDist) {
     const total = cumulative[cumulative.length - 1] || 0;
     const d = Math.max(0, Math.min(total, targetDist));
-    for (let i = 1; i < cumulative.length; i++) {
-      if (d <= cumulative[i]) {
-        const segStart = cumulative[i - 1];
-        const segLen = Math.max(1e-9, cumulative[i] - segStart);
-        const t = (d - segStart) / segLen;
-        const a = points[i - 1];
-        const b = points[i];
-        return {
-          x: a.x + (b.x - a.x) * t,
-          y: a.y + (b.y - a.y) * t,
-        };
-      }
+    // Binary search for the segment containing targetDist
+    let lo = 1, hi = cumulative.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cumulative[mid] < d) lo = mid + 1;
+      else hi = mid;
+    }
+    const i = lo;
+    if (i < cumulative.length) {
+      const segStart = cumulative[i - 1];
+      const segLen = Math.max(1e-9, cumulative[i] - segStart);
+      const t = (d - segStart) / segLen;
+      const a = points[i - 1];
+      const b = points[i];
+      return {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+      };
     }
     return points[points.length - 1];
   }
 
-  function drawDashedTransitPath(pathGfx, curve, size, isSelected, displayScale = 1, shipProgress = 0) {
+  function drawDashedTransitPath(pathGfx, curve, size, isSelected, displayScale = 1, shipProgress = 0, warp = null) {
     if (!pathGfx || !curve) return;
 
     let points, cumulative;
-    if (curve.type === "arc") {
-      // Arc curves already have pre-computed polyline + cumulative distances
+    if (curve.type === "arc" || curve.type === "composite") {
+      // Arc and composite curves already have pre-computed polyline + cumulative distances
       points = curve.points;
       cumulative = curve.cumDist;
     } else {
-      // Bézier: sample into a polyline
-      const samples = 96;
-      points = [];
-      for (let i = 0; i <= samples; i++) points.push(cubicPoint(curve, i / samples));
-      cumulative = [0];
-      for (let i = 1; i < points.length; i++) {
-        const dx = points[i].x - points[i - 1].x;
-        const dy = points[i].y - points[i - 1].y;
-        cumulative.push(cumulative[i - 1] + Math.hypot(dx, dy));
+      // Bézier: sample into a polyline (cached on curve object)
+      if (!curve._polyPoints) {
+        const samples = 128;
+        curve._polyPoints = [];
+        for (let i = 0; i <= samples; i++) curve._polyPoints.push(cubicPoint(curve, i / samples));
+        curve._polyCum = [0];
+        for (let i = 1; i < curve._polyPoints.length; i++) {
+          const dx = curve._polyPoints[i].x - curve._polyPoints[i - 1].x;
+          const dy = curve._polyPoints[i].y - curve._polyPoints[i - 1].y;
+          curve._polyCum.push(curve._polyCum[i - 1] + Math.hypot(dx, dy));
+        }
       }
+      points = curve._polyPoints;
+      cumulative = curve._polyCum;
+    }
+
+    // Apply live-position warp so path endpoints track moving celestial bodies
+    if (warp) {
+      const w = warpPolyline(points, cumulative, warp);
+      points = w.points;
+      cumulative = w.cumDist;
     }
 
     const total = cumulative[cumulative.length - 1] || 0;
@@ -3191,53 +3593,65 @@
     const traveledAlpha = isSelected ? 0.18 : 0.10;
 
     // --- Split point along the path ---
-    const shipDist = clamp(shipProgress, 0, 1) * total;
+    // For composite curves, shipProgress is time-fraction — convert to distance
+    const shipDist = (curve.type === "composite")
+      ? compositeDistAtT(curve, clamp(shipProgress, 0, 1))
+      : clamp(shipProgress, 0, 1) * total;
 
     pathGfx.clear();
+
+    // Find the polyline index where the ship currently is (for splitting
+    // the path into traveled vs. ahead portions using actual polyline points
+    // instead of re-sampling, which produces much smoother curves).
+    let shipSegIdx = 0;
+    for (let i = 1; i < cumulative.length; i++) {
+      if (cumulative[i] >= shipDist) { shipSegIdx = i; break; }
+      shipSegIdx = i;
+    }
+    // Exact interpolated ship position on the polyline
+    const shipPt = pointOnPolyline(points, cumulative, shipDist);
 
     // 1) Traveled portion (thin, dim line behind the ship)
     if (shipDist > 1) {
       pathGfx.lineStyle(thinWidth, traveledColor, traveledAlpha);
-      const startPt = pointOnPolyline(points, cumulative, 0);
-      pathGfx.moveTo(startPt.x, startPt.y);
-      const traveledSegments = 24;
-      for (let i = 1; i <= traveledSegments; i++) {
-        const d = (i / traveledSegments) * shipDist;
-        const pt = pointOnPolyline(points, cumulative, Math.min(total, d));
-        pathGfx.lineTo(pt.x, pt.y);
+      pathGfx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < shipSegIdx; i++) {
+        pathGfx.lineTo(points[i].x, points[i].y);
       }
+      pathGfx.lineTo(shipPt.x, shipPt.y);
     }
 
     // 2) Ahead portion (smooth solid line from ship to destination)
     const remainDist = total - shipDist;
     if (remainDist > 1) {
       pathGfx.lineStyle(lineWidth, aheadColor, aheadAlpha);
-      const startAhead = pointOnPolyline(points, cumulative, shipDist);
-      pathGfx.moveTo(startAhead.x, startAhead.y);
-      const aheadSegments = 48;
-      for (let i = 1; i <= aheadSegments; i++) {
-        const d = shipDist + (i / aheadSegments) * remainDist;
-        const pt = pointOnPolyline(points, cumulative, Math.min(total, d));
-        pathGfx.lineTo(pt.x, pt.y);
+      pathGfx.moveTo(shipPt.x, shipPt.y);
+      for (let i = shipSegIdx; i < points.length; i++) {
+        if (cumulative[i] <= shipDist) continue;
+        pathGfx.lineTo(points[i].x, points[i].y);
       }
     }
 
-    // 3) Directional chevron dashes along the ahead portion
+    // 3) Static directional chevron dashes along the ahead portion
     const dashLen = Math.max(3, size * SHIP_PATH_DASH_LEN_MULT * 0.7);
     const gapLen = Math.max(4, size * SHIP_PATH_GAP_LEN_MULT * 1.8);
-    const animOffset = ((performance.now() / 1000) * dashLen * 2) % (dashLen + gapLen);
 
-    pathGfx.lineStyle(chevWidth, chevronColor, isSelected ? 0.55 : SHIP_PATH_CHEVRON_ALPHA);
-    for (let d = shipDist + animOffset; d < total; d += dashLen + gapLen) {
-      const fadeIn = smoothstep(shipDist, shipDist + remainDist * 0.05, d);
-      const fadeOut = 1 - smoothstep(total - remainDist * 0.08, total, d);
-      const segAlpha = fadeIn * fadeOut * (isSelected ? 0.55 : SHIP_PATH_CHEVRON_ALPHA);
-      if (segAlpha < 0.01) continue;
-      pathGfx.lineStyle(chevWidth, chevronColor, segAlpha);
-      const a = pointOnPolyline(points, cumulative, d);
-      const b = pointOnPolyline(points, cumulative, Math.min(total, d + dashLen));
-      pathGfx.moveTo(a.x, a.y);
-      pathGfx.lineTo(b.x, b.y);
+    if (remainDist > dashLen * 2) {
+      const maxChevrons = isSelected ? 20 : 8;
+      let chevCount = 0;
+      for (let d = shipDist; d < total; d += dashLen + gapLen) {
+        if (chevCount >= maxChevrons) break;
+        const fadeIn = smoothstep(shipDist, shipDist + remainDist * 0.05, d);
+        const fadeOut = 1 - smoothstep(total - remainDist * 0.08, total, d);
+        const segAlpha = fadeIn * fadeOut * (isSelected ? 0.55 : SHIP_PATH_CHEVRON_ALPHA);
+        if (segAlpha < 0.01) continue;
+        pathGfx.lineStyle(chevWidth, chevronColor, segAlpha);
+        const a = pointOnPolyline(points, cumulative, d);
+        const b = pointOnPolyline(points, cumulative, Math.min(total, d + dashLen));
+        pathGfx.moveTo(a.x, a.y);
+        pathGfx.lineTo(b.x, b.y);
+        chevCount++;
+      }
     }
 
     // 4) Destination diamond marker
@@ -3260,6 +3674,59 @@
     pathGfx.beginFill(traveledColor, traveledAlpha * 2.5);
     pathGfx.drawCircle(originPt.x, originPt.y, originSize);
     pathGfx.endFill();
+  }
+
+  /**
+   * Draw faint arcs for future (not-yet-active) transfer legs so the full
+   * multi-leg route is visible on the map even before the ship reaches them.
+   */
+  function drawFutureTransitLegs(pathGfx, ship, activeLegIndex, shipSize, isSelected) {
+    if (!pathGfx || !ship) return;
+    const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
+    if (activeLegIndex < 0 || activeLegIndex >= legs.length - 1) return;
+
+    const zoom = Math.max(0.0001, world.scale.x);
+    const shipSizeFactor = clamp((Number(shipSize) || 10) / 10, 0.42, 1.55);
+    const lineWidth = Math.max(0.8, (isSelected ? 1.8 : 1.0) * shipSizeFactor) / zoom;
+    const futureColor = isSelected ? 0x8ab4e8 : 0x7a9cc0;
+    const futureAlpha = isSelected ? 0.25 : 0.15;
+
+    for (let i = activeLegIndex + 1; i < legs.length; i++) {
+      const leg = legs[i];
+      if (!leg) continue;
+      const fromId = String(leg.from_id || "");
+      const toId = String(leg.to_id || "");
+      const depTime = Number(leg.departure_time);
+      const arrTime = Number(leg.arrival_time);
+      const isInterplanetary = !!(leg.is_interplanetary);
+
+      const fromAnchor = getTransitAnchorWorld(fromId, depTime);
+      const fromLive = locationsById.get(fromId);
+      const fromLoc = fromAnchor || fromLive;
+      const toAnchor = getTransitAnchorWorld(toId, arrTime);
+      const toLive = locationsById.get(toId);
+      const toLoc = toAnchor || toLive;
+      if (!fromLoc || !toLoc) continue;
+
+      const curve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isInterplanetary, depTime, arrTime);
+      if (!curve) continue;
+
+      // Draw as a simple faint solid line
+      let points;
+      if (curve.type === "arc") {
+        points = curve.points;
+      } else {
+        points = [];
+        for (let s = 0; s <= 64; s++) points.push(cubicPoint(curve, s / 64));
+      }
+      if (!points || points.length < 2) continue;
+
+      pathGfx.lineStyle(lineWidth, futureColor, futureAlpha);
+      pathGfx.moveTo(points[0].x, points[0].y);
+      for (let j = 1; j < points.length; j++) {
+        pathGfx.lineTo(points[j].x, points[j].y);
+      }
+    }
   }
 
   function pickActiveTransferLeg(ship, nowGameS) {
@@ -3428,6 +3895,7 @@
   let vestaGfx = null;
   let pallasGfx = null;
   let hygieaGfx = null;
+  let jupiterGfx = null;
   const mainPlanetGfx = [];
   let hoveredBodyId = null;
   let moonDetailAlpha = 1;
@@ -3441,7 +3909,13 @@
     const glyph = new PIXI.Container();
 
     const half = Math.max(2.8, radiusWorld);
-    if (["moon", "luna"].includes(String(name).toLowerCase())) {
+    if (String(name).toLowerCase() === "sun") {
+      const sunBurst = makeSunGlyph(SUN_ICON_SCREEN_PX);
+      sunBurst.__isSunIcon = true;
+      glyph.addChild(sunBurst);
+      c.__isSunIcon = true;
+      c.__sunBaseSizePx = sunBurst.__baseSizePx || SUN_ICON_SCREEN_PX;
+    } else if (["moon", "luna"].includes(String(name).toLowerCase())) {
       const moonGlyph = makeMoonIconGlyph(MOON_ICON_SCREEN_PX);
       moonGlyph.__isMoonIcon = true;
       glyph.addChild(moonGlyph);
@@ -3519,6 +3993,7 @@
     vestaGfx = makePlanet("Vesta", 3.6, 0x9a8a7a, 0xb0a090);
     pallasGfx = makePlanet("Pallas", 3.5, 0x7a6e62, 0x908478);
     hygieaGfx = makePlanet("Hygiea", 3.4, 0x5c5550, 0x706860);
+    jupiterGfx = makePlanet("Jupiter", 5.2, 0xc88b3a, 0xd4a860);
 
     bindBodyHover(sunGfx, "grp_sun");
     bindBodyHover(mercuryGfx, "grp_mercury");
@@ -3530,9 +4005,10 @@
     bindBodyHover(vestaGfx, "grp_vesta");
     bindBodyHover(pallasGfx, "grp_pallas");
     bindBodyHover(hygieaGfx, "grp_hygiea");
+    bindBodyHover(jupiterGfx, "grp_jupiter");
 
-    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx);
-    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx);
+    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx);
+    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx);
   }
 
   function updatePlanetVisualScale() {
@@ -3542,6 +4018,7 @@
 
     for (const planet of mainPlanetGfx) {
       if (!planet) continue;
+      if (planet.__isSunIcon) continue;
       const isHovered = hoveredBodyId && planet.__bodyId === hoveredBodyId;
       const hoverMul = isHovered ? BODY_HOVER_SCALE_MULT : 1;
       if (planet.__glyph) {
@@ -3552,6 +4029,21 @@
         planet.__label.scale.set(labelLockedToScreen * hoverMul);
         planet.__label.alpha = isHovered ? 1 : BODY_BASE_LABEL_ALPHA;
       }
+    }
+
+    if (sunGfx?.__glyph) {
+      const sunBase = Math.max(12, Number(sunGfx.__sunBaseSizePx) || SUN_ICON_SCREEN_PX);
+      const sunLockedToScreen = (SUN_ICON_SCREEN_PX / sunBase) / zoom;
+      const isSunHovered = hoveredBodyId === "grp_sun";
+      const hoverMul = isSunHovered ? BODY_HOVER_SCALE_MULT : 1;
+      sunGfx.__glyph.scale.set(sunLockedToScreen * hoverMul);
+      sunGfx.__glyph.alpha = isSunHovered ? 1 : 0.95;
+    }
+    if (sunGfx?.__label) {
+      const isSunHovered = hoveredBodyId === "grp_sun";
+      const hoverMul = isSunHovered ? BODY_HOVER_SCALE_MULT : 1;
+      sunGfx.__label.scale.set(labelLockedToScreen * hoverMul);
+      sunGfx.__label.alpha = isSunHovered ? 1 : BODY_BASE_LABEL_ALPHA;
     }
 
     if (moonGfx?.__glyph) {
@@ -3581,6 +4073,7 @@
     const vesta = locationsById.get("grp_vesta");
     const pallas = locationsById.get("grp_pallas");
     const hygiea = locationsById.get("grp_hygiea");
+    const jupiter = locationsById.get("grp_jupiter");
     if (!sun || !mercury || !venus || !earth || !moon || !mars) return;
     if (!sunGfx || !mercuryGfx || !venusGfx || !earthGfx || !moonGfx || !marsGfx) return;
 
@@ -3594,6 +4087,7 @@
     if (vesta && vestaGfx) vestaGfx.position.set(vesta.rx, vesta.ry);
     if (pallas && pallasGfx) pallasGfx.position.set(pallas.rx, pallas.ry);
     if (hygiea && hygieaGfx) hygieaGfx.position.set(hygiea.rx, hygiea.ry);
+    if (jupiter && jupiterGfx) jupiterGfx.position.set(jupiter.rx, jupiter.ry);
   }
 
   // ---------- Orbit hover labels ----------
@@ -3647,6 +4141,19 @@
       { id: "PALLAS_HO", center: "grp_pallas", period_s: 450 },
       { id: "HYGIEA_LO", center: "grp_hygiea", period_s: 410 },
       { id: "HYGIEA_HO", center: "grp_hygiea", period_s: 470 },
+      { id: "PHOBOS_LO", center: "PHOBOS", period_s: 120 },
+      { id: "DEIMOS_LO", center: "DEIMOS", period_s: 140 },
+      { id: "ZOOZVE_LO", center: "ZOOZVE", period_s: 100 },
+      { id: "JUP_LO", center: "grp_jupiter", period_s: 500 },
+      { id: "JUP_HO", center: "grp_jupiter", period_s: 600 },
+      { id: "IO_LO", center: "IO", period_s: 160 },
+      { id: "IO_HO", center: "IO", period_s: 200 },
+      { id: "EUROPA_LO", center: "EUROPA", period_s: 180 },
+      { id: "EUROPA_HO", center: "EUROPA", period_s: 220 },
+      { id: "GANYMEDE_LO", center: "GANYMEDE", period_s: 200 },
+      { id: "GANYMEDE_HO", center: "GANYMEDE", period_s: 240 },
+      { id: "CALLISTO_LO", center: "CALLISTO", period_s: 220 },
+      { id: "CALLISTO_HO", center: "CALLISTO", period_s: 260 },
     ];
 
     for (const od of orbitDefs) {
@@ -3671,7 +4178,19 @@
     ensureOrbitLabels();
   }
 
+  // Orbit IDs that should remain visible at solar-system zoom levels
+  const SOLAR_SCALE_ORBIT_IDS = new Set(["JUP_HO"]);
+
   function renderOrbitRings() {
+    // Detect zoom changes and mark dirty
+    const currentZoom = world.scale.x;
+    if (currentZoom !== lastOrbitZoom) {
+      orbitRingsDirty = true;
+      lastOrbitZoom = currentZoom;
+    }
+    if (!orbitRingsDirty) return;
+    orbitRingsDirty = false;
+
     orbitLayer.clear();
     if (orbitDetailAlpha <= 0.001 && mainOrbitDetailAlpha <= 0.001) return;
 
@@ -3682,13 +4201,23 @@
 
     const sun = locationsById.get("grp_sun");
     if (sun) {
-      const solarIds = ["grp_mercury", "grp_venus", "grp_earth", "grp_mars"];
+      const solarIds = ["grp_mercury", "grp_venus", "grp_earth", "grp_mars", "grp_jupiter"];
       orbitLayer.lineStyle((ringScreenPx * SOLAR_RING_MULT) / zoom, 0xf3d9a6, 0.18 * mainOrbitDetailAlpha);
       for (const pid of solarIds) {
         const body = locationsById.get(pid);
         if (!body) continue;
         const rr = Math.hypot(body.rx - sun.rx, body.ry - sun.ry);
         if (rr > 1e-6) orbitLayer.drawCircle(sun.rx, sun.ry, rr);
+      }
+
+      // Zoozve quasi-satellite orbit ring around the Sun
+      const zoozveBody = locationsById.get("ZOOZVE") || locationsById.get("grp_zoozve");
+      if (zoozveBody) {
+        const rrZ = Math.hypot(zoozveBody.rx - sun.rx, zoozveBody.ry - sun.ry);
+        if (rrZ > 1e-6) {
+          orbitLayer.lineStyle((ringScreenPx * SOLAR_RING_MULT) / zoom, 0xa0a0a0, 0.10 * mainOrbitDetailAlpha);
+          orbitLayer.drawCircle(sun.rx, sun.ry, rrZ);
+        }
       }
 
       // Asteroid belt dust cloud — wide overlapping bands for a smooth diffuse look
@@ -3733,9 +4262,11 @@
       const oi = orbitInfo.get(id);
       if (!oi) return;
 
+      const isSolarScale = SOLAR_SCALE_ORBIT_IDS.has(id);
+      const alpha = isSolarScale ? mainOrbitDetailAlpha : orbitDetailAlpha;
       const isHover = hoveredOrbitId === id;
       const lw = isHover ? baseLW * ORBIT_RING_HOVER_MULT : baseLW;
-      const a = (isHover ? 0.26 : 0.10) * orbitDetailAlpha;
+      const a = (isHover ? 0.26 : 0.10) * alpha;
 
       orbitLayer.lineStyle(lw, 0xffffff, a);
       orbitLayer.drawCircle(oi.cx, oi.cy, oi.radius);
@@ -3751,7 +4282,39 @@
       "VESTA_LO", "VESTA_HO",
       "PALLAS_LO", "PALLAS_HO",
       "HYGIEA_LO", "HYGIEA_HO",
+      "PHOBOS_LO", "DEIMOS_LO", "ZOOZVE_LO",
+      "JUP_LO", "JUP_HO",
+      "IO_LO", "IO_HO",
+      "EUROPA_LO", "EUROPA_HO",
+      "GANYMEDE_LO", "GANYMEDE_HO",
+      "CALLISTO_LO", "CALLISTO_HO",
     ].forEach(drawRing);
+
+    // Phobos and Deimos orbital path rings around Mars
+    const marsGrp = locationsById.get("grp_mars");
+    if (marsGrp) {
+      const moonletOrbitIds = ["PHOBOS", "DEIMOS"];
+      orbitLayer.lineStyle(baseLW, 0xaaaaaa, 0.12 * orbitDetailAlpha);
+      for (const mid of moonletOrbitIds) {
+        const marker = locationsById.get(mid);
+        if (!marker) continue;
+        const rr = Math.hypot(marker.rx - marsGrp.rx, marker.ry - marsGrp.ry);
+        if (rr > 1e-6) orbitLayer.drawCircle(marsGrp.rx, marsGrp.ry, rr);
+      }
+    }
+
+    // Jupiter's Galilean moon orbital path rings
+    const jupGrp = locationsById.get("grp_jupiter");
+    if (jupGrp) {
+      const jupMoonIds = ["IO", "EUROPA", "GANYMEDE", "CALLISTO"];
+      orbitLayer.lineStyle(baseLW, 0xaaaaaa, 0.12 * orbitDetailAlpha);
+      for (const mid of jupMoonIds) {
+        const marker = locationsById.get(mid);
+        if (!marker) continue;
+        const rr = Math.hypot(marker.rx - jupGrp.rx, marker.ry - jupGrp.ry);
+        if (rr > 1e-6) orbitLayer.drawCircle(jupGrp.rx, jupGrp.ry, rr);
+      }
+    }
   }
 
   // ---------- Ring hover detection (Step 4) ----------
@@ -3778,12 +4341,16 @@
       }
     }
 
-    hoveredOrbitId = best;
+    if (hoveredOrbitId !== best) {
+      hoveredOrbitId = best;
+      markOrbitsDirty();
+    }
 
     // show only hovered orbit label near cursor
     for (const [id, t] of orbitLabelMap.entries()) {
       if (id === hoveredOrbitId) {
-        t.alpha = orbitDetailAlpha;
+        const a = SOLAR_SCALE_ORBIT_IDS.has(id) ? mainOrbitDetailAlpha : orbitDetailAlpha;
+        t.alpha = a;
         t.position.set(p.x + 14 / world.scale.x, p.y);
       } else {
         t.alpha = 0;
@@ -3792,6 +4359,7 @@
   });
 
   app.view.addEventListener("pointerleave", () => {
+    if (hoveredOrbitId !== null) markOrbitsDirty();
     hoveredOrbitId = null;
     hoveredBodyId = null;
     for (const t of orbitLabelMap.values()) t.alpha = 0;
@@ -3799,10 +4367,16 @@
 
   // ---------- Locations ----------
   function ensureLocationsGfx() {
-    function makeMoonMarker(isPhobos) {
-      const marker = makeMoonIconGlyph(MOON_ICON_SCREEN_PX);
+    function makeMoonMarker(moonId = "") {
+      const id = String(moonId || "").toUpperCase();
+      const isJovianMoon = id === "IO" || id === "EUROPA" || id === "GANYMEDE" || id === "CALLISTO";
+      const targetScreenPx = isJovianMoon ? JOVIAN_MOON_ICON_SCREEN_PX : MOON_ICON_SCREEN_PX;
+      const marker = isJovianMoon
+        ? makeJovianMoonIconGlyph(id, targetScreenPx)
+        : makeMoonIconGlyph(targetScreenPx);
       marker.__isMoonIcon = true;
       marker.__moonBaseSizePx = marker.__baseSizePx || MOON_ICON_SCREEN_PX;
+      marker.__targetScreenPx = targetScreenPx;
       return marker;
     }
 
@@ -3825,7 +4399,7 @@
       const inEarthLocal = hasAncestor(loc.id, "grp_earth_orbits", locationParentById);
       const inMoonLocal = hasAncestor(loc.id, "grp_moon_orbits", locationParentById);
       const isLPoint = LPOINT_IDS.has(loc.id);
-      const isMoonlet = loc.id === "PHOBOS" || loc.id === "DEIMOS";
+      const isMoonlet = loc.id === "PHOBOS" || loc.id === "DEIMOS" || loc.id === "IO" || loc.id === "EUROPA" || loc.id === "GANYMEDE" || loc.id === "CALLISTO";
       const isAsteroid = isAsteroidLocation(loc);
 
       let kind = "deep-node";
@@ -3872,9 +4446,11 @@
         cross.moveTo(3, 0);    cross.lineTo(4.5, 0);
         dot.addChild(cross);
       } else if (loc.id === "PHOBOS") {
-        dot = makeMoonMarker(true);
+        dot = makeMoonMarker("PHOBOS");
       } else if (loc.id === "DEIMOS") {
-        dot = makeMoonMarker(false);
+        dot = makeMoonMarker("DEIMOS");
+      } else if (loc.id === "IO" || loc.id === "EUROPA" || loc.id === "GANYMEDE" || loc.id === "CALLISTO") {
+        dot = makeMoonMarker(loc.id);
       } else if (isAsteroid) {
         dot = makeAsteroidMarker();
       } else {
@@ -3929,35 +4505,45 @@
     const deepIconShrink = deepZoomShrink(z, DEEP_ZOOM_SHRINK_START, DEEP_ZOOM_ICON_SHRINK_RATE, DEEP_ZOOM_ICON_SHRINK_MIN);
     const deepLabelShrink = deepZoomShrink(z, DEEP_ZOOM_SHRINK_START, DEEP_ZOOM_LABEL_SHRINK_RATE, DEEP_ZOOM_LABEL_SHRINK_MIN);
 
-    // Keep moons and local orbit rings fully visible down to scale 0.7,
-    // then fade as user zooms further out.
-    moonDetailAlpha = zoomFade(z, 0.35, 0.7);
-    orbitDetailAlpha = zoomFade(z, 0.35, 0.7);
+    // Moons, local orbit rings, and orbit-node dots fully visible at scale 0.30,
+    // fading in from 0.10.
+    moonDetailAlpha = zoomFade(z, 0.10, 0.30);
+    orbitDetailAlpha = zoomFade(z, 0.10, 0.30);
     mainOrbitDetailAlpha = 1 - zoomFade(z, 1.2, 3.2);
     lPointDetailAlpha = zoomFade(z, 1.2, 2.4);
-    localNodeDetailAlpha = zoomFade(z, 0.35, 0.7);
+    localNodeDetailAlpha = zoomFade(z, 0.10, 0.30);
 
     if (moonGfx) moonGfx.alpha = moonDetailAlpha;
     updatePlanetVisualScale();
 
-    for (const entry of locGfx.values()) {
-      const detailAlpha = entry.kind === "lagrange"
-        ? lPointDetailAlpha
-        : (entry.kind === "orbit-node"
-          ? localNodeDetailAlpha
-          : (entry.kind === "moonlet" ? moonDetailAlpha : 1));
+    for (const [locId, entry] of locGfx.entries()) {
+      const detailAlpha = (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId))
+        ? 1
+        : (entry.kind === "lagrange"
+          ? lPointDetailAlpha
+          : (entry.kind === "orbit-node"
+            ? localNodeDetailAlpha
+            : (entry.kind === "moonlet" ? moonDetailAlpha : 1)));
       if (entry.kind === "moonlet" && entry.dot?.__isMoonIcon) {
         const moonBase = Math.max(8, Number(entry.dot.__moonBaseSizePx) || MOON_ICON_SCREEN_PX);
+        const targetMoonPx = Math.max(7, Number(entry.dot.__targetScreenPx) || MOON_ICON_SCREEN_PX);
         const moonletHoverMul = entry.hovered ? MOONLET_HOVER_SCALE_MULT : 1;
-        entry.dot.scale.set(((MOON_ICON_SCREEN_PX / moonBase) / Math.max(0.0001, z)) * moonletHoverMul);
+        entry.dot.scale.set(((targetMoonPx / moonBase) / Math.max(0.0001, z)) * moonletHoverMul);
       } else if (entry.kind === "asteroid" && entry.dot?.__isAsteroidIcon) {
         const asteroidBase = Math.max(8, Number(entry.dot.__asteroidBaseSizePx) || ASTEROID_ICON_SCREEN_PX);
         const asteroidHoverMul = entry.hovered ? ASTEROID_HOVER_SCALE_MULT : 1;
         entry.dot.scale.set(((ASTEROID_ICON_SCREEN_PX / asteroidBase) / Math.max(0.0001, z)) * asteroidHoverMul);
+      } else if (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId)) {
+        // Solar-scale L-points: lock to screen size like planets
+        entry.dot.scale.set((1 / Math.max(0.0001, z)) * PLANET_ICON_SCREEN_MULT);
       } else {
         entry.dot.scale.set(iconGrowOnZoomOut * deepIconShrink);
       }
-      entry.label.scale.set(labelGrowOnZoomOut * deepLabelShrink);
+      entry.label.scale.set(
+        (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId))
+          ? (1 / Math.max(0.0001, z))
+          : labelGrowOnZoomOut * deepLabelShrink
+      );
       // Ensure location dots have a minimum screen-pixel hit area regardless of zoom
       const dotScale = Math.max(0.0001, entry.dot.scale.x);
       const locHitLocal = Math.max(9, (MIN_LOC_HIT_SCREEN_PX / Math.max(0.0001, z)) / dotScale);
@@ -3968,12 +4554,21 @@
       }
       entry.dot.alpha = detailAlpha * (entry.hovered ? 1 : 0.9);
       entry.dot.visible = detailAlpha > 0.001;
-      entry.label.alpha = entry.hovered ? detailAlpha : 0;
-      entry.label.visible = entry.hovered && detailAlpha > 0.001;
+      // Moonlets, asteroids, and solar-scale L-points always show their name label when visible
+      const alwaysLabel = entry.kind === "moonlet" || entry.kind === "asteroid"
+        || (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId));
+      if (alwaysLabel) {
+        entry.label.alpha = entry.hovered ? detailAlpha : detailAlpha * CELESTIAL_BASE_LABEL_ALPHA;
+        entry.label.visible = detailAlpha > 0.001;
+      } else {
+        entry.label.alpha = entry.hovered ? detailAlpha : 0;
+        entry.label.visible = entry.hovered && detailAlpha > 0.001;
+      }
     }
 
     for (const [id, t] of orbitLabelMap.entries()) {
-      t.alpha = (id === hoveredOrbitId && orbitDetailAlpha > 0.001) ? orbitDetailAlpha : 0;
+      const a = SOLAR_SCALE_ORBIT_IDS.has(id) ? mainOrbitDetailAlpha : orbitDetailAlpha;
+      t.alpha = (id === hoveredOrbitId && a > 0.001) ? a : 0;
     }
 
     applyUniversalTextScaleCap();
@@ -4013,6 +4608,7 @@
     world.scale.set(s);
     world.x = stage.clientWidth / 2 - ((minX + maxX) / 2) * s;
     world.y = stage.clientHeight / 2 - ((minY + maxY) / 2) * s;
+    markOrbitsDirty();
     refreshZoomScaledTextResolution();
     applyZoomDetailVisibility();
   }
@@ -4524,47 +5120,68 @@
       } else {
         if (!ship.departed_at || !ship.arrives_at) continue;
 
-        const activeLegInfo = pickActiveTransferLeg(ship, now);
-        const activeLeg = activeLegInfo?.leg || null;
+        // Build a single composite curve from all transfer legs
+        const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
+        const overallDepart = Number(ship.departed_at);
+        const overallArrive = Number(ship.arrives_at);
 
-        const legFromId = String(activeLeg?.from_id || ship.from_location_id || "");
-        const legToId = String(activeLeg?.to_id || ship.to_location_id || "");
-        const legDeparture = Number(activeLeg?.departure_time || ship.departed_at);
-        const legArrival = Number(activeLeg?.arrival_time || ship.arrives_at);
-
-        const A = locationsById.get(legFromId);
-        const B = locationsById.get(legToId);
-        const fromAnchor = getTransitAnchorWorld(legFromId, legDeparture);
-        const toAnchor = getTransitAnchorWorld(legToId, legArrival);
-        const curveFrom = fromAnchor || A;
-        const curveTo = toAnchor || B;
-        if (!curveFrom || !curveTo) continue;
-
-        const denom = Math.max(1e-6, legArrival - legDeparture);
-        const t = (now - legDeparture) / denom;
-        const tt = Math.max(0, Math.min(1, t));
-        const fromSig = fromAnchor ? `${fromAnchor.rx.toFixed(2)},${fromAnchor.ry.toFixed(2)}` : (curveFrom ? `~${curveFrom.rx.toFixed(1)},${curveFrom.ry.toFixed(1)}` : "live");
-        const toSig = toAnchor ? `${toAnchor.rx.toFixed(2)},${toAnchor.ry.toFixed(2)}` : (curveTo ? `~${curveTo.rx.toFixed(1)},${curveTo.ry.toFixed(1)}` : "live");
-        const transitKey = `${legFromId}->${legToId}|${fromSig}|${toSig}`;
-        const legIsInterplanetary = !!(activeLeg?.is_interplanetary);
-        if (!gfx.curve || gfx.transitKey !== transitKey) {
-          gfx.curve = computeTransitCurve(legFromId, legToId, curveFrom, curveTo, legIsInterplanetary, legDeparture, legArrival);
-          gfx.transitKey = transitKey;
+        // Build cache key from all leg endpoints + anchors
+        let compositeSig = `${ship.from_location_id}->${ship.to_location_id}|${legs.length}`;
+        for (const leg of legs) {
+          const fa = getTransitAnchorWorld(String(leg.from_id || ""), Number(leg.departure_time));
+          const ta = getTransitAnchorWorld(String(leg.to_id || ""), Number(leg.arrival_time));
+          compositeSig += `|${fa ? fa.rx.toFixed(1) : "~"},${ta ? ta.rx.toFixed(1) : "~"}`;
         }
 
+        if (!gfx.curve || gfx.transitKey !== compositeSig) {
+          if (legs.length > 0) {
+            gfx.curve = buildCompositeCurve(legs);
+          }
+          // Fallback: single-leg from overall from/to
+          if (!gfx.curve) {
+            const fromId = String(ship.from_location_id || "");
+            const toId = String(ship.to_location_id || "");
+            const A = locationsById.get(fromId);
+            const B = locationsById.get(toId);
+            const fa = getTransitAnchorWorld(fromId, overallDepart) || A;
+            const ta = getTransitAnchorWorld(toId, overallArrive) || B;
+            if (fa && ta) {
+              const fs = getLocationSolarGroup(fromId);
+              const ts = getLocationSolarGroup(toId);
+              gfx.curve = computeTransitCurve(fromId, toId, fa, ta, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
+            }
+          }
+          gfx.transitKey = compositeSig;
+        }
+        if (!gfx.curve) continue;
+
+        const denom = Math.max(1e-6, overallArrive - overallDepart);
+        const t = (now - overallDepart) / denom;
+        const tt = Math.max(0, Math.min(1, t));
+
+        // Warp: adjust curve for live planet positions so endpoints track moving bodies
+        const warp = computeCurveWarp(gfx.curve);
         const p = curvePoint(gfx.curve, tt);
+        const wp = warpXY(p.x, p.y, tt, warp);
         const tan = curveTangent(gfx.curve, tt);
         const travelAngle = Math.atan2(tan.y, tan.x);
         const decel = tt >= 0.5;
         facingAngle = decel ? travelAngle + Math.PI : travelAngle;
         headingAngle = travelAngle;
-        px = p.x;
-        py = p.y;
+        px = wp.x;
+        py = wp.y;
 
         if (pathGfx) {
           const isSelected = ship.id === selectedShipId;
-          drawDashedTransitPath(pathGfx, gfx.curve, size || 10, isSelected, effectiveShipScale, tt);
-          drawTransitLegMarkers(pathGfx, ship, now, isSelected);
+          // Quantize inputs to skip redundant full redraws
+          const qProg = (tt * 500) | 0;
+          const qZoom = (zoom * 100) | 0;
+          const qWarp = warp ? `${(warp.dxS|0)},${(warp.dyS|0)},${(warp.dxE|0)},${(warp.dyE|0)}` : "";
+          const cacheKey = `${qProg}|${qZoom}|${isSelected ? 1 : 0}|${qWarp}`;
+          if (pathGfx.__transitCacheKey !== cacheKey) {
+            pathGfx.__transitCacheKey = cacheKey;
+            drawDashedTransitPath(pathGfx, gfx.curve, size || 10, isSelected, effectiveShipScale, tt, warp);
+          }
         }
 
         container.visible = true;
@@ -4647,6 +5264,7 @@
     const vesta = projectedLocations.find((l) => l.id === "grp_vesta");
     const pallas = projectedLocations.find((l) => l.id === "grp_pallas");
     const hygiea = projectedLocations.find((l) => l.id === "grp_hygiea");
+    const jupiter = projectedLocations.find((l) => l.id === "grp_jupiter");
 
     const sunX = sun ? Number(sun.x) : 0;
     const sunY = sun ? Number(sun.y) : 0;
@@ -4681,6 +5299,7 @@
     const vestaProjected = vesta ? projectDeepPosition(vesta.x, vesta.y) : { rx: 0, ry: 0 };
     const pallasProjected = pallas ? projectDeepPosition(pallas.x, pallas.y) : { rx: 0, ry: 0 };
     const hygieaProjected = hygiea ? projectDeepPosition(hygiea.x, hygiea.y) : { rx: 0, ry: 0 };
+    const jupiterProjected = jupiter ? projectDeepPosition(jupiter.x, jupiter.y) : { rx: 0, ry: 0 };
     const mercuryRx = mercuryProjected.rx;
     const mercuryRy = mercuryProjected.ry;
     const venusRx = venusProjected.rx;
@@ -4699,6 +5318,59 @@
     const pallasRy = pallasProjected.ry;
     const hygieaRx = hygieaProjected.rx;
     const hygieaRy = hygieaProjected.ry;
+    const jupiterRx = jupiterProjected.rx;
+    const jupiterRy = jupiterProjected.ry;
+
+    // Resolve Phobos, Deimos, Zoozve marker positions (they are projected as mars_moons / zoozve group descendants)
+    const phobosLoc = projectedLocations.find((l) => l.id === "PHOBOS");
+    const deimosLoc = projectedLocations.find((l) => l.id === "DEIMOS");
+    const zoozve = projectedLocations.find((l) => l.id === "grp_zoozve") || projectedLocations.find((l) => l.id === "ZOOZVE");
+    // Phobos/Deimos projected positions (relative to mars, using MARS_ORBIT_SCALE)
+    const phobosProjected = phobosLoc && mars
+      ? { rx: marsRx + (Number(phobosLoc.x) - Number(mars.x)) * MARS_ORBIT_SCALE,
+          ry: marsRy + (Number(phobosLoc.y) - Number(mars.y)) * MARS_ORBIT_SCALE }
+      : { rx: marsRx, ry: marsRy };
+    const deimosProjected = deimosLoc && mars
+      ? { rx: marsRx + (Number(deimosLoc.x) - Number(mars.x)) * MARS_ORBIT_SCALE,
+          ry: marsRy + (Number(deimosLoc.y) - Number(mars.y)) * MARS_ORBIT_SCALE }
+      : { rx: marsRx, ry: marsRy };
+    const zoozveProjected = zoozve ? projectDeepPosition(zoozve.x, zoozve.y) : { rx: 0, ry: 0 };
+    const phobosRx = phobosProjected.rx;
+    const phobosRy = phobosProjected.ry;
+    const deimosRx = deimosProjected.rx;
+    const deimosRy = deimosProjected.ry;
+    const zoozveRx = zoozveProjected.rx;
+    const zoozveRy = zoozveProjected.ry;
+
+    // Resolve Jupiter's Galilean moon marker positions
+    const ioLoc = projectedLocations.find((l) => l.id === "IO");
+    const europaLoc = projectedLocations.find((l) => l.id === "EUROPA");
+    const ganymedeLoc = projectedLocations.find((l) => l.id === "GANYMEDE");
+    const callistoLoc = projectedLocations.find((l) => l.id === "CALLISTO");
+    const ioProjected = ioLoc && jupiter
+      ? { rx: jupiterRx + (Number(ioLoc.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE,
+          ry: jupiterRy + (Number(ioLoc.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE }
+      : { rx: jupiterRx, ry: jupiterRy };
+    const europaProjected = europaLoc && jupiter
+      ? { rx: jupiterRx + (Number(europaLoc.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE,
+          ry: jupiterRy + (Number(europaLoc.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE }
+      : { rx: jupiterRx, ry: jupiterRy };
+    const ganymProjected = ganymedeLoc && jupiter
+      ? { rx: jupiterRx + (Number(ganymedeLoc.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE,
+          ry: jupiterRy + (Number(ganymedeLoc.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE }
+      : { rx: jupiterRx, ry: jupiterRy };
+    const callistoProjected = callistoLoc && jupiter
+      ? { rx: jupiterRx + (Number(callistoLoc.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE,
+          ry: jupiterRy + (Number(callistoLoc.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE }
+      : { rx: jupiterRx, ry: jupiterRy };
+    const ioRx = ioProjected.rx;
+    const ioRy = ioProjected.ry;
+    const europaRx = europaProjected.rx;
+    const europaRy = europaProjected.ry;
+    const ganymRx = ganymProjected.rx;
+    const ganymRy = ganymProjected.ry;
+    const callistoRx = callistoProjected.rx;
+    const callistoRy = callistoProjected.ry;
 
     for (const l of projectedLocations) {
       l.is_group = !!Number(l.is_group);
@@ -4722,6 +5394,9 @@
       } else if (!l.is_group && hasAncestor(l.id, "grp_mars_orbits", parentById) && mars) {
         rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
         ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_mars_moons", parentById) && mars) {
+        rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
+        ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
       } else if (!l.is_group && hasAncestor(l.id, "grp_ceres_orbits", parentById) && ceres) {
         rx = ceresRx + (Number(l.x) - Number(ceres.x)) * CERES_ORBIT_SCALE;
         ry = ceresRy + (Number(l.y) - Number(ceres.y)) * CERES_ORBIT_SCALE;
@@ -4734,6 +5409,45 @@
       } else if (!l.is_group && hasAncestor(l.id, "grp_hygiea_orbits", parentById) && hygiea) {
         rx = hygieaRx + (Number(l.x) - Number(hygiea.x)) * HYGIEA_ORBIT_SCALE;
         ry = hygieaRy + (Number(l.y) - Number(hygiea.y)) * HYGIEA_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_phobos_orbits", parentById) && phobosLoc) {
+        rx = phobosRx + (Number(l.x) - Number(phobosLoc.x)) * PHOBOS_ORBIT_SCALE;
+        ry = phobosRy + (Number(l.y) - Number(phobosLoc.y)) * PHOBOS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_deimos_orbits", parentById) && deimosLoc) {
+        rx = deimosRx + (Number(l.x) - Number(deimosLoc.x)) * DEIMOS_ORBIT_SCALE;
+        ry = deimosRy + (Number(l.y) - Number(deimosLoc.y)) * DEIMOS_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_zoozve_orbits", parentById) && zoozve) {
+        rx = zoozveRx + (Number(l.x) - Number(zoozve.x)) * ZOOZVE_ORBIT_SCALE;
+        ry = zoozveRy + (Number(l.y) - Number(zoozve.y)) * ZOOZVE_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_jupiter_orbits", parentById) && jupiter) {
+        rx = jupiterRx + (Number(l.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE;
+        ry = jupiterRy + (Number(l.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_jupiter_moons", parentById) && jupiter) {
+        rx = jupiterRx + (Number(l.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE;
+        ry = jupiterRy + (Number(l.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_jupiter_lpoints", parentById) && jupiter) {
+        // L4/L5 are heliocentric (60° from Jupiter on its orbit) — use solar projection
+        // L1/L2/L3 are near Jupiter — use local orbit scale
+        const sjId = String(l.id);
+        if (sjId === "SJ_L4" || sjId === "SJ_L5") {
+          const proj = projectDeepPosition(l.x, l.y);
+          rx = proj.rx;
+          ry = proj.ry;
+        } else {
+          rx = jupiterRx + (Number(l.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE;
+          ry = jupiterRy + (Number(l.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE;
+        }
+      } else if (!l.is_group && hasAncestor(l.id, "grp_io_orbits", parentById) && ioLoc) {
+        rx = ioRx + (Number(l.x) - Number(ioLoc.x)) * IO_ORBIT_SCALE;
+        ry = ioRy + (Number(l.y) - Number(ioLoc.y)) * IO_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_europa_orbits", parentById) && europaLoc) {
+        rx = europaRx + (Number(l.x) - Number(europaLoc.x)) * EUROPA_ORBIT_SCALE;
+        ry = europaRy + (Number(l.y) - Number(europaLoc.y)) * EUROPA_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_ganymede_orbits", parentById) && ganymedeLoc) {
+        rx = ganymRx + (Number(l.x) - Number(ganymedeLoc.x)) * GANYMEDE_ORBIT_SCALE;
+        ry = ganymRy + (Number(l.y) - Number(ganymedeLoc.y)) * GANYMEDE_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_callisto_orbits", parentById) && callistoLoc) {
+        rx = callistoRx + (Number(l.x) - Number(callistoLoc.x)) * CALLISTO_ORBIT_SCALE;
+        ry = callistoRy + (Number(l.y) - Number(callistoLoc.y)) * CALLISTO_ORBIT_SCALE;
       } else if (l.id === "grp_mercury") {
         rx = mercuryRx; ry = mercuryRy;
       } else if (l.id === "grp_venus") {
@@ -4752,6 +5466,8 @@
         rx = pallasRx; ry = pallasRy;
       } else if (l.id === "grp_hygiea") {
         rx = hygieaRx; ry = hygieaRy;
+      } else if (l.id === "grp_jupiter") {
+        rx = jupiterRx; ry = jupiterRy;
       }
 
       l.rx = rx;
@@ -5757,16 +6473,39 @@
     const shouldRefit = options.refit !== false;
     const data = await (await fetch("/api/locations?dynamic=1", { cache: "no-store" })).json();
     const projected = projectLocationsForMap(data.locations || []);
+
+    // --- Capture previous positions for smooth interpolation ---
+    const prevById = locationsById;          // old map (empty on first call)
+    const isFirstLoad = prevById.size === 0;
+
     locations = projected.locations;
     locationParentById = projected.parentById;
-
     locationsById = new Map(locations.map((l) => [l.id, l]));
     leaves = locations.filter((l) => !l.is_group);
+
+    // Build lerp entries: from old position → new position
+    locLerp.clear();
+    if (!isFirstLoad) {
+      for (const l of locations) {
+        const prev = prevById.get(l.id);
+        if (prev && (prev.rx !== l.rx || prev.ry !== l.ry)) {
+          locLerp.set(l.id, {
+            fromRx: prev.rx, fromRy: prev.ry,
+            toRx:   l.rx,   toRy:   l.ry,
+          });
+          // Start from old position so first frame isn't a jump
+          l.rx = prev.rx;
+          l.ry = prev.ry;
+        }
+      }
+      locLerpStartMs = performance.now();
+    }
 
     buildPlanets();
     positionPlanets();
 
     computeOrbitInfo();
+    markOrbitsDirty();
 
     ensureLocationsGfx();
     updateLocationPositions();
@@ -5826,15 +6565,62 @@
   setInfo("Select a ship", "", "", ["Click a ship, then Move to plan a transfer."]);
   actions.innerHTML = "";
 
+  // Orbit-center lookup: orbitId → center body id (mirrors computeOrbitInfo defs)
+  const ORBIT_CENTER_MAP = new Map([
+    ["LEO","grp_earth"],["HEO","grp_earth"],["GEO","grp_earth"],
+    ["LLO","grp_moon"],["HLO","grp_moon"],
+    ["MERC_ORB","grp_mercury"],["MERC_HEO","grp_mercury"],["MERC_GEO","grp_mercury"],
+    ["VEN_ORB","grp_venus"],["VEN_HEO","grp_venus"],["VEN_GEO","grp_venus"],
+    ["LMO","grp_mars"],["HMO","grp_mars"],["MGO","grp_mars"],
+    ["CERES_LO","grp_ceres"],["CERES_HO","grp_ceres"],
+    ["VESTA_LO","grp_vesta"],["VESTA_HO","grp_vesta"],
+    ["PALLAS_LO","grp_pallas"],["PALLAS_HO","grp_pallas"],
+    ["HYGIEA_LO","grp_hygiea"],["HYGIEA_HO","grp_hygiea"],
+    ["JUP_LO","grp_jupiter"],["JUP_HO","grp_jupiter"],
+    ["IO_LO","IO"],["IO_HO","IO"],
+    ["EUROPA_LO","EUROPA"],["EUROPA_HO","EUROPA"],
+    ["GANYMEDE_LO","GANYMEDE"],["GANYMEDE_HO","GANYMEDE"],
+    ["CALLISTO_LO","CALLISTO"],["CALLISTO_HO","CALLISTO"],
+  ]);
+
+  // --- Smooth celestial lerp (called every frame) ---
+  // Linear interpolation with extrapolation past t=1 so movement
+  // never visibly pauses between poll intervals.
+  function lerpCelestialPositions() {
+    if (locLerp.size === 0) return;
+    const elapsed = performance.now() - locLerpStartMs;
+    // Linear progress — intentionally NOT clamped to 1 so the bodies
+    // keep drifting at the same velocity until the next poll overwrites.
+    const t = elapsed / LOC_LERP_DURATION_MS;
+    for (const [id, lp] of locLerp) {
+      const loc = locationsById.get(id);
+      if (!loc) continue;
+      loc.rx = lp.fromRx + (lp.toRx - lp.fromRx) * t;
+      loc.ry = lp.fromRy + (lp.toRy - lp.fromRy) * t;
+    }
+    // Keep orbit-ring centers in sync with interpolated planet positions
+    for (const [orbitId, centerId] of ORBIT_CENTER_MAP) {
+      const oi = orbitInfo.get(orbitId);
+      const ctr = locationsById.get(centerId);
+      if (oi && ctr) { oi.cx = ctr.rx; oi.cy = ctr.ry; }
+    }
+    // Don't clear — the next syncLocationsOnce() call resets locLerp
+  }
+
   // Main render loop
   app.ticker.add(() => {
     try {
+      tickCounter++;
+      const hadLerp = locLerp.size > 0;
+      lerpCelestialPositions();
+      if (hadLerp) markOrbitsDirty();  // celestials moved
       positionPlanets();
-      renderOrbitRings();
+      updateLocationPositions();
+      renderOrbitRings();              // skips internally when not dirty
       applyZoomDetailVisibility();
       updateShipPositions();
-      buildMapOverview();
-      applyTextCollisionCulling();
+      if (tickCounter % OVERVIEW_EVERY_N === 0) buildMapOverview();
+      if (tickCounter % TEXT_CULL_EVERY_N === 0) applyTextCollisionCulling();
     } catch (err) {
       console.error("Main map tick failed:", err);
       if (!app.ticker.started) app.ticker.start();

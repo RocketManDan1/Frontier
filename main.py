@@ -962,6 +962,13 @@ def ensure_solar_system_expansion(conn: sqlite3.Connection) -> None:
         upsert_locations(conn, location_rows)
         upsert_transfer_edges(conn, edge_rows)
 
+        # Remove stale transfer edges no longer in the config
+        config_edge_pairs = {(r[0], r[1]) for r in edge_rows}
+        db_edges = conn.execute("SELECT from_id, to_id FROM transfer_edges").fetchall()
+        for row in db_edges:
+            if (row["from_id"], row["to_id"]) not in config_edge_pairs:
+                conn.execute("DELETE FROM transfer_edges WHERE from_id=? AND to_id=?", (row["from_id"], row["to_id"]))
+
         # Seed surface site data
         try:
             site_rows, resource_rows = celestial_config.load_surface_site_data()
