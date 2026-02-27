@@ -1,5 +1,31 @@
 # Lambert Solver — Design & Implementation Steps
 
+## Implementation Status
+
+| Phase | Status | Notes |
+|---|---|---|
+| **Phase 1: Foundation** (Steps 0–4) | ✅ Complete | `mu_km3_s2` / `soi_radius_km` in config, `compute_body_state()` returns 3D pos+vel, `lambert.py` created with universal-variable solver, comprehensive tests |
+| **Phase 2: Integration** (Steps 5–7) | ✅ Complete | `transfer_planner.py` wraps Lambert + SOI burns, `fleet_router.py` calls it for interplanetary legs, duplicate dicts (`_BODY_CONSTANTS`, `_BODY_ORBITS`, `_EPOCH_MEAN_ANOMALY_DEG`, `_LOCATION_PARENT_BODY`) deleted — all read from config |
+| **Phase 3: Porkchop & polish** (Steps 8–10) | ✅ Complete | Porkchop endpoint (`/api/transfer/porkchop`), frontend heatmap + TOF slider + crosshair, edge types annotated |
+| **Phase 4: Performance & robustness** (Steps 11–14) | ✅ Complete | Lambert caching, Battin fallback, quality scoring, auto-edge generation |
+| **Phase 5: Trajectory rendering** (Steps 15–18) | ✅ Complete | Kepler propagator, trajectory storage, frontend arc rendering |
+
+### Key implementation details (vs. original design)
+
+- **Solver method**: Universal variable method (Stumpff functions + Newton iteration) rather than Izzo's method. Handles zero-rev transfers robustly.
+- **TOF sweep**: `compute_interplanetary_leg()` sweeps 14 TOF candidates (0.3×–2.5× Hohmann estimate) at each departure time and picks the best Δv, rather than using a single Hohmann TOF estimate.
+- **Phase multiplier removed**: Lambert already accounts for orbital geometry — the old cosine phase-angle penalty was double-counting and has been removed.
+- **Location→body mapping**: Auto-derived from `celestial_config.json` orbit nodes, markers, and surface sites rather than hand-maintained dicts.
+
+### Phase 4 implementation details
+
+- **Lambert caching**: `transfer_planner.py` caches `compute_interplanetary_leg()` results in an LRU `OrderedDict` keyed by `(from_loc, to_loc, departure_bucket, extra_dv_bucket)`. Bucket size = 1 hour game-time, max 1024 entries. Cache is cleared on config reload. Stats available via `get_lambert_cache_stats()`.
+- **Battin fallback**: `lambert.py` adds `_solve_lambert_battin()` using geometric parameterization (chord/semi-perimeter) with continued-fraction evaluation. Used as fallback when the universal-variable solver returns None for near-180° transfers (cos(Δν) < -0.95). Helper functions: `_continued_fraction_eta()`, `_battin_continued_fraction_k()`.
+- **Quality scoring**: `transfer_planner.transfer_quality_score(dv, tof, revolutions)` returns `dv + 1.0 × tof_days + 50 × revolutions`. Used in porkchop grid to rank solutions and in top-N best-solution selection. Each solution now includes `revolutions`, `type` (short/long), and `quality_score` fields.
+- **Auto-edge generation**: `celestial_config.generate_interplanetary_edges(config)` identifies heliocentric bodies with orbit_nodes, picks the lowest orbit as gateway (overridable via `gateway_location_id` body field), and generates bidirectional edges for all body pairs with Hohmann Δv/TOF estimates. Activated by setting `"auto_interplanetary_edges": true` in `celestial_config.json`. When active, hand-authored interplanetary edges are replaced; local/lagrange/landing edges are preserved.
+
+---
+
 ## Overview
 
 Replace the current Hohmann + phase-angle approximation for interplanetary transfers with an exact **Lambert solver** — given two positions and a time-of-flight, compute the required velocity vectors. Add a **porkchop plot** endpoint that scans departure × arrival date grids to find optimal transfer windows. Support multi-revolution solutions.
@@ -288,33 +314,33 @@ Future: auto-generate edges from topology rules rather than hand-authoring.
 
 ## Implementation Order
 
-### Phase 1: Foundation (no behavior changes)
-1. **Add `mu_km3_s2` and `soi_radius_km` to `celestial_config.json` bodies**
-2. **Extend `celestial_config.py`** — add `compute_body_state()` returning 3D position + velocity
-3. **Create `lambert.py`** — core solver with multi-revolution support
-4. **Create `tests/test_lambert.py`** — validate against known transfers
+### Phase 1: Foundation (no behavior changes) ✅
+1. **Add `mu_km3_s2` and `soi_radius_km` to `celestial_config.json` bodies** ✅
+2. **Extend `celestial_config.py`** — add `compute_body_state()` returning 3D position + velocity ✅
+3. **Create `lambert.py`** — core solver with multi-revolution support ✅
+4. **Create `tests/test_lambert.py`** — validate against known transfers ✅
 
-### Phase 2: Integration (replaces Hohmann)  
-5. **Create `transfer_planner.py`** — patched-conic wrapper combining Lambert + SOI burns
-6. **Wire into `fleet_router.py`** — `_compute_leg_at_departure()` calls transfer_planner for interplanetary legs
-7. **Delete duplicate dicts** — `_BODY_CONSTANTS`, `_BODY_ORBITS`, `_EPOCH_MEAN_ANOMALY_DEG`, `_LOCATION_PARENT_BODY` read from config
+### Phase 2: Integration (replaces Hohmann) ✅
+5. **Create `transfer_planner.py`** — patched-conic wrapper combining Lambert + SOI burns ✅
+6. **Wire into `fleet_router.py`** — `_compute_leg_at_departure()` calls transfer_planner for interplanetary legs ✅
+7. **Delete duplicate dicts** — `_BODY_CONSTANTS`, `_BODY_ORBITS`, `_EPOCH_MEAN_ANOMALY_DEG`, `_LOCATION_PARENT_BODY` read from config ✅
 
-### Phase 3: Porkchop & polish
-8. **Add porkchop endpoint** to fleet_router or new transfer_router
-9. **Update frontend** transfer planner to show porkchop data
-10. **Add edge type field** to transfer_edges for future auto-generation
+### Phase 3: Porkchop & polish ✅
+8. **Add porkchop endpoint** (`GET /api/transfer/porkchop`) to `fleet_router.py` ✅
+9. **Update frontend** transfer planner with porkchop heatmap, TOF slider, crosshair overlay, live Δv/fuel readouts ✅
+10. **Add edge type field** to transfer_edges for future auto-generation ✅
 
-### Phase 4: Performance & robustness
-11. **Cache Lambert results** by departure-time bucket — avoid redundant solves for the same leg within a time window
-12. **Battin's method fallback** for near-180° transfers where the universal-variable solver loses precision
-13. **Multi-rev quality scoring** — rank multi-revolution solutions by a cost function (Δv + TOF penalty) for the porkchop planner
-14. **Auto-generate edges from topology** — derive transfer_edges from body hierarchy + SOI nesting rules instead of hand-authoring JSON
+### Phase 4: Performance & robustness ✅
+11. **Cache Lambert results** by departure-time bucket — `transfer_planner.py` LRU cache with 1-hour game-time buckets, 1024-entry max, hit/miss stats ✅
+12. **Battin's method fallback** for near-180° transfers where the universal-variable solver fails — `lambert.py` `_solve_lambert_battin()` with continued-fraction evaluation ✅
+13. **Multi-rev quality scoring** — `transfer_quality_score()` cost function (Δv + TOF penalty + revolution penalty) used in porkchop grid ranking ✅
+14. **Auto-generate edges from topology** — `celestial_config.generate_interplanetary_edges()` derives interplanetary transfer_edges from body hierarchy + gateway orbit detection; activated via `auto_interplanetary_edges: true` config flag ✅
 
-### Phase 5: Accurate orbital trajectory rendering
-15. **Kepler propagator in `transfer_planner.py`** — `compute_trajectory_points(r1, v1, mu, tof, n)` propagates the Lambert transfer orbit forward, returning sampled heliocentric (x, y) positions
-16. **Store trajectory on ship departure** — compute the trajectory polyline for each interplanetary leg and persist as `trajectory_json` on the ship row (new DB column + migration)
-17. **Serve trajectory in ship API** — include trajectory points in the fleet/ships response for in-transit ships
-18. **Frontend renders real trajectories** — when trajectory data is present, use the polyline directly instead of `computeHohmannArc`; ship position sampled at `t = elapsed / tof` for accurate placement along the actual transfer orbit
+### Phase 5: Accurate orbital trajectory rendering ✅
+15. **Kepler propagator in `transfer_planner.py`** — `compute_trajectory_points(r1, v1, mu, tof, n)` propagates the Lambert transfer orbit forward using universal-variable f/g coefficients, returning sampled heliocentric (x, y) positions; `_kepler_propagate_state()` does Newton iteration on Kepler's equation ✅
+16. **Store trajectory on ship departure** — compute the trajectory polyline for each interplanetary leg and persist as `trajectory_json` on the ship row; new migration `0014_trajectory_json`; `compute_interplanetary_leg` returns `helio_r1`, `helio_v1`, `helio_mu` for caller use ✅
+17. **Serve trajectory in ship API** — include `trajectory` array in fleet/ships response for in-transit ships with `trajectory_json` data ✅
+18. **Frontend renders real trajectories** — `buildTrajectoryArc()` projects heliocentric km points via `HELIO_LINEAR_WORLD_PER_KM`; `buildCompositeCurve()` accepts optional trajectory data and uses Lambert polylines instead of `computeHohmannArc` for interplanetary legs ✅
 
 ---
 
@@ -326,7 +352,7 @@ Future: auto-generate edges from topology rules rather than hand-authoring.
 - **Transfer execution**: Ships still depart/arrive via the same mechanism. Only the dv/tof numbers change.
 - **Local orbit changes**: LEO↔GEO etc. still use Hohmann (because they're circular orbit changes around the same body — Lambert is overkill).
 - **Surface landings**: Fixed dv/tof from config — not orbital mechanics problems.
-- **Database schema**: No changes needed.
+- **Database schema**: Phase 5 added `trajectory_json TEXT` column to `ships` table (migration 0014) for storing pre-computed trajectory polylines.
 
 ---
 

@@ -2992,7 +2992,8 @@ def settle_arrivals(conn: sqlite3.Connection, now_s: float) -> None:
           transit_from_x = NULL,
           transit_from_y = NULL,
           transit_to_x = NULL,
-          transit_to_y = NULL
+          transit_to_y = NULL,
+          trajectory_json = NULL
         WHERE arrives_at IS NOT NULL AND arrives_at <= ?
         """,
         (now_s,),

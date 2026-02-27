@@ -14,6 +14,7 @@ Extracted from main.py — handles:
 
 import json
 import heapq
+import logging
 import math
 import sqlite3
 from functools import lru_cache
@@ -763,7 +764,8 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                  transfer_path_json,dv_planned_m_s,dock_slot,
                  parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
                  corp_id,
-                 transit_from_x,transit_from_y,transit_to_x,transit_to_y
+                 transit_from_x,transit_from_y,transit_to_x,transit_to_y,
+                 trajectory_json
         FROM ships
         ORDER BY id
         """
@@ -811,6 +813,15 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             ship_data["transit_from_y"] = r["transit_from_y"]
             ship_data["transit_to_x"] = r["transit_to_x"]
             ship_data["transit_to_y"] = r["transit_to_y"]
+
+        # Attach trajectory polyline for in-transit ships (Phase 5)
+        if r["arrives_at"] and r["trajectory_json"]:
+            try:
+                traj = json.loads(r["trajectory_json"])
+                if traj:
+                    ship_data["trajectory"] = traj
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         if r["arrives_at"] and r["from_location_id"] and r["to_location_id"] and r["departed_at"]:
             raw_path = json.loads(r["transfer_path_json"] or "[]")
@@ -1041,6 +1052,31 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         from_xy = (0.0, 0.0)
         to_xy = (0.0, 0.0)
 
+    # Compute trajectory polyline for interplanetary legs (Phase 5)
+    trajectory_data: Optional[List[Dict[str, Any]]] = None
+    try:
+        legs = route_quote.get("legs") or []
+        interp_trajs = []
+        for leg in legs:
+            if not leg.get("is_interplanetary"):
+                continue
+            orbital = leg.get("orbital")
+            if not orbital:
+                continue
+            pts = transfer_planner.compute_leg_trajectory(orbital, n_points=64)
+            if pts:
+                interp_trajs.append({
+                    "from_id": str(leg.get("from_id") or ""),
+                    "to_id": str(leg.get("to_id") or ""),
+                    "points": [[round(x, 1), round(y, 1)] for x, y in pts],
+                })
+        if interp_trajs:
+            trajectory_data = interp_trajs
+    except Exception:
+        logging.exception("Failed to compute trajectory points for ship %s transfer %s → %s", ship_id, from_id, to_id)
+        trajectory_data = None
+    trajectory_json_str = json.dumps(trajectory_data) if trajectory_data else None
+
     conn.execute(
         """
         UPDATE ships
@@ -1056,11 +1092,12 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
           transit_from_x=?,
           transit_from_y=?,
           transit_to_x=?,
-          transit_to_y=?
+          transit_to_y=?,
+          trajectory_json=?
         WHERE id=?
         """,
         (from_id, to_id, dep, arr, path_json, dv, fuel_remaining_kg,
-         from_xy[0], from_xy[1], to_xy[0], to_xy[1], ship_id),
+         from_xy[0], from_xy[1], to_xy[0], to_xy[1], trajectory_json_str, ship_id),
     )
     conn.commit()
 

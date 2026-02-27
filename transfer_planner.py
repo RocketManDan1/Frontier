@@ -11,6 +11,8 @@ Also provides:
 """
 
 import math
+import time
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,7 +24,69 @@ from lambert import (
     compute_hohmann_dv_tof,
     _norm,
     _sub,
+    _dot,
+    _add,
+    _scale,
+    _stumpff_c2,
+    _stumpff_c3,
 )
+
+
+# ── Lambert result cache ───────────────────────────────────
+# Caches compute_interplanetary_leg() results bucketed by departure time
+# to avoid redundant Lambert sweeps for the same leg within a time window.
+
+_LAMBERT_CACHE_BUCKET_S = 3600.0  # 1 hour game-time buckets
+_LAMBERT_CACHE_MAX = 1024
+_lambert_cache: OrderedDict[Tuple[str, str, int, int], Dict[str, Any]] = OrderedDict()
+_lambert_cache_hits = 0
+_lambert_cache_misses = 0
+
+
+def _lambert_cache_key(
+    from_loc: str, to_loc: str, departure_time_s: float, extra_dv_fraction: float,
+) -> Tuple[str, str, int, int]:
+    dep_bucket = int(departure_time_s // _LAMBERT_CACHE_BUCKET_S)
+    extra_bucket = int(round(extra_dv_fraction * 10000))
+    return (from_loc, to_loc, dep_bucket, extra_bucket)
+
+
+def _lambert_cache_get(key: Tuple[str, str, int, int]) -> Optional[Dict[str, Any]]:
+    global _lambert_cache_hits
+    val = _lambert_cache.get(key)
+    if val is not None:
+        _lambert_cache.move_to_end(key)
+        _lambert_cache_hits += 1
+        return dict(val)  # shallow copy
+    return None
+
+
+def _lambert_cache_put(key: Tuple[str, str, int, int], value: Dict[str, Any]) -> None:
+    global _lambert_cache_misses
+    _lambert_cache_misses += 1
+    _lambert_cache[key] = dict(value)
+    _lambert_cache.move_to_end(key)
+    while len(_lambert_cache) > _LAMBERT_CACHE_MAX:
+        _lambert_cache.popitem(last=False)
+
+
+def get_lambert_cache_stats() -> Dict[str, int]:
+    """Return cache hit/miss statistics (for diagnostics)."""
+    return {
+        "hits": _lambert_cache_hits,
+        "misses": _lambert_cache_misses,
+        "size": len(_lambert_cache),
+        "max_size": _LAMBERT_CACHE_MAX,
+        "bucket_s": int(_LAMBERT_CACHE_BUCKET_S),
+    }
+
+
+def clear_lambert_cache() -> None:
+    """Flush the Lambert result cache (e.g. after config reload)."""
+    global _lambert_cache_hits, _lambert_cache_misses
+    _lambert_cache.clear()
+    _lambert_cache_hits = 0
+    _lambert_cache_misses = 0
 
 
 # ── Config accessors (cached) ──────────────────────────────
@@ -136,6 +200,146 @@ def _parking_orbit_radius_km(body_id: str, location_id: Optional[str] = None) ->
     return radius_km + default_alt
 
 
+# ── Kepler propagator (universal variable) ──────────────────
+
+def _kepler_propagate_state(
+    r0: Vec3, v0: Vec3, dt: float, mu: float,
+) -> Vec3:
+    """Propagate state (r0, v0) forward by dt under two-body dynamics.
+
+    Uses the universal variable (chi) formulation with Stumpff functions
+    based on Curtis Algorithm 3.3.  Returns the position vector at time dt.
+    """
+    r0_mag = _norm(r0)
+    if r0_mag < 1e-12 or mu < 1e-12:
+        return r0
+
+    v0_mag = _norm(v0)
+    vr0 = _dot(r0, v0) / r0_mag  # radial velocity component
+
+    # Reciprocal of semi-major axis (alpha); alpha > 0 = ellipse, < 0 = hyperbola
+    alpha = 2.0 / r0_mag - v0_mag * v0_mag / mu
+    if abs(alpha) < 1e-15:
+        alpha = 0.0  # parabolic
+
+    sqrt_mu = math.sqrt(mu)
+    abs_dt = abs(dt)
+
+    # Initial guess for chi
+    if alpha > 1e-12:
+        # Elliptic
+        chi = sqrt_mu * abs_dt * alpha
+    elif alpha < -1e-12:
+        # Hyperbolic
+        a_hyp = 1.0 / alpha
+        chi = (
+            math.copysign(1.0, dt)
+            * math.sqrt(-a_hyp)
+            * math.log(
+                max(1e-30,
+                    (-2.0 * mu * alpha * abs_dt)
+                    / (vr0 + math.copysign(1.0, dt) * math.sqrt(-mu / alpha) * (1.0 - r0_mag * alpha))
+                )
+            )
+        )
+        # Clamp to reasonable range
+        chi = max(-1e8, min(1e8, chi))
+    else:
+        # Parabolic
+        chi = sqrt_mu * abs_dt / r0_mag
+
+    if dt < 0:
+        chi = -abs(chi)
+
+    # Newton iteration to solve Kepler's equation in universal variables
+    for _ in range(50):
+        psi = chi * chi * alpha
+        c2 = _stumpff_c2(psi)
+        c3 = _stumpff_c3(psi)
+
+        chi2 = chi * chi
+        chi3 = chi2 * chi
+
+        r = chi2 * c2 + (vr0 / sqrt_mu) * chi3 * c3 * sqrt_mu + r0_mag * (1.0 - chi2 / r0_mag * alpha * c2 + chi2 * c2)
+        # Simplified: f(chi) = (r0_mag * vr0 / sqrt_mu) * chi^2 * c2 + (1 - r0_mag * alpha) * chi^3 * c3 + r0_mag * chi - sqrt_mu * dt
+        f_chi = (
+            (r0_mag * vr0 / sqrt_mu) * chi2 * c2
+            + (1.0 - r0_mag * alpha) * chi3 * c3
+            + r0_mag * chi
+            - sqrt_mu * dt
+        )
+
+        # r as function of chi (used as denominator in Newton step)
+        r_chi = (
+            (r0_mag * vr0 / sqrt_mu) * chi * (1.0 - chi2 * c3 * alpha)
+            + (1.0 - r0_mag * alpha) * chi2 * c2
+            + r0_mag
+        )
+
+        if abs(r_chi) < 1e-30:
+            break
+
+        d_chi = -f_chi / r_chi
+        chi += d_chi
+
+        if abs(d_chi) < 1e-10 * (1.0 + abs(chi)):
+            break
+
+    # Compute f, g Lagrange coefficients
+    psi = chi * chi * alpha
+    c2 = _stumpff_c2(psi)
+    c3 = _stumpff_c3(psi)
+    chi2 = chi * chi
+
+    f = 1.0 - (chi2 / r0_mag) * c2
+    g = dt - (chi2 * chi / sqrt_mu) * c3
+
+    # Position at time dt
+    r_new = _add(_scale(f, r0), _scale(g, v0))
+    return r_new
+
+
+def compute_trajectory_points(
+    r1: Vec3,
+    v1: Vec3,
+    mu: float,
+    tof: float,
+    n_points: int = 64,
+) -> List[Tuple[float, float]]:
+    """Propagate a Keplerian orbit from (r1, v1) and return n_points (x, y) samples.
+
+    Uses the universal variable Kepler propagator to sample the transfer
+    orbit at evenly-spaced time intervals.  Returns heliocentric (x, y)
+    coordinates in km — the z component is projected out (ecliptic plane).
+
+    Parameters
+    ----------
+    r1 : Vec3  — initial position vector (km)
+    v1 : Vec3  — initial velocity vector (km/s)
+    mu : float — gravitational parameter of central body (km³/s²)
+    tof : float — total time of flight (seconds)
+    n_points : int — number of sample points (including start and end)
+
+    Returns
+    -------
+    List of (x, y) tuples in km.
+    """
+    if n_points < 2:
+        n_points = 2
+    if tof <= 0 or mu <= 0:
+        return [(r1[0], r1[1])] * n_points
+
+    points: List[Tuple[float, float]] = []
+    for i in range(n_points):
+        t = tof * i / (n_points - 1)
+        if i == 0:
+            points.append((r1[0], r1[1]))
+        else:
+            r_t = _kepler_propagate_state(r1, v1, t, mu)
+            points.append((r_t[0], r_t[1]))
+    return points
+
+
 # ── Core: Lambert-based interplanetary leg ──────────────────
 
 def compute_interplanetary_leg(
@@ -146,6 +350,9 @@ def compute_interplanetary_leg(
 ) -> Optional[Dict[str, Any]]:
     """Compute an interplanetary transfer leg using the Lambert solver.
 
+    Results are cached by departure-time bucket to avoid redundant Lambert
+    sweeps for the same leg within a time window.
+
     Sweeps several TOFs around the Hohmann estimate and picks the lowest-Δv
     solution for the given departure time.  Phase-angle information is returned
     for display but does NOT modify the Δv — the Lambert solver already
@@ -154,6 +361,11 @@ def compute_interplanetary_leg(
     Returns a dict compatible with the existing orbital data format, or None
     if the transfer cannot be computed (same body, unknown body, etc.).
     """
+    # ── Check cache ─────────────────────────────────────────
+    cache_key = _lambert_cache_key(from_location, to_location, departure_time_s, extra_dv_fraction)
+    cached = _lambert_cache_get(cache_key)
+    if cached is not None:
+        return cached
     cfg = _get_config()
     loc_map = _get_location_body_map()
 
@@ -284,7 +496,7 @@ def compute_interplanetary_leg(
     final_dv = base_dv_m_s * (1.0 + max(0.0, float(extra_dv_fraction)))
     final_tof = _excess_dv_time_reduction(base_tof_s, base_dv_m_s, max(0.0, float(extra_dv_fraction)))
 
-    return {
+    result = {
         "base_dv_m_s": float(base_dv_m_s),
         "base_tof_s": float(base_tof_s),
         "phase_multiplier": float(phase_multiplier),
@@ -302,7 +514,16 @@ def compute_interplanetary_leg(
         "dv_arrive_m_s": float(dv_arr),
         "arrival_time": float(arrival_time_s),
         "solver": "lambert",
+        # Heliocentric departure state for trajectory rendering (Phase 5)
+        "helio_r1": list(r1_vec),
+        "helio_v1": list(best_v1),
+        "helio_mu": float(mu_sun),
     }
+
+    # ── Store in cache ──────────────────────────────────────
+    _lambert_cache_put(cache_key, result)
+
+    return result
 
 
 def _angle_between_2d(a: Vec3, b: Vec3) -> float:
@@ -310,6 +531,29 @@ def _angle_between_2d(a: Vec3, b: Vec3) -> float:
     theta_a = math.atan2(a[1], a[0])
     theta_b = math.atan2(b[1], b[0])
     return (theta_b - theta_a) % (2.0 * math.pi)
+
+
+def compute_leg_trajectory(
+    orbital: Dict[str, Any],
+    n_points: int = 64,
+) -> Optional[List[Tuple[float, float]]]:
+    """Compute trajectory points for an interplanetary leg from its orbital data.
+
+    Expects a dict returned by ``compute_interplanetary_leg`` which contains
+    ``helio_r1``, ``helio_v1``, ``helio_mu``, and ``tof_s`` (or ``base_tof_s``).
+
+    Returns a list of (x, y) heliocentric km positions, or None if the
+    orbital data is missing the required fields.
+    """
+    r1_raw = orbital.get("helio_r1")
+    v1_raw = orbital.get("helio_v1")
+    mu = orbital.get("helio_mu")
+    tof = orbital.get("tof_s") or orbital.get("base_tof_s")
+    if r1_raw is None or v1_raw is None or mu is None or not tof:
+        return None
+    r1: Vec3 = (float(r1_raw[0]), float(r1_raw[1]), float(r1_raw[2]))
+    v1: Vec3 = (float(v1_raw[0]), float(v1_raw[1]), float(v1_raw[2]))
+    return compute_trajectory_points(r1, v1, float(mu), float(tof), n_points=n_points)
 
 
 def _excess_dv_time_reduction(base_tof_s: float, base_dv_m_s: float, extra_dv_fraction: float) -> float:
@@ -403,6 +647,37 @@ def is_interplanetary(from_location: str, to_location: str) -> bool:
     if not a or not b or a == "sun" or b == "sun":
         return False
     return _resolve_heliocentric_body(a) != _resolve_heliocentric_body(b)
+
+
+# ── Multi-rev quality scoring ──────────────────────────────
+
+# TOF penalty weight: each additional day of flight adds this many m/s
+# to the quality score.  Tuned so that a 1-rev solution saving 500 m/s
+# but taking 200 extra days (~200 * 1.0 = 200 m/s penalty) is still
+# preferred over a shorter 0-rev transfer.
+_TOF_PENALTY_M_S_PER_DAY = 1.0
+
+
+def transfer_quality_score(
+    dv_m_s: float,
+    tof_s: float,
+    revolutions: int = 0,
+    tof_penalty_per_day: float = _TOF_PENALTY_M_S_PER_DAY,
+) -> float:
+    """Compute a quality score for ranking transfer solutions.
+
+    Lower is better.  Combines total Δv with a time-of-flight penalty
+    so that multi-revolution solutions that save fuel but take much
+    longer are ranked appropriately against faster 0-rev transfers.
+
+    Score = Δv + tof_penalty_per_day × (TOF in days) + rev_penalty
+
+    The revolution penalty discourages multi-rev solutions when the Δv
+    savings are marginal (50 m/s per additional revolution).
+    """
+    tof_days = max(0.0, tof_s) / 86400.0
+    rev_penalty = revolutions * 50.0  # 50 m/s per extra revolution
+    return dv_m_s + tof_penalty_per_day * tof_days + rev_penalty
 
 
 # ── Porkchop plot computation ──────────────────────────────
@@ -499,11 +774,13 @@ def compute_porkchop(
                 row.append(None)
                 continue
 
-            # Find best solution across all revolutions
+            # Find best solution across all revolutions using quality score
+            best_score_this = FAIL_DV
             best_dv_this = FAIL_DV
             best_v1_this = None
             best_v2_this = None
             best_rev = 0
+            best_type = "short"
 
             for sol_idx, (v1_sol, v2_sol) in enumerate(solutions):
                 dv_dep, dv_arr, dv_tot = compute_transfer_dv(
@@ -516,12 +793,24 @@ def compute_porkchop(
                     mu_arrival=mu_to,
                     r_park_arrival=r_park_to,
                 )
-                if dv_tot < best_dv_this:
+                # Determine revolution count and type from solution index
+                # Index 0 = 0-rev, then pairs: (1=1-rev short, 2=1-rev long),
+                # (3=2-rev short, 4=2-rev long), etc.
+                if sol_idx == 0:
+                    rev_count = 0
+                    sol_type = "short"
+                else:
+                    rev_count = (sol_idx - 1) // 2 + 1
+                    sol_type = "short" if (sol_idx - 1) % 2 == 0 else "long"
+
+                score = transfer_quality_score(dv_tot, tof, rev_count)
+                if score < best_score_this:
+                    best_score_this = score
                     best_dv_this = dv_tot
                     best_v1_this = v1_sol
                     best_v2_this = v2_sol
-                    # Revolution count: sol_idx 0 = 0-rev, 1+ = multi-rev
-                    best_rev = sol_idx // 2 + (1 if sol_idx > 0 else 0)
+                    best_rev = rev_count
+                    best_type = sol_type
 
             if best_dv_this < FAIL_DV:
                 row.append(round(best_dv_this, 1))
@@ -535,19 +824,21 @@ def compute_porkchop(
 
         dv_grid.append(row)
 
-    # Find top-N best solutions from the grid
-    candidates: List[Tuple[float, int, int]] = []
+    # Find top-N best solutions from the grid, ranked by quality score
+    candidates: List[Tuple[float, float, int, int]] = []  # (score, dv, dep_idx, tof_idx)
     for di in range(grid_size):
         for ti in range(grid_size):
             val = dv_grid[di][ti]
             if val is not None:
-                candidates.append((val, di, ti))
+                tof_val = tof_values[ti]
+                score = transfer_quality_score(val, tof_val, revolutions=0)
+                candidates.append((score, val, di, ti))
 
     candidates.sort(key=lambda x: x[0])
 
     # De-duplicate: keep solutions that are spread apart in the grid
     seen_cells: set = set()
-    for dv_val, di, ti in candidates[:50]:
+    for score_val, dv_val, di, ti in candidates[:50]:
         # Skip if too close to an already-picked solution
         close = False
         for sdi, sti in seen_cells:
@@ -575,18 +866,29 @@ def compute_porkchop(
         if not solutions:
             continue
 
-        # Re-evaluate for detailed output
-        for v1_sol, v2_sol in solutions:
+        # Re-evaluate for detailed output with quality scoring
+        best_sol_detail = None
+        best_sol_score = FAIL_DV
+        for sol_idx, (v1_sol, v2_sol) in enumerate(solutions):
             dv_dep, dv_arr, dv_tot = compute_transfer_dv(
                 v1_departure=v1_sol, v1_body=v1_body,
                 v2_arrival=v2_sol, v2_body=v2_body,
                 mu_departure=mu_from, r_park_departure=r_park_from,
                 mu_arrival=mu_to, r_park_arrival=r_park_to,
             )
-            if abs(dv_tot - dv_val) < 1.0:
+            if sol_idx == 0:
+                rev_count = 0
+                sol_type = "short"
+            else:
+                rev_count = (sol_idx - 1) // 2 + 1
+                sol_type = "short" if (sol_idx - 1) % 2 == 0 else "long"
+
+            score = transfer_quality_score(dv_tot, tof, rev_count)
+            if score < best_sol_score:
+                best_sol_score = score
                 v_inf_dep = _norm(_sub(v1_sol, v1_body))
                 v_inf_arr = _norm(_sub(v2_sol, v2_body))
-                best_solutions.append({
+                best_sol_detail = {
                     "departure_time": round(dep_t, 1),
                     "arrival_time": round(arr_t, 1),
                     "tof_s": round(tof, 1),
@@ -595,10 +897,14 @@ def compute_porkchop(
                     "dv_arrive_m_s": round(dv_arr, 1),
                     "v_inf_depart_km_s": round(v_inf_dep, 3),
                     "v_inf_arrive_km_s": round(v_inf_arr, 3),
-                    "type": "short",
-                })
-                seen_cells.add((di, ti))
-                break
+                    "revolutions": rev_count,
+                    "type": sol_type,
+                    "quality_score": round(score, 1),
+                }
+
+        if best_sol_detail is not None:
+            best_solutions.append(best_sol_detail)
+            seen_cells.add((di, ti))
 
         if len(best_solutions) >= 5:
             break
@@ -617,5 +923,6 @@ def compute_porkchop(
 
 
 def invalidate_config_cache() -> None:
-    """Clear the cached config (call after config reload)."""
+    """Clear the cached config and Lambert result cache (call after config reload)."""
     _CONFIG_CACHE.clear()
+    clear_lambert_cache()

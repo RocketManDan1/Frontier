@@ -537,6 +537,23 @@ def build_locations_and_edges(config: Dict[str, Any], game_time_s: Optional[floa
             )
         edge_rows.append((src, dst, float(dv_m_s), float(tof_s), str(edge_type)))
 
+    # ── Auto-generate interplanetary edges if enabled ───────
+    auto_ip = config.get("auto_interplanetary_edges", False)
+    if auto_ip:
+        # Remove hand-authored interplanetary edges (keep local/lagrange)
+        edge_rows = [e for e in edge_rows if e[4] != "interplanetary"]
+        edge_ids = {(e[0], e[1]) for e in edge_rows}
+
+        # Generate from topology
+        auto_edges = generate_interplanetary_edges(config, hohmann_estimate=True)
+        for ae in auto_edges:
+            key = (ae[0], ae[1])
+            if key not in edge_ids:
+                # Verify both endpoints exist as leaf locations
+                if ae[0] in leaf_ids and ae[1] in leaf_ids:
+                    edge_rows.append(ae)
+                    edge_ids.add(key)
+
     # Append surface site landing/ascent edges
     edge_rows.extend(surface_edge_rows)
 
@@ -877,3 +894,200 @@ def get_orbit_node_radius(config: Dict[str, Any], location_id: str) -> Optional[
             if r is not None:
                 return float(r)
     return None
+
+
+# ── Auto-generation of interplanetary transfer edges ────────
+
+
+def _get_body_parent_id(body: Dict[str, Any]) -> str:
+    """Return the center_body_id for a body (empty string if none/sun)."""
+    pos = body.get("position", {})
+    center = str(pos.get("center_body_id", "")).strip()
+    return center
+
+
+def _resolve_helio_body_id(bodies_by_id: Dict[str, Dict[str, Any]], body_id: str) -> str:
+    """Walk up the parent chain to find the heliocentric body (parent is sun/empty)."""
+    visited: set = set()
+    current = body_id
+    while current and current != "sun" and current not in visited:
+        visited.add(current)
+        body = bodies_by_id.get(current)
+        if not body:
+            return body_id
+        parent = _get_body_parent_id(body)
+        if not parent or parent == "sun":
+            return current
+        current = parent
+    return body_id
+
+
+def _find_gateway_location(
+    config: Dict[str, Any],
+    body_id: str,
+    bodies_by_id: Dict[str, Dict[str, Any]],
+) -> Optional[str]:
+    """Find the gateway orbit location for a body.
+
+    Priority:
+    1. Body's explicit ``gateway_location_id`` field (if set in config)
+    2. The orbit_node with the smallest radius_km around that body
+    3. None if no orbit_nodes exist for the body
+    """
+    body = bodies_by_id.get(body_id)
+    if body:
+        explicit = str(body.get("gateway_location_id", "")).strip()
+        if explicit:
+            return explicit
+
+    # Find lowest orbit
+    best_id: Optional[str] = None
+    best_radius = float("inf")
+    for node in (config.get("orbit_nodes") or []):
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("body_id", "")) != body_id:
+            continue
+        r = node.get("radius_km")
+        if r is not None and float(r) < best_radius:
+            best_radius = float(r)
+            best_id = str(node["id"])
+
+    return best_id
+
+
+def generate_interplanetary_edges(
+    config: Dict[str, Any],
+    hohmann_estimate: bool = True,
+) -> List[EdgeRow]:
+    """Auto-generate bidirectional interplanetary transfer edges from topology.
+
+    Rules:
+    1. Identify all heliocentric bodies (bodies whose parent is sun or empty)
+       that have at least one orbit_node (gateway location).
+    2. Generate a bidirectional interplanetary edge between each pair of
+       heliocentric bodies that both have SOI radii defined.
+    3. Use Hohmann-estimate Δv/TOF as placeholder values (the Lambert solver
+       will override these dynamically at query time).
+    4. Moons are not directly connected — they are reached via local edges
+       from their parent planet's gateway.
+
+    Parameters
+    ----------
+    config : loaded celestial_config dict
+    hohmann_estimate : if True, compute Hohmann Δv/TOF estimates for the
+        placeholder edge values; if False, use zero (Lambert overrides anyway).
+
+    Returns
+    -------
+    List of EdgeRow tuples: (from_id, to_id, dv_m_s, tof_s, "interplanetary")
+    """
+    bodies_by_id = _build_bodies_by_id(config)
+    mu_sun = 0.0
+    sun_body = bodies_by_id.get("sun")
+    if sun_body:
+        mu_sun = float(sun_body.get("mu_km3_s2", 0.0))
+
+    # 1. Identify heliocentric bodies with gateways and SOI
+    helio_bodies: List[Dict[str, Any]] = []
+    for body in (config.get("bodies") or []):
+        if not isinstance(body, dict):
+            continue
+        bid = str(body.get("id", "")).strip()
+        if not bid or bid == "sun":
+            continue
+        parent = _get_body_parent_id(body)
+        if parent and parent != "sun":
+            continue  # Moon or sub-satellite — skip
+
+        gateway = _find_gateway_location(config, bid, bodies_by_id)
+        if not gateway:
+            continue  # No orbit node on this body
+
+        # SOI is optional — bodies without SOI still get edges
+        soi = body.get("soi_radius_km")
+
+        helio_bodies.append({
+            "id": bid,
+            "gateway": gateway,
+            "soi": float(soi) if soi is not None else None,
+        })
+
+    if not helio_bodies or mu_sun <= 0:
+        return []
+
+    # 2. For each pair, generate bidirectional edges
+    edges: List[EdgeRow] = []
+    n = len(helio_bodies)
+    for i in range(n):
+        for j in range(i + 1, n):
+            a = helio_bodies[i]
+            b = helio_bodies[j]
+
+            dv_estimate = 0.0
+            tof_estimate = 86400.0  # 1-day placeholder
+
+            if hohmann_estimate and mu_sun > 0:
+                # Get approximate orbital radii for Hohmann estimate
+                body_a = bodies_by_id.get(a["id"])
+                body_b = bodies_by_id.get(b["id"])
+                if body_a and body_b:
+                    pos_a = body_a.get("position", {})
+                    pos_b = body_b.get("position", {})
+                    r_a = float(pos_a.get("a_km", 0.0))
+                    r_b = float(pos_b.get("a_km", 0.0))
+                    if r_a > 0 and r_b > 0:
+                        # Hohmann estimate: Δv ≈ |v_circ_dep - v_transfer_dep| + |v_circ_arr - v_transfer_arr|
+                        a_t = 0.5 * (r_a + r_b)
+                        if a_t > 0:
+                            v1_circ = math.sqrt(mu_sun / r_a)
+                            v2_circ = math.sqrt(mu_sun / r_b)
+                            v1_trans = math.sqrt(mu_sun * (2.0 / r_a - 1.0 / a_t))
+                            v2_trans = math.sqrt(mu_sun * (2.0 / r_b - 1.0 / a_t))
+                            # v_inf at each end
+                            v_inf_dep = abs(v1_trans - v1_circ)
+                            v_inf_arr = abs(v2_trans - v2_circ)
+                            # Convert to patched-conic Δv from parking orbit
+                            mu_a = float(body_a.get("mu_km3_s2", 0.0))
+                            mu_b = float(body_b.get("mu_km3_s2", 0.0))
+                            r_gw_a = get_orbit_node_radius(config, a["gateway"])
+                            r_gw_b = get_orbit_node_radius(config, b["gateway"])
+
+                            dv_dep = v_inf_dep
+                            if mu_a > 0 and r_gw_a and r_gw_a > 0:
+                                v_park = math.sqrt(mu_a / r_gw_a)
+                                v_hyp = math.sqrt(v_inf_dep**2 + 2.0 * mu_a / r_gw_a)
+                                dv_dep = abs(v_hyp - v_park)
+
+                            dv_arr = v_inf_arr
+                            if mu_b > 0 and r_gw_b and r_gw_b > 0:
+                                v_park = math.sqrt(mu_b / r_gw_b)
+                                v_hyp = math.sqrt(v_inf_arr**2 + 2.0 * mu_b / r_gw_b)
+                                dv_arr = abs(v_hyp - v_park)
+
+                            dv_estimate = (dv_dep + dv_arr) * 1000.0  # km/s → m/s
+                            tof_estimate = math.pi * math.sqrt(a_t**3 / mu_sun)
+
+            edges.append((a["gateway"], b["gateway"], dv_estimate, tof_estimate, "interplanetary"))
+            edges.append((b["gateway"], a["gateway"], dv_estimate, tof_estimate, "interplanetary"))
+
+    return edges
+
+
+def get_auto_edge_gateway_map(config: Dict[str, Any]) -> Dict[str, str]:
+    """Return a body_id → gateway_location_id mapping (for diagnostics/tests)."""
+    bodies_by_id = _build_bodies_by_id(config)
+    result: Dict[str, str] = {}
+    for body in (config.get("bodies") or []):
+        if not isinstance(body, dict):
+            continue
+        bid = str(body.get("id", "")).strip()
+        if not bid or bid == "sun":
+            continue
+        parent = _get_body_parent_id(body)
+        if parent and parent != "sun":
+            continue
+        gw = _find_gateway_location(config, bid, bodies_by_id)
+        if gw:
+            result[bid] = gw
+    return result

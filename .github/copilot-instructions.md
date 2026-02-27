@@ -10,10 +10,23 @@ Single-container **FastAPI + SQLite** space-logistics game server. All backend l
 
 | File | Role |
 |---|---|
-| `main.py` (~4300 lines) | All API route handlers, Pydantic models, startup logic, game state endpoints |
+| `main.py` | Startup logic, Pydantic models, game state endpoints, solar-system expansion |
+| `fleet_router.py` | Ship fleet & transfer endpoints (`/api/fleet/*`, `/api/transfer/*`) |
+| `shipyard_router.py` | Ship building endpoints (`/api/shipyard/*`) |
+| `inventory_router.py` | Location/ship inventory transfer endpoints (`/api/inventory/*`) |
+| `location_router.py` | Location listing & dynamic position endpoints (`/api/locations`) |
+| `catalog_router.py` | Item catalog browsing endpoints (`/api/catalog/*`) |
+| `industry_router.py` | Equipment deployment & production job endpoints (`/api/industry/*`) |
+| `industry_service.py` | Production job logic, power balance, settle-on-access |
+| `org_router.py` | Organization, research, marketplace endpoints (`/api/org/*`) |
+| `org_service.py` | Organization settlement, income, loan logic |
+| `admin_game_router.py` | Admin game-management endpoints (`/api/admin/*`) |
 | `catalog_service.py` | Item/recipe/resource catalog loading from `items/` JSON trees; ship stat calculations |
 | `sim_service.py` | Accelerated game clock (default 48× real-time), pause/resume, epoch reset |
-| `celestial_config.py` | Parses `config/celestial_config.json` → locations, transfer edges, Lagrange point positions |
+| `celestial_config.py` | Parses `config/celestial_config.json` → locations, transfer edges, body state vectors, gravitational parameters |
+| `lambert.py` | Pure-math Lambert solver (universal variable method) for two-point boundary value orbital transfers |
+| `transfer_planner.py` | Patched-conic interplanetary transfer planner — Lambert + SOI burns, porkchop plot grid computation, departure window scanning |
+| `constants.py` | Shared constants (game epoch, physics values) |
 | `auth_service.py` | Session-cookie auth, password hashing, `require_login`/`require_admin` guards |
 | `auth_repository.py` | Raw SQL helpers for the `users` table |
 | `auth_router.py` | `/api/auth/*` and `/api/admin/accounts/*` routes (FastAPI `APIRouter`) |
@@ -68,7 +81,7 @@ sudo docker compose up -d --build
 ## Game-Specific Domain Knowledge
 
 - **Simulation clock**: Game time runs at `GAME_TIME_SCALE` (default 48×). Ship transfers use game-time for departure/arrival. The clock can be paused/reset by admins.
-- **Ship transfers**: Ships move between locations (LEO, GEO, Luna, L1–L5, etc.) consuming delta-v and fuel. Transfer quotes come from a precomputed `transfer_matrix` built from `celestial_config.json` edges.
+- **Ship transfers**: Ships move between locations (LEO, GEO, Luna, L1–L5, etc.) consuming delta-v and fuel. Local orbit changes (same body) use Hohmann estimates from static `transfer_edges`. Interplanetary transfers use a **Lambert solver** (`lambert.py` + `transfer_planner.py`) that sweeps multiple time-of-flight candidates to find the best Δv at the current departure time. A **porkchop plot** endpoint (`/api/transfer/porkchop`) scans departure date × TOF grids for optimal transfer windows.
 - **Ship builds**: Players select parts from the catalog → `/api/shipyard/preview` returns computed stats (dry mass, fuel capacity, ISP, thrust) → `/api/shipyard/build` creates the ship.
 - **Inventory**: Location-based and ship-based inventory stacks tracked in `location_inventory_stacks`. Resources transfer between ships and locations.
 - **Item categories** have aliases (e.g., `"engines"` → `"thruster"`, `"propellant"` → `"fuel"`) defined in `ITEM_CATEGORY_ALIASES` for flexible API lookups.

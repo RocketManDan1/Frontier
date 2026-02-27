@@ -3086,6 +3086,9 @@
    * (the ancestor whose parent is grp_sun). Returns the group id string.
    * For Earth and its Moon, both return "grp_earth".
    * For Mars and its moons, returns "grp_mars".
+   * For asteroid belt bodies (Ceres, Vesta, Pallas, Hygiea) whose parent
+   * is a container group (grp_asteroid_belt) under grp_sun, returns the
+   * individual body group (e.g. "grp_hygiea"), not the container.
    */
   function getLocationSolarGroup(locationId) {
     let cur = String(locationId || "");
@@ -3095,6 +3098,10 @@
       if (cur.startsWith("grp_") && !cur.endsWith("_orbits") && !cur.endsWith("_sites") && !cur.endsWith("_moons")) {
         const parent = String(locationParentById.get(cur) || "");
         if (parent === "grp_sun" || parent === "") return cur;
+        // Check grandparent — handles bodies nested under a container group
+        // (e.g. grp_hygiea → grp_asteroid_belt → grp_sun)
+        const grandparent = String(locationParentById.get(parent) || "");
+        if (grandparent === "grp_sun") return cur;
       }
       cur = String(locationParentById.get(cur) || "");
     }
@@ -3218,7 +3225,42 @@
    * continuous polyline. Each leg is weighted by its time-of-flight so the
    * ship moves at a pace proportional to real transfer time.
    */
-  function buildCompositeCurve(legs) {
+  /**
+   * Build an arc-type curve from server-computed trajectory points.
+   * Trajectory points are in heliocentric km; project to world coords.
+   */
+  function buildTrajectoryArc(trajectoryPoints, fromLocId, toLocId) {
+    if (!trajectoryPoints || trajectoryPoints.length < 2) return null;
+    const points = [];
+    const cumDist = [0];
+    for (let i = 0; i < trajectoryPoints.length; i++) {
+      const xKm = trajectoryPoints[i][0];
+      const yKm = trajectoryPoints[i][1];
+      const rx = xKm * HELIO_LINEAR_WORLD_PER_KM;
+      const ry = yKm * HELIO_LINEAR_WORLD_PER_KM;
+      points.push({ x: rx, y: ry });
+      if (i > 0) {
+        const ddx = rx - points[i - 1].x;
+        const ddy = ry - points[i - 1].y;
+        cumDist.push(cumDist[i - 1] + Math.hypot(ddx, ddy));
+      }
+    }
+    const arc = { type: "arc", points, cumDist };
+    // Add endpoint tracking for live body warp
+    const fromSolar = getLocationSolarGroup(fromLocId);
+    const toSolar = getLocationSolarGroup(toLocId);
+    if (fromSolar) {
+      const fromBody = locationsById.get(fromSolar);
+      if (fromBody) { arc.trackStartId = fromSolar; arc.trackStartOrig = { x: fromBody.rx, y: fromBody.ry }; }
+    }
+    if (toSolar) {
+      const toBody = locationsById.get(toSolar);
+      if (toBody) { arc.trackEndId = toSolar; arc.trackEndOrig = { x: toBody.rx, y: toBody.ry }; }
+    }
+    return arc;
+  }
+
+  function buildCompositeCurve(legs, trajectory) {
     if (!legs || !legs.length) return null;
 
     const totalTof = legs.reduce((s, l) => s + Math.max(1, Number(l.tof_s) || (Number(l.arrival_time) - Number(l.departure_time))), 0);
@@ -3245,7 +3287,17 @@
       const toLoc = toAnchor || toLive;
       if (!fromLoc || !toLoc) continue;
 
-      const legCurve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isIP, depTime, arrTime);
+      // Use server-computed Lambert trajectory if available for this leg
+      let legCurve = null;
+      if (isIP && Array.isArray(trajectory)) {
+        const traj = trajectory.find(t => t && String(t.from_id) === fromId && String(t.to_id) === toId);
+        if (traj && Array.isArray(traj.points) && traj.points.length >= 2) {
+          legCurve = buildTrajectoryArc(traj.points, fromId, toId);
+        }
+      }
+      if (!legCurve) {
+        legCurve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isIP, depTime, arrTime);
+      }
       if (!legCurve) continue;
 
       // Capture tracking from first and last legs for composite warp
@@ -5127,6 +5179,8 @@
 
         // Build cache key from all leg endpoints + anchors
         let compositeSig = `${ship.from_location_id}->${ship.to_location_id}|${legs.length}`;
+        const hasTrajectory = Array.isArray(ship.trajectory) && ship.trajectory.length > 0;
+        compositeSig += `|traj=${hasTrajectory ? 1 : 0}`;
         for (const leg of legs) {
           const fa = getTransitAnchorWorld(String(leg.from_id || ""), Number(leg.departure_time));
           const ta = getTransitAnchorWorld(String(leg.to_id || ""), Number(leg.arrival_time));
@@ -5135,20 +5189,30 @@
 
         if (!gfx.curve || gfx.transitKey !== compositeSig) {
           if (legs.length > 0) {
-            gfx.curve = buildCompositeCurve(legs);
+            const shipTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : null;
+            gfx.curve = buildCompositeCurve(legs, shipTrajectory);
           }
           // Fallback: single-leg from overall from/to
           if (!gfx.curve) {
             const fromId = String(ship.from_location_id || "");
             const toId = String(ship.to_location_id || "");
-            const A = locationsById.get(fromId);
-            const B = locationsById.get(toId);
-            const fa = getTransitAnchorWorld(fromId, overallDepart) || A;
-            const ta = getTransitAnchorWorld(toId, overallArrive) || B;
-            if (fa && ta) {
-              const fs = getLocationSolarGroup(fromId);
-              const ts = getLocationSolarGroup(toId);
-              gfx.curve = computeTransitCurve(fromId, toId, fa, ta, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
+            // Try trajectory data for single-leg fallback
+            if (hasTrajectory) {
+              const traj = ship.trajectory.find(t => t && String(t.from_id) === fromId && String(t.to_id) === toId);
+              if (traj && Array.isArray(traj.points) && traj.points.length >= 2) {
+                gfx.curve = buildTrajectoryArc(traj.points, fromId, toId);
+              }
+            }
+            if (!gfx.curve) {
+              const A = locationsById.get(fromId);
+              const B = locationsById.get(toId);
+              const fa = getTransitAnchorWorld(fromId, overallDepart) || A;
+              const ta = getTransitAnchorWorld(toId, overallArrive) || B;
+              if (fa && ta) {
+                const fs = getLocationSolarGroup(fromId);
+                const ts = getLocationSolarGroup(toId);
+                gfx.curve = computeTransitCurve(fromId, toId, fa, ta, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
+              }
             }
           }
           gfx.transitKey = compositeSig;

@@ -49,9 +49,13 @@
     },
   };
 
-  /* ── Environment banner ──────────────────────────────────────────── */
+  /* ── Environment banner (map page only) ────────────────────────────── */
   async function applyEnvBanner() {
     try {
+      // Only show the banner on the map (index) page
+      const path = window.location.pathname;
+      if (path !== "/" && path !== "/index.html") return;
+
       const resp = await fetch("/api/server/info", { cache: "no-store" });
       if (!resp.ok) return;
       const info = await resp.json();

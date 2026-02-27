@@ -71,6 +71,255 @@ def _stumpff_c3(psi: float) -> float:
     return (math.sinh(sp) - sp) / ((-psi) * sp)
 
 
+# ─── Battin's method — robust for near-180° transfers ────────
+
+def _continued_fraction_eta(x: float) -> float:
+    """Evaluate Battin's continued fraction η(x).
+
+    η(x) = x / (√(1+x) + 1) ≈ series expansion for small x.
+    Used in Battin's method for the relationship between the
+    eccentric anomaly difference and the transfer geometry.
+    """
+    # Direct formula: η = x / (√(1+x) + 1)
+    if abs(x) < 1e-12:
+        return 0.0
+    sqrt_val = math.sqrt(max(0.0, 1.0 + x))
+    denom = sqrt_val + 1.0
+    if abs(denom) < 1e-15:
+        return 0.0
+    return x / denom
+
+
+def _battin_continued_fraction_k(u: float, n_terms: int = 30) -> float:
+    """Evaluate Battin's continued fraction K(u) used in the h1/h2 functions.
+
+    K(u) is defined by the continued fraction:
+    K(u) = (1/3) / (1 + (4/27)u / (1 + (8/27)u / (1 + ...)))
+
+    Evaluated bottom-up for numerical stability.
+    """
+    cf = 1.0
+    for i in range(n_terms, 0, -1):
+        c_num = (i * (i + 1.0)) / ((2.0 * i + 1.0) * (2.0 * i + 3.0))
+        cf = 1.0 + c_num * u / cf
+    return (1.0 / 3.0) / cf
+
+
+def _solve_lambert_battin(
+    r1: Vec3,
+    r2: Vec3,
+    tof: float,
+    mu: float,
+    clockwise: bool = False,
+) -> Optional[Tuple[Vec3, Vec3]]:
+    """Solve Lambert's problem using Battin's method.
+
+    Battin's method is more numerically stable for near-180° transfer angles
+    where the universal-variable solver may lose precision.  It uses a
+    geometrically motivated parameterization that avoids the singularity.
+
+    Reference: Battin, "An Introduction to the Mathematics and Methods of
+    Astrodynamics", Chapter 6.
+
+    Returns (v1, v2) or None if no solution found.
+    """
+    r1_mag = _norm(r1)
+    r2_mag = _norm(r2)
+    if r1_mag < 1e-10 or r2_mag < 1e-10 or tof <= 0.0 or mu <= 0.0:
+        return None
+
+    # ── Transfer angle ──────────────────────────────────────
+    cos_dnu = _dot(r1, r2) / (r1_mag * r2_mag)
+    cos_dnu = max(-1.0, min(1.0, cos_dnu))
+
+    c_cross = _cross(r1, r2)
+    cross_z = c_cross[2]
+
+    if clockwise:
+        if cross_z >= 0.0:
+            dnu = 2.0 * math.pi - math.acos(cos_dnu)
+        else:
+            dnu = math.acos(cos_dnu)
+    else:
+        if cross_z >= 0.0:
+            dnu = math.acos(cos_dnu)
+        else:
+            dnu = 2.0 * math.pi - math.acos(cos_dnu)
+
+    # ── Battin geometry parameters ──────────────────────────
+    # Use half-angle on transfer angle: ta = dnu / 2
+    k = r1_mag * r2_mag
+    l_param = (r1_mag + r2_mag) / (4.0 * math.sqrt(k))  # Battin's ℓ
+    sin_dnu_2 = math.sin(dnu / 2.0)
+    cos_dnu_2 = math.cos(dnu / 2.0)
+
+    # Chord length
+    c = math.sqrt(r1_mag * r1_mag + r2_mag * r2_mag - 2.0 * r1_mag * r2_mag * cos_dnu)
+    s = (r1_mag + r2_mag + c) / 2.0  # semi-perimeter
+
+    # Guard against degenerate
+    if s < 1e-10 or c < 1e-10:
+        return None
+
+    lambda_param = math.sqrt(1.0 - c / s)  # Battin's λ = √(1 - c/s)
+    if dnu > math.pi:
+        lambda_param = -lambda_param
+
+    # Parabolic TOF (minimum energy)
+    tof_p = (2.0 / 3.0) * math.sqrt(s ** 3 / (2.0 * mu)) * (1.0 - lambda_param ** 3)
+
+    # ── Newton iteration on x (Battin parameterization) ─────
+    # x relates to the energy: x = l² for elliptic, etc.
+    # Initial guess based on TOF relative to parabolic
+    if abs(tof_p) < 1e-12:
+        return None
+
+    # Battin's method: iterate on x where the transfer semi-major axis a = s/(4*(1-x²))
+    # Use the ratio tof/tof_p to estimate initial x
+    # For TOF < TOF_p: hyperbolic (x > 1), for TOF > TOF_p: elliptic (x < 1)
+    # Initial guess from Battin's heuristic
+    m_ratio = tof / tof_p
+    if m_ratio < 1e-12:
+        return None
+
+    # Starting value
+    x = 0.0
+    if m_ratio > 1.0:
+        # Elliptic — x < 1
+        x = (m_ratio - 1.0) / (m_ratio + 0.4)
+        x = min(0.99, max(-0.99, x))
+    else:
+        # Hyperbolic — tends toward larger x
+        x = (1.0 - m_ratio) / (m_ratio + 0.4)
+        x = min(0.99, max(-0.99, x))
+
+    lambda2 = lambda_param * lambda_param
+
+    for _ in range(100):
+        # h parameters from Battin's continued fraction
+        x2 = x * x
+        # Prevent division by zero
+        if abs(1.0 - x2) < 1e-15:
+            x = x * 0.999
+            x2 = x * x
+
+        # Compute ξ = (1 - λ²(1 - x)) / (2x)
+        if abs(x) < 1e-12:
+            # Limiting case near x = 0
+            xi = lambda2 / 2.0
+        else:
+            xi = (1.0 - lambda2 * (1.0 - x)) / (2.0 * x)
+
+        # Compute h1, h2 using continued fraction K(u)
+        u = xi * xi / ((1.0 + xi) if abs(1.0 + xi) > 1e-15 else 1e-15)
+        k_val = _battin_continued_fraction_k(u)
+
+        # y = (1 + xi + h2) where h2 = k_val * (xi + 1)
+        y = 1.0 + xi * (1.0 + k_val)
+
+        if y < 1e-15:
+            break
+
+        # Semi-major axis
+        a = s / (4.0 * (1.0 - x2)) if abs(1.0 - x2) > 1e-15 else s * 1e15
+
+        # Compute TOF for current x
+        if x2 < 1.0:
+            # Elliptic
+            beta = 2.0 * math.asin(math.sqrt(max(0.0, min(1.0, (s - c) / (2.0 * a)))))
+            if dnu > math.pi:
+                beta = -beta
+            alpha = 2.0 * math.asin(math.sqrt(max(0.0, min(1.0, s / (2.0 * a)))))
+            tof_x = math.sqrt(a ** 3 / mu) * ((alpha - math.sin(alpha)) - (beta - math.sin(beta)))
+        elif abs(x2 - 1.0) < 1e-12:
+            # Parabolic
+            tof_x = tof_p
+        else:
+            # Hyperbolic
+            a_hyp = abs(a)
+            if s / (2.0 * a_hyp) < 1.0:
+                alpha_h = 2.0 * math.asinh(math.sqrt(max(0.0, s / (2.0 * a_hyp))))
+            else:
+                alpha_h = 2.0 * math.acosh(s / (2.0 * a_hyp))
+            sc_rat = max(0.0, (s - c) / (2.0 * a_hyp))
+            if sc_rat < 1.0:
+                beta_h = 2.0 * math.asinh(math.sqrt(sc_rat))
+            else:
+                beta_h = 2.0 * math.acosh(math.sqrt(sc_rat) + math.sqrt(max(0.0, sc_rat - 1.0)))
+            if dnu > math.pi:
+                beta_h = -beta_h
+            tof_x = math.sqrt(a_hyp ** 3 / mu) * ((math.sinh(alpha_h) - alpha_h) - (math.sinh(beta_h) - beta_h))
+
+        if abs(tof_x) < 1e-15:
+            break
+
+        # Newton update: dx = (tof - tof_x) / dTOF_dx
+        # Numerical derivative
+        dx = 0.001
+        x_p = x + dx
+        x_m = x - dx
+
+        # Recompute TOF at x+dx for numerical derivative
+        a_p = s / (4.0 * (1.0 - x_p * x_p)) if abs(1.0 - x_p * x_p) > 1e-15 else s * 1e15
+        if x_p * x_p < 1.0 and a_p > 0:
+            bp = 2.0 * math.asin(math.sqrt(max(0.0, min(1.0, (s - c) / (2.0 * a_p)))))
+            if dnu > math.pi:
+                bp = -bp
+            ap = 2.0 * math.asin(math.sqrt(max(0.0, min(1.0, s / (2.0 * a_p)))))
+            tof_p_x = math.sqrt(a_p ** 3 / mu) * ((ap - math.sin(ap)) - (bp - math.sin(bp)))
+        else:
+            tof_p_x = tof_x  # fallback
+
+        dtof_dx = (tof_p_x - tof_x) / dx if abs(dx) > 1e-15 else 0.0
+
+        if abs(dtof_dx) < 1e-20:
+            break
+
+        x_new = x + (tof - tof_x) / dtof_dx
+
+        # Clamp
+        x_new = max(-0.999, min(0.999, x_new))
+
+        if abs(x_new - x) < 1e-10:
+            x = x_new
+            break
+        x = x_new
+
+    # ── Compute a from converged x ──────────────────────────
+    x2 = x * x
+    if abs(1.0 - x2) < 1e-15:
+        return None
+    a = s / (4.0 * (1.0 - x2))
+    if a < 1e-10:
+        return None
+
+    # ── f, g, g_dot Lagrange coefficients ───────────────────
+    # Standard formulation using a and the transfer geometry
+    f = 1.0 - a / r1_mag * (1.0 - cos_dnu)
+    g_denom = mu * a
+    if g_denom <= 0:
+        return None
+    g = tof - math.sqrt(a ** 3 / mu) * (
+        dnu - math.sin(dnu) if abs(dnu) < 2 * math.pi else 0.0
+    )
+
+    # The correct Lagrange coefficients for the Lambert problem:
+    # v1 = (r2 - f*r1) / g
+    # v2 = (g_dot*r2 - r1) / g
+    if abs(g) < 1e-15:
+        return None
+
+    v1 = _scale(1.0 / g, _sub(r2, _scale(f, r1)))
+    g_dot = 1.0 - a / r2_mag * (1.0 - cos_dnu)
+    v2 = _scale(1.0 / g, _sub(_scale(g_dot, r2), r1))
+
+    # Sanity check: velocities should not be absurdly large
+    if _norm(v1) > 200.0 or _norm(v2) > 200.0:
+        return None
+
+    return (v1, v2)
+
+
 # ─── Core: Universal variable Lambert solver ─────────────────
 
 def _solve_lambert_uv(
@@ -465,10 +714,20 @@ def solve_lambert(
 
     solutions: List[Tuple[Vec3, Vec3]] = []
 
+    # Detect near-180° transfer angle for Battin fallback
+    cos_dnu = _dot(r1, r2) / (r1_mag * r2_mag)
+    cos_dnu = max(-1.0, min(1.0, cos_dnu))
+    is_near_180 = cos_dnu < -0.95  # within ~18° of 180°
+
     # 0-revolution (direct) transfer
     result = _solve_lambert_uv(r1, r2, tof, mu, clockwise=clockwise)
     if result is not None:
         solutions.append(result)
+    elif is_near_180:
+        # Battin's method fallback for near-180° where UV solver failed
+        result = _solve_lambert_battin(r1, r2, tof, mu, clockwise=clockwise)
+        if result is not None:
+            solutions.append(result)
 
     # Multi-revolution solutions
     for N in range(1, max_revs + 1):

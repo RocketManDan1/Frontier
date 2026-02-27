@@ -101,11 +101,12 @@ For interplanetary transfer calculations, `fleet_router.py` caches position look
 
 **Intra-body transfers** (e.g., LEO↔GEO, LMO↔HMO) use static delta-v values from the `transfer_edges` array. These costs are constant regardless of time.
 
-**Interplanetary transfers** (e.g., LEO→LMO) are handled by a two-layer system:
-1. **Static base graph**: `transfer_edges` entries provide baseline Hohmann delta-v and time-of-flight. At startup, `dijkstra_all_pairs()` builds a precomputed `transfer_matrix` using delta-v as the Dijkstra weight.
-2. **Dynamic phase-angle adjustment**: At transfer-quote time, `fleet_router.py` computes the real-time heliocentric positions of the departure and arrival bodies, calculates the current phase angle vs. the optimal Hohmann phase angle, and applies a ±40% cosine multiplier (`_body_phase_solution()`). This makes interplanetary transfer costs time-dependent without a full Lambert solver.
+**Interplanetary transfers** (e.g., LEO→LMO) are handled by a **Lambert solver** (`lambert.py` + `transfer_planner.py`):
+1. **Static base graph**: `transfer_edges` entries define **topology** (which locations connect) and provide baseline Hohmann delta-v estimates. At startup, `dijkstra_all_pairs()` builds a precomputed `transfer_matrix` using these as Dijkstra weights for route finding.
+2. **Dynamic Lambert computation**: At transfer-quote time, `transfer_planner.compute_interplanetary_leg()` gets the 3D heliocentric state vectors of departure and arrival bodies via `celestial_config.compute_body_state()`, then sweeps 14 time-of-flight candidates (0.3×–2.5× Hohmann estimate) through the Lambert solver to find the best Δv. Patched-conic SOI departure/arrival burns are added.
+3. **Porkchop plot**: The `/api/transfer/porkchop` endpoint scans a full departure-date × TOF grid and returns a 2D Δv matrix plus best-solution details.
 
-The `_LOCATION_PARENT_BODY` dict in `fleet_router.py` maps every leaf location to its parent body for heliocentric state lookups. The `_BODY_CONSTANTS` dict provides gravitational parameters (`mu_km3_s2`), body radius, and parking orbit altitude for Hohmann calculations.
+Body gravitational parameters (`mu_km3_s2`), SOI radii, and location-to-body mappings are all derived from `celestial_config.json` — there are no hand-maintained duplicate dicts.
 
 ### Surface Sites
 
@@ -188,17 +189,19 @@ Add interplanetary connections to the existing network:
 { "from_id": "JUP_LO", "to_id": "LEO", "dv_m_s": 9200, "tof_s": 78624000 }
 ```
 
-#### 5. Update `fleet_router.py` constants
+#### 5. Update `celestial_config.json` body entry
 
-Add entries to `_LOCATION_PARENT_BODY`:
-```python
-"JUP_LO": "jupiter", "JUP_HO": "jupiter",
+Ensure the new body has `mu_km3_s2` and `soi_radius_km` fields if it participates in interplanetary transfers:
+```json
+{
+  "id": "jupiter",
+  "mu_km3_s2": 126686534.0,
+  "soi_radius_km": 48200000.0,
+  ...
+}
 ```
 
-Add to `_BODY_CONSTANTS`:
-```python
-"jupiter": {"mu_km3_s2": 126686534.0, "radius_km": 69911.0, "parking_alt_km": 5000.0},
-```
+Location-to-body mapping is auto-derived from `orbit_nodes[].body_id`, `markers[].body_id`, and `surface_sites[].body_id` in the config — no manual dict updates needed.
 
 #### 6. Rebuild
 
@@ -248,7 +251,7 @@ Add entries to the `surface_sites` array:
 }
 ```
 
-Bidirectional transfer edges to `orbit_node_id` are auto-generated. Remember to add any new surface site IDs to `_LOCATION_PARENT_BODY` in `fleet_router.py`.
+Bidirectional transfer edges to `orbit_node_id` are auto-generated. Location-to-body mapping is auto-derived from the config, so no manual dict updates are needed.
 
 ### Adding a Lagrange System
 
@@ -277,11 +280,10 @@ Lagrange point models:
 
 ### Checklist for Any New Object
 
-1. **`celestial_config.json`** — body, groups, orbit nodes, transfer edges, surface sites, markers, lagrange systems as needed.
-2. **`fleet_router.py`** — add entries to `_LOCATION_PARENT_BODY` for every new leaf location and to `_BODY_CONSTANTS` for any new body that participates in interplanetary Hohmann calculations.
-3. **`config/celestial_config.schema.json`** — update if adding new field types (usually not needed).
-4. **Rebuild the dev server** — `sudo docker compose up -d --build frontier-dev`.
-5. **Test** — verify the new body appears on the map, orbit nodes show up in the location tree, and transfer quotes work from existing locations to the new ones.
+1. **`celestial_config.json`** — body (with `mu_km3_s2` and `soi_radius_km` for interplanetary bodies), groups, orbit nodes, transfer edges, surface sites, markers, lagrange systems as needed.
+2. **`config/celestial_config.schema.json`** — update if adding new field types (usually not needed).
+3. **Rebuild the dev server** — `sudo docker compose up -d --build frontier-dev`.
+4. **Test** — verify the new body appears on the map, orbit nodes show up in the location tree, and transfer quotes work from existing locations to the new ones.
 
 ### Where to Get Orbital Elements
 
@@ -298,15 +300,13 @@ All existing bodies use J2000.0 epoch (`epoch_jd: 2451544.5`) for consistency.
 
 Assessment of what would need to change if celestial bodies tracked real JPL Horizons ephemeris data with fully time-varying positions and delta-v, beyond the current Keplerian approximation.
 
-### 1. Transfer Delta-V Becomes Fully Time-Dependent (HIGH — core game mechanic)
+### 1. Transfer Delta-V Is Already Time-Dependent (DONE — Lambert solver implemented)
 
-Currently, `transfer_edges` and `transfer_matrix` store **static** delta-v and time-of-flight values for the Dijkstra graph. Interplanetary legs get a dynamic phase-angle adjustment (±40%) at quote time, but the base Hohmann cost and the precomputed shortest-path graph remain fixed.
+Interplanetary transfers now use a **Lambert solver** (`lambert.py` + `transfer_planner.py`) that computes exact Δv from 3D state vectors at the departure time. The static `transfer_matrix` Dijkstra graph is still used for **route topology** (which locations connect), but interplanetary leg costs are dynamically overridden with Lambert-computed values at quote time.
 
-**What would break:**
-- **Interplanetary delta-v is not constant** — a Hohmann transfer Earth→Mars costs ~4.3 km/s at an optimal window, but up to ~6+ km/s at bad alignment. The current phase-multiplier approximates this but is not a proper Lambert solver.
-- The precomputed Dijkstra `transfer_matrix` can't fully accommodate time. Multi-hop interplanetary routes may have different optimal orderings depending on departure date.
+A **porkchop plot** endpoint (`/api/transfer/porkchop`) scans departure-date × TOF grids and returns optimal transfer windows.
 
-**To fix:** Replace the static `transfer_matrix` with a per-request porkchop-plot or Lambert solver, or pre-compute a time-indexed lookup table that gets regenerated periodically.
+**What remains:** The Dijkstra route-finding still uses static edge weights for path selection. A fully time-dependent Dijkstra (where edge weights vary by departure time along the path) is not yet implemented — this would matter for multi-hop interplanetary routes where intermediate timing affects total Δv.
 
 ### 2. Keplerian Approximation Drift (MEDIUM)
 
@@ -335,14 +335,15 @@ Intra-body edges (LEO↔GEO, LMO↔HMO, etc.) are for local orbit-change maneuve
 | Component | Current state | Impact of full ephemeris |
 |---|---|---|
 | Body positions | Keplerian propagation at game time | Would need SPICE kernels or osculating elements |
-| `transfer_matrix` / Dijkstra | Static graph, phase-adjusted at quote time | Must become fully time-dependent |
+| Interplanetary transfers | Lambert solver with patched-conic SOI burns | More accurate with SPICE state vectors but architecture is ready |
+| `transfer_matrix` / Dijkstra | Static graph for route topology; interplanetary legs dynamically overridden | Multi-hop timing optimization still needed |
 | `/api/locations` | Already dynamic (recomputes per request) | **No change needed** |
-| `celestial_config.py` parser | Already has Kepler solver + `game_time_s` | Would need SPICE integration |
+| `celestial_config.py` parser | Already has Kepler solver + `game_time_s` + 3D state vectors | Would need SPICE integration |
 | Lagrange point positions | Recomputed per request from body positions | **No change needed** |
-| In-transit ship interpolation | Linear between static endpoints | Needs trajectory-aware interpolation |
+| In-transit ship interpolation | Linear between static endpoints | Needs trajectory-aware interpolation (Phase 5 planned) |
 | `sim.js` Earth–Moon mini-map | Already handles `keplerian_2d` | Needs extension to solar system |
 | Intra-body edges (LEO↔GEO etc.) | Static delta-v | **No change** — not time-dependent |
 
 ### Key Takeaway
 
-The architecture has already moved significantly toward dynamic positions — bodies use Keplerian elements, positions are recomputed per-request, and interplanetary transfers use phase-angle adjustments. The remaining gap is replacing the static Dijkstra transfer matrix with a fully time-dependent solver and potentially upgrading from two-body Keplerian propagation to real ephemeris data for long-duration accuracy.
+The architecture has moved to **fully dynamic interplanetary transfers** — a Lambert solver computes exact Δv from 3D state vectors, porkchop plots visualize transfer windows, and all body parameters (gravitational constants, SOI radii, location mappings) are consolidated in `celestial_config.json`. The remaining gaps are: (1) trajectory-aware ship rendering during transit (Phase 5 of the Lambert design), (2) upgrading from two-body Keplerian propagation to real ephemeris data for long-duration accuracy, and (3) time-dependent multi-hop Dijkstra routing.

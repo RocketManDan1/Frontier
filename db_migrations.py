@@ -602,6 +602,11 @@ def _migration_0013_edge_type(conn: sqlite3.Connection) -> None:
     _safe_add_column(conn, "transfer_edges", "edge_type", "TEXT DEFAULT 'local'")
 
 
+def _migration_0014_trajectory_json(conn: sqlite3.Connection) -> None:
+    """Add trajectory_json column to ships for storing rendered trajectory polylines."""
+    _safe_add_column(conn, "ships", "trajectory_json", "TEXT")
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -617,6 +622,7 @@ def _migrations() -> List[Migration]:
     Migration("0011_rekey_inventory_stacks", "Re-key legacy inventory stacks to SHA1-based stack keys", _migration_0011_rekey_inventory_stacks),
     Migration("0012_transit_coord_snapshot", "Add transit coordinate snapshot columns to ships", _migration_0012_transit_coord_snapshot),
     Migration("0013_edge_type", "Add edge_type column to transfer_edges", _migration_0013_edge_type),
+    Migration("0014_trajectory_json", "Add trajectory_json column to ships", _migration_0014_trajectory_json),
     ]
 
 
