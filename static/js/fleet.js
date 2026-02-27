@@ -7,6 +7,38 @@
   const detailEl = document.getElementById("fleetDetail");
   const itemDisplay = window.ItemDisplay || null;
 
+  /* ── Embed-aware event dispatchers ─────────────────────── */
+  const HANGAR_WINDOW_EVENT = "earthmoon:open-hangar-window";
+  const TRANSFER_PLANNER_EVENT = "earthmoon:open-transfer-planner";
+  const isEmbedded = window !== window.top;
+
+  function openHangar(ship) {
+    if (!ship) return;
+    if (isEmbedded) {
+      try {
+        window.top.dispatchEvent(new CustomEvent(HANGAR_WINDOW_EVENT, {
+          detail: { kind: "ship", id: String(ship.id || ""), name: String(ship.name || ship.id || "Ship") },
+        }));
+        return;
+      } catch { /* cross-origin fallback */ }
+    }
+    const loc = ship.location_id || ship.to_location_id || "";
+    window.location.href = `/?focus=${encodeURIComponent(loc)}&ship=${encodeURIComponent(ship.id)}&hangar=1`;
+  }
+
+  function openTransferOrDispatch(ship) {
+    if (!ship) return;
+    if (isEmbedded) {
+      try {
+        window.top.dispatchEvent(new CustomEvent(TRANSFER_PLANNER_EVENT, {
+          detail: { id: String(ship.id || ""), name: String(ship.name || ship.id || "Ship") },
+        }));
+        return;
+      } catch { /* cross-origin fallback */ }
+    }
+    openTransferDialog(ship);
+  }
+
   /* ── Clock sync ───────────────────────────────────────── */
   let serverSyncGameS = Date.now() / 1000;
   let clientSyncRealS = Date.now() / 1000;
@@ -207,20 +239,17 @@
       },
     });
 
-    // Open hangar (navigates to map with hangar context)
+    // Open hangar
     actions.push({
       label: "Open hangar",
-      onClick: () => {
-        const loc = ship.location_id || ship.to_location_id || "";
-        window.location.href = `/?focus=${encodeURIComponent(loc)}&ship=${encodeURIComponent(ship.id)}&hangar=1`;
-      },
+      onClick: () => openHangar(ship),
     });
 
     // Plan transfer (docked only)
     if (isDocked) {
       actions.push({
         label: "Plan transfer\u2026",
-        onClick: () => openTransferDialog(ship),
+        onClick: () => openTransferOrDispatch(ship),
       });
     }
 
@@ -657,7 +686,7 @@
     // Transit progress
     if (ship.status === "transit") {
       const pct = transitProgressPct(ship);
-      const path = (ship.transfer_path || []).join(" → ") || `${ship.from_location_id} → ${ship.to_location_id}`;
+      const path = `${ship.from_location_id} → ${ship.to_location_id}`;
       html += `
         <div class="fleetSection">
           <div class="fleetSectionTitle">Transfer Progress</div>
@@ -697,11 +726,8 @@
     detailEl.innerHTML = html;
 
     // Wire action buttons
-    detailEl.querySelector("[data-action='hangar']")?.addEventListener("click", () => {
-      const loc = ship.location_id || ship.to_location_id || "";
-      window.location.href = `/?focus=${encodeURIComponent(loc)}&ship=${encodeURIComponent(ship.id)}&hangar=1`;
-    });
-    detailEl.querySelector("[data-action='transfer']")?.addEventListener("click", () => openTransferDialog(ship));
+    detailEl.querySelector("[data-action='hangar']")?.addEventListener("click", () => openHangar(ship));
+    detailEl.querySelector("[data-action='transfer']")?.addEventListener("click", () => openTransferOrDispatch(ship));
     detailEl.querySelector("[data-action='deconstruct']")?.addEventListener("click", () => confirmDeconstruct(ship));
 
     // Context menu on detail head
@@ -928,7 +954,7 @@
     const thrustExhaust = Number(pb.thrust_exhaust_mw || 0);
     const electricConv = Number(pb.electric_conversion_mw || 0);
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
-    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const wasteSurplus = Math.max(0, Number(pb.waste_heat_surplus_mw || 0));
     const maxThrottle = Number(pb.max_throttle || 0);
     const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
     if (!hasAny) return "";

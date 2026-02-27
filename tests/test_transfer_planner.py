@@ -470,16 +470,12 @@ class TestRealTransferMatrix:
         assert data["dv_m_s"] > 0
         assert data["tof_s"] > 0
 
-    def test_quote_has_path(self, client):
+    def test_quote_has_route_mode(self, client):
         r = client.get("/api/transfer_quote", params={"from_id": "LEO", "to_id": "LLO"})
         data = r.json()
-        assert "path" in data
-        path = data["path"]
-        assert isinstance(path, list)
-        # Path should start with LEO and end with LLO
-        if len(path) >= 2:
-            assert path[0] == "LEO"
-            assert path[-1] == "LLO"
+        assert "route_mode" in data
+        assert isinstance(data["route_mode"], str)
+        assert data["route_mode"] in ("direct", "direct-local", "direct-lambert", "direct-gateway", "local-multihop")
 
     def test_self_quote_is_zero(self, client):
         r = client.get("/api/transfer_quote", params={"from_id": "LEO", "to_id": "LEO"})
@@ -726,11 +722,8 @@ class TestShipTransferLifecycle:
             assert data["fuel_remaining_kg"] >= 0
             assert data["departed_at"] > 0
             assert data["arrives_at"] > data["departed_at"]
-            assert isinstance(data.get("transfer_legs"), list)
-            if data["transfer_legs"]:
-                first_leg = data["transfer_legs"][0]
-                assert "from_id" in first_leg and "to_id" in first_leg
-                assert "departure_time" in first_leg and "arrival_time" in first_leg
+            assert isinstance(data.get("is_interplanetary"), bool)
+            assert isinstance(data.get("route_mode"), str)
         finally:
             self._delete_ship(client, ship_id)
 
@@ -936,8 +929,8 @@ class TestSettleArrivals:
         now = time.time()
         db_conn.execute(
             """INSERT INTO ships (id,name,location_id,from_location_id,to_location_id,
-                departed_at,arrives_at,transfer_path_json,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
-               VALUES ('s1','Ship1',NULL,'X','Y',?,?,'[]','[]',100,200,500,900)""",
+                departed_at,arrives_at,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
+               VALUES ('s1','Ship1',NULL,'X','Y',?,?,'[]',100,200,500,900)""",
             (now - 1000, now - 100),
         )
         db_conn.commit()
@@ -966,8 +959,8 @@ class TestSettleArrivals:
         future = now + 99999
         db_conn.execute(
             """INSERT INTO ships (id,name,location_id,from_location_id,to_location_id,
-                departed_at,arrives_at,transfer_path_json,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
-               VALUES ('s2','Ship2',NULL,'X','Y',?,?,'[]','[]',100,200,500,900)""",
+                departed_at,arrives_at,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
+               VALUES ('s2','Ship2',NULL,'X','Y',?,?,'[]',100,200,500,900)""",
             (now, future),
         )
         db_conn.commit()
@@ -995,15 +988,15 @@ class TestSettleArrivals:
         # Ship A: already arrived
         db_conn.execute(
             """INSERT INTO ships (id,name,location_id,from_location_id,to_location_id,
-                departed_at,arrives_at,transfer_path_json,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
-               VALUES ('sa','A',NULL,'P','Q',?,?,'[]','[]',100,200,500,900)""",
+                departed_at,arrives_at,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
+               VALUES ('sa','A',NULL,'P','Q',?,?,'[]',100,200,500,900)""",
             (now - 200, now - 10),
         )
         # Ship B: still in transit
         db_conn.execute(
             """INSERT INTO ships (id,name,location_id,from_location_id,to_location_id,
-                departed_at,arrives_at,transfer_path_json,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
-               VALUES ('sb','B',NULL,'P','Q',?,?,'[]','[]',100,200,500,900)""",
+                departed_at,arrives_at,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
+               VALUES ('sb','B',NULL,'P','Q',?,?,'[]',100,200,500,900)""",
             (now - 100, now + 500),
         )
         db_conn.commit()
@@ -1027,8 +1020,8 @@ class TestSettleArrivals:
         )
         db_conn.execute(
             """INSERT INTO ships (id,name,location_id,from_location_id,to_location_id,
-                departed_at,arrives_at,transfer_path_json,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
-               VALUES ('sd','Docked','D',NULL,NULL,NULL,NULL,'[]','[]',100,200,500,900)"""
+                departed_at,arrives_at,parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s)
+               VALUES ('sd','Docked','D',NULL,NULL,NULL,NULL,'[]',100,200,500,900)"""
         )
         db_conn.commit()
 

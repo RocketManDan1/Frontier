@@ -896,6 +896,15 @@ def get_orbit_node_radius(config: Dict[str, Any], location_id: str) -> Optional[
     return None
 
 
+def get_orbit_node_body_id(config: Dict[str, Any], location_id: str) -> Optional[str]:
+    """Get the body_id that an orbit_node location orbits."""
+    for node in (config.get("orbit_nodes") or []):
+        if isinstance(node, dict) and str(node.get("id", "")) == location_id:
+            bid = str(node.get("body_id", "")).strip()
+            return bid if bid else None
+    return None
+
+
 # ── Auto-generation of interplanetary transfer edges ────────
 
 

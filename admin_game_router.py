@@ -222,9 +222,9 @@ def api_admin_spawn_ship(req: SpawnShipReq, request: Request, conn: sqlite3.Conn
         INSERT INTO ships (
           id,name,shape,color,size_px,notes_json,
           location_id,from_location_id,to_location_id,departed_at,arrives_at,
-                        transfer_path_json,dv_planned_m_s,dock_slot,
-                        parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          dv_planned_m_s,dock_slot,
+          parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             ship_id,
@@ -238,7 +238,6 @@ def api_admin_spawn_ship(req: SpawnShipReq, request: Request, conn: sqlite3.Conn
             None,
             None,
             None,
-            "[]",
             None,
             None,
             json.dumps(parts),
@@ -384,7 +383,6 @@ def api_admin_teleport_ship(
             to_location_id = NULL,
             departed_at = NULL,
             arrives_at = NULL,
-            transfer_path_json = '[]',
             transit_from_x = NULL,
             transit_from_y = NULL,
             transit_to_x = NULL,

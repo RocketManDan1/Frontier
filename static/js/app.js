@@ -1126,6 +1126,7 @@
   const transitAnchorSnapshots = new Map();
   const transitAnchorSnapshotInflight = new Map();
   const HANGAR_WINDOW_EVENT = "earthmoon:open-hangar-window";
+  const TRANSFER_PLANNER_EVENT = "earthmoon:open-transfer-planner";
 
   function selectedShip() {
     if (!selectedShipId) return null;
@@ -2289,7 +2290,7 @@
     const electricConv = Number(pb.electric_conversion_mw || 0);
     const totalWaste = Number(pb.total_waste_heat_mw || 0);
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
-    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const wasteSurplus = Math.max(0, Number(pb.waste_heat_surplus_mw || 0));
     const maxThrottle = Number(pb.max_throttle || 0);
     const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
     if (!hasAny) return "";
@@ -3108,6 +3109,30 @@
     return null;
   }
 
+  /**
+   * Resolve a location to its top-level heliocentric body group.
+   * E.g. LLO → grp_moon → grp_earth (heliocentric), LEO → grp_earth.
+   * Used to determine whether two locations are truly interplanetary
+   * (different heliocentric bodies) vs. local (e.g. Earth↔Moon).
+   */
+  function getHeliocentricGroup(locationId) {
+    let cur = getLocationSolarGroup(locationId);
+    if (!cur) return null;
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const parent = String(locationParentById.get(cur) || "");
+      if (parent === "grp_sun" || parent === "") return cur;
+      // Walk up to find a grp_ node whose parent is grp_sun
+      if (parent.startsWith("grp_") && !parent.endsWith("_orbits") && !parent.endsWith("_sites") && !parent.endsWith("_moons")) {
+        cur = parent;
+      } else {
+        cur = parent;
+      }
+    }
+    return cur;
+  }
+
   function dockedChipAnchorIdForLocation(locationId) {
     let cur = String(locationId || "");
     const seen = new Set();
@@ -3206,25 +3231,18 @@
     return { x: p2.x - p1.x, y: p2.y - p1.y };
   }
 
-  /** Unified curve position: dispatches between Bézier, arc, and composite. */
+  /** Unified curve position: dispatches between Bézier and arc. */
   function curvePoint(curve, t) {
-    if (curve.type === "composite") return compositePoint(curve, t);
     if (curve.type === "arc") return arcPoint(curve, t);
     return cubicPoint(curve, t);
   }
 
-  /** Unified curve tangent: dispatches between Bézier, arc, and composite. */
+  /** Unified curve tangent: dispatches between Bézier and arc. */
   function curveTangent(curve, t) {
-    if (curve.type === "composite") return compositeTangent(curve, t);
     if (curve.type === "arc") return arcTangent(curve, t);
     return cubicTangent(curve, t);
   }
 
-  /**
-   * Build a composite curve from multiple transfer legs, stitched into one
-   * continuous polyline. Each leg is weighted by its time-of-flight so the
-   * ship moves at a pace proportional to real transfer time.
-   */
   /**
    * Build an arc-type curve from server-computed trajectory points.
    * Trajectory points are in heliocentric km; project to world coords.
@@ -3260,120 +3278,96 @@
     return arc;
   }
 
-  function buildCompositeCurve(legs, trajectory) {
-    if (!legs || !legs.length) return null;
+  /**
+   * Build an arc-type curve from body-centric trajectory points.
+   * Points are offsets (km) from the center body; project to world coords
+   * using the local orbit expansion scale relative to the center body's
+   * current map position. Used for SOI transfers (e.g. Earth→Moon).
+   */
+  function buildBodyCentricArc(trajectoryData, fromLocId, toLocId) {
+    const pts = trajectoryData.points;
+    const centerGroup = trajectoryData.center_group;
+    if (!pts || pts.length < 2 || !centerGroup) return null;
 
-    const totalTof = legs.reduce((s, l) => s + Math.max(1, Number(l.tof_s) || (Number(l.arrival_time) - Number(l.departure_time))), 0);
-    const allPoints = [];
-    const legBounds = []; // { startFrac, endFrac } in [0,1] for each leg
-    let timeSoFar = 0;
-    let firstLegTrack = null;
-    let lastLegTrack = null;
+    const centerLoc = locationsById.get(centerGroup);
+    if (!centerLoc) return null;
 
-    for (let i = 0; i < legs.length; i++) {
-      const leg = legs[i];
-      const fromId = String(leg.from_id || "");
-      const toId = String(leg.to_id || "");
-      const depTime = Number(leg.departure_time);
-      const arrTime = Number(leg.arrival_time);
-      const isIP = !!(leg.is_interplanetary);
-      const tof = Math.max(1, Number(leg.tof_s) || (arrTime - depTime));
+    const ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
 
-      const fromAnchor = getTransitAnchorWorld(fromId, depTime);
-      const fromLive = locationsById.get(fromId);
-      const fromLoc = fromAnchor || fromLive;
-      const toAnchor = getTransitAnchorWorld(toId, arrTime);
-      const toLive = locationsById.get(toId);
-      const toLoc = toAnchor || toLive;
-      if (!fromLoc || !toLoc) continue;
+    // ── Adaptive scale: transition from expanded orbit scale (near parent
+    //    body, e.g. LEO) to the actual map scale at the destination (e.g.
+    //    Moon).  This fixes the overshoot where trajectories used a uniform
+    //    3.2× expansion but moons/planets sit at 1× heliocentric scale.
+    const fromLoc = locationsById.get(fromLocId);
+    const toLoc = locationsById.get(toLocId);
+    const firstPt = pts[0];
+    const lastPt = pts[pts.length - 1];
+    const firstR = Math.hypot(firstPt[0], firstPt[1]);
+    const lastR = Math.hypot(lastPt[0], lastPt[1]);
 
-      // Use server-computed Lambert trajectory if available for this leg
-      let legCurve = null;
-      if (isIP && Array.isArray(trajectory)) {
-        const traj = trajectory.find(t => t && String(t.from_id) === fromId && String(t.to_id) === toId);
-        if (traj && Array.isArray(traj.points) && traj.points.length >= 2) {
-          legCurve = buildTrajectoryArc(traj.points, fromId, toId);
-        }
-      }
-      if (!legCurve) {
-        legCurve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isIP, depTime, arrTime);
-      }
-      if (!legCurve) continue;
+    // World-space distances from center body for departure and arrival
+    const fromDist = fromLoc ? Math.hypot(fromLoc.rx - centerLoc.rx, fromLoc.ry - centerLoc.ry) : firstR * ORBIT_SCALE;
+    const toDist = toLoc ? Math.hypot(toLoc.rx - centerLoc.rx, toLoc.ry - centerLoc.ry) : lastR * ORBIT_SCALE;
 
-      // Capture tracking from first and last legs for composite warp
-      if (!firstLegTrack && legCurve.trackStartId) {
-        firstLegTrack = { id: legCurve.trackStartId, orig: legCurve.trackStartOrig };
-      }
-      if (legCurve.trackEndId) {
-        lastLegTrack = { id: legCurve.trackEndId, orig: legCurve.trackEndOrig };
-      }
+    // Determine inner/outer radii (km) and their target world distances
+    const innerR = Math.min(firstR, lastR);
+    const outerR = Math.max(firstR, lastR);
+    const isFirstInner = firstR <= lastR;
+    const innerDist = isFirstInner ? fromDist : toDist;
+    const outerDist = isFirstInner ? toDist : fromDist;
 
-      // Sample this leg's curve into points
-      let pts;
-      if (legCurve.type === "arc") {
-        pts = legCurve.points;
-      } else {
-        pts = [];
-        for (let s = 0; s <= 64; s++) pts.push(cubicPoint(legCurve, s / 64));
-      }
+    // Per-endpoint scale factors
+    const innerScale = innerR > 1 ? innerDist / innerR : ORBIT_SCALE;
+    const outerScale = outerR > 1 ? outerDist / outerR : ORBIT_SCALE;
+    const rRange = outerR - innerR;
 
-      const startFrac = timeSoFar / totalTof;
-      timeSoFar += tof;
-      const endFrac = timeSoFar / totalTof;
-      legBounds.push({ startFrac, endFrac });
+    // ── SOI TRAJECTORY DEBUG ──────────────────────────────────────────
+    // Visible in browser F12 → Console. Search: "[SOI-TRAJ]"
+    const dbg = trajectoryData._debug || {};
+    console.group(`%c[SOI-TRAJ] ${fromLocId} → ${toLocId}`, 'color: #ff6600; font-weight: bold');
+    console.log('Backend debug:', dbg);
+    console.log('Scales:', { ORBIT_SCALE, innerScale: innerScale.toFixed(6), outerScale: outerScale.toFixed(6), ratio: (innerScale / outerScale).toFixed(2) });
+    console.log('Center body:', centerGroup, '→ map pos:', { rx: centerLoc.rx, ry: centerLoc.ry });
+    console.log('From:', fromLocId, fromLoc ? { rx: fromLoc.rx, ry: fromLoc.ry, distFromCenter: fromDist.toFixed(4) } : 'NOT FOUND');
+    console.log('To:', toLocId, toLoc ? { rx: toLoc.rx, ry: toLoc.ry, distFromCenter: toDist.toFixed(4) } : 'NOT FOUND');
+    console.log('Trajectory radii (km):', { firstR: firstR.toFixed(1), lastR: lastR.toFixed(1), innerR: innerR.toFixed(1), outerR: outerR.toFixed(1) });
+    console.log('Adaptive scaling:', { innerScale: innerScale.toFixed(6), outerScale: outerScale.toFixed(6), compressionRatio: (innerScale / outerScale).toFixed(2) + 'x' });
+    console.groupEnd();
+    // ── END DEBUG ────────────────────────────────────────────────────
 
-      // Append points (skip first point of subsequent legs to avoid duplicates)
-      const startIdx = (allPoints.length > 0) ? 1 : 0;
-      for (let j = startIdx; j < pts.length; j++) {
-        allPoints.push({ x: pts[j].x, y: pts[j].y, frac: startFrac + (endFrac - startFrac) * (j / (pts.length - 1)) });
-      }
-    }
-
-    if (allPoints.length < 2) return null;
-
-    // Build cumulative distances
+    const points = [];
     const cumDist = [0];
-    for (let i = 1; i < allPoints.length; i++) {
-      const dx = allPoints[i].x - allPoints[i - 1].x;
-      const dy = allPoints[i].y - allPoints[i - 1].y;
-      cumDist.push(cumDist[i - 1] + Math.hypot(dx, dy));
+    for (let i = 0; i < pts.length; i++) {
+      const xKm = pts[i][0];
+      const yKm = pts[i][1];
+      const r = Math.hypot(xKm, yKm);
+
+      // Interpolate scale by radius: expanded orbit scale near parent body,
+      // compressed toward actual map scale at destination distance.
+      let scale;
+      if (rRange > 1) {
+        const t = Math.max(0, Math.min(1, (r - innerR) / rRange));
+        scale = innerScale + t * (outerScale - innerScale);
+      } else {
+        scale = ORBIT_SCALE;
+      }
+
+      const rx = centerLoc.rx + xKm * scale;
+      const ry = centerLoc.ry + yKm * scale;
+      points.push({ x: rx, y: ry });
+      if (i > 0) {
+        const ddx = rx - points[i - 1].x;
+        const ddy = ry - points[i - 1].y;
+        cumDist.push(cumDist[i - 1] + Math.hypot(ddx, ddy));
+      }
     }
-
-    const composite = { type: "composite", points: allPoints, cumDist, legBounds };
-    if (firstLegTrack) { composite.trackStartId = firstLegTrack.id; composite.trackStartOrig = firstLegTrack.orig; }
-    if (lastLegTrack) { composite.trackEndId = lastLegTrack.id; composite.trackEndOrig = lastLegTrack.orig; }
-    return composite;
-  }
-
-  /** Map overall t ∈ [0,1] to a distance along the composite polyline,
-   *  respecting per-leg time weighting. */
-  function compositeDistAtT(curve, t) {
-    const tc = Math.max(0, Math.min(1, t));
-    // Find the polyline point whose frac is closest
-    const pts = curve.points;
-    if (tc <= 0) return 0;
-    if (tc >= 1) return curve.cumDist[curve.cumDist.length - 1];
-    // Binary search for the segment spanning tc
-    let lo = 0, hi = pts.length - 1;
-    while (lo < hi - 1) {
-      const mid = (lo + hi) >> 1;
-      if (pts[mid].frac <= tc) lo = mid; else hi = mid;
-    }
-    const segFrac = pts[hi].frac - pts[lo].frac;
-    const localT = segFrac > 1e-9 ? (tc - pts[lo].frac) / segFrac : 0;
-    return curve.cumDist[lo] + (curve.cumDist[hi] - curve.cumDist[lo]) * localT;
-  }
-
-  function compositePoint(curve, t) {
-    const d = compositeDistAtT(curve, t);
-    return pointOnPolyline(curve.points, curve.cumDist, d);
-  }
-
-  function compositeTangent(curve, t) {
-    const dt = 0.003;
-    const p1 = compositePoint(curve, Math.max(0, t - dt));
-    const p2 = compositePoint(curve, Math.min(1, t + dt));
-    return { x: p2.x - p1.x, y: p2.y - p1.y };
+    const arc = { type: "arc", points, cumDist };
+    // Track the center body so all points shift uniformly when it moves
+    arc.trackStartId = centerGroup;
+    arc.trackStartOrig = { x: centerLoc.rx, y: centerLoc.ry };
+    arc.trackEndId = centerGroup;
+    arc.trackEndOrig = { x: centerLoc.rx, y: centerLoc.ry };
+    return arc;
   }
 
   /**
@@ -3503,8 +3497,8 @@
     const samePrimary = !!(fromBody && toBody && fromBody.id === toBody.id);
     const primaryBody = samePrimary ? fromBody : (fromBody || toBody || null);
 
-    const departTan = pickOrbitTangent(fromBody || primaryBody, p0, p3, dir);
-    const arriveTan = pickOrbitTangent(toBody || primaryBody, p3, p0, { x: -dir.x, y: -dir.y });
+    let departTan = pickOrbitTangent(fromBody || primaryBody, p0, p3, dir);
+    let arriveTan = pickOrbitTangent(toBody || primaryBody, p3, p0, { x: -dir.x, y: -dir.y });
 
     let c1Dist = Math.max(12, d * 0.36);
     let c2Dist = Math.max(12, d * 0.33);
@@ -3522,6 +3516,37 @@
       const outward = r1 >= r0 ? 1 : -1;
       const bendMag = Math.min(d * 0.18, Math.max(10, Math.abs(r1 - r0) * 0.34));
       bendVec = { x: midToBody.x * bendMag * outward, y: midToBody.y * bendMag * outward };
+    } else if (!samePrimary && fromBody && toBody) {
+      // Cross-body transfer (e.g. Earth orbit → Moon orbit).
+      // The orbit tangent at the departure body works well (represents
+      // TLI burn direction), but the arrival tangent must blend toward
+      // the approach direction so we don't get an S-curve kink when
+      // the destination orbit is tiny relative to the transfer distance.
+      const rFrom = Math.hypot(p0.x - fromBody.rx, p0.y - fromBody.ry);
+      const rTo = Math.hypot(p3.x - toBody.rx, p3.y - toBody.ry);
+
+      // Departure: orbit tangent scaled to local orbit size
+      c1Dist = Math.max(12, Math.min(d * 0.38, rFrom * 3.0 + d * 0.08));
+
+      // Arrival: use the approach direction (from→to) so the curve
+      // flows smoothly into the destination without hooking sideways.
+      // Blend a small amount of orbit tangent back in for aesthetics.
+      const approachDir = normalizeVec(dir.x, dir.y, 1, 0);
+      const orbitBlend = Math.min(0.25, rTo / d);  // tiny orbits ≈ 0, large ≈ 0.25
+      arriveTan = normalizeVec(
+        approachDir.x * (1 - orbitBlend) + arriveTan.x * orbitBlend,
+        approachDir.y * (1 - orbitBlend) + arriveTan.y * orbitBlend,
+        approachDir.x, approachDir.y
+      );
+      c2Dist = Math.max(12, d * 0.25);
+
+      // Gentle outward bend away from the larger parent body
+      const parentBody = fromBody;
+      const midX = (p0.x + p3.x) * 0.5;
+      const midY = (p0.y + p3.y) * 0.5;
+      const midToParent = normalizeVec(midX - parentBody.rx, midY - parentBody.ry, dir.x, dir.y);
+      const bendMag = Math.max(6, d * 0.07);
+      bendVec = { x: midToParent.x * bendMag, y: midToParent.y * bendMag };
     }
 
     const c1 = {
@@ -3597,8 +3622,8 @@
     if (!pathGfx || !curve) return;
 
     let points, cumulative;
-    if (curve.type === "arc" || curve.type === "composite") {
-      // Arc and composite curves already have pre-computed polyline + cumulative distances
+    if (curve.type === "arc") {
+      // Arc curves already have pre-computed polyline + cumulative distances
       points = curve.points;
       cumulative = curve.cumDist;
     } else {
@@ -3645,10 +3670,7 @@
     const traveledAlpha = isSelected ? 0.18 : 0.10;
 
     // --- Split point along the path ---
-    // For composite curves, shipProgress is time-fraction — convert to distance
-    const shipDist = (curve.type === "composite")
-      ? compositeDistAtT(curve, clamp(shipProgress, 0, 1))
-      : clamp(shipProgress, 0, 1) * total;
+    const shipDist = clamp(shipProgress, 0, 1) * total;
 
     pathGfx.clear();
 
@@ -3726,158 +3748,6 @@
     pathGfx.beginFill(traveledColor, traveledAlpha * 2.5);
     pathGfx.drawCircle(originPt.x, originPt.y, originSize);
     pathGfx.endFill();
-  }
-
-  /**
-   * Draw faint arcs for future (not-yet-active) transfer legs so the full
-   * multi-leg route is visible on the map even before the ship reaches them.
-   */
-  function drawFutureTransitLegs(pathGfx, ship, activeLegIndex, shipSize, isSelected) {
-    if (!pathGfx || !ship) return;
-    const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
-    if (activeLegIndex < 0 || activeLegIndex >= legs.length - 1) return;
-
-    const zoom = Math.max(0.0001, world.scale.x);
-    const shipSizeFactor = clamp((Number(shipSize) || 10) / 10, 0.42, 1.55);
-    const lineWidth = Math.max(0.8, (isSelected ? 1.8 : 1.0) * shipSizeFactor) / zoom;
-    const futureColor = isSelected ? 0x8ab4e8 : 0x7a9cc0;
-    const futureAlpha = isSelected ? 0.25 : 0.15;
-
-    for (let i = activeLegIndex + 1; i < legs.length; i++) {
-      const leg = legs[i];
-      if (!leg) continue;
-      const fromId = String(leg.from_id || "");
-      const toId = String(leg.to_id || "");
-      const depTime = Number(leg.departure_time);
-      const arrTime = Number(leg.arrival_time);
-      const isInterplanetary = !!(leg.is_interplanetary);
-
-      const fromAnchor = getTransitAnchorWorld(fromId, depTime);
-      const fromLive = locationsById.get(fromId);
-      const fromLoc = fromAnchor || fromLive;
-      const toAnchor = getTransitAnchorWorld(toId, arrTime);
-      const toLive = locationsById.get(toId);
-      const toLoc = toAnchor || toLive;
-      if (!fromLoc || !toLoc) continue;
-
-      const curve = computeTransitCurve(fromId, toId, fromLoc, toLoc, isInterplanetary, depTime, arrTime);
-      if (!curve) continue;
-
-      // Draw as a simple faint solid line
-      let points;
-      if (curve.type === "arc") {
-        points = curve.points;
-      } else {
-        points = [];
-        for (let s = 0; s <= 64; s++) points.push(cubicPoint(curve, s / 64));
-      }
-      if (!points || points.length < 2) continue;
-
-      pathGfx.lineStyle(lineWidth, futureColor, futureAlpha);
-      pathGfx.moveTo(points[0].x, points[0].y);
-      for (let j = 1; j < points.length; j++) {
-        pathGfx.lineTo(points[j].x, points[j].y);
-      }
-    }
-  }
-
-  function pickActiveTransferLeg(ship, nowGameS) {
-    const legs = Array.isArray(ship?.transfer_legs) ? ship.transfer_legs : [];
-    if (!legs.length) return null;
-
-    let active = legs.find((leg) => nowGameS >= Number(leg.departure_time) && nowGameS <= Number(leg.arrival_time));
-    if (!active) {
-      if (nowGameS < Number(legs[0].departure_time)) active = legs[0];
-      else active = legs[legs.length - 1];
-    }
-    if (!active) return null;
-    const idx = Math.max(0, legs.indexOf(active));
-    return {
-      index: idx,
-      count: legs.length,
-      leg: active,
-    };
-  }
-
-  function drawTransitLegMarkers(pathGfx, ship, nowGameS, isSelected) {
-    if (!pathGfx || !ship) return;
-    const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
-    if (!legs.length) return;
-
-    const zoom = Math.max(0.0001, world.scale.x);
-    const markerR = (isSelected ? 3.0 : 2.2) / zoom;
-    const doneColor = 0x627287;
-    const activeColor = 0xd6e9ff;
-    const activeHaloColor = 0xffffff;
-    const pendingColor = 0x9cb4cf;
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.006);
-    const sun = locationsById.get("grp_sun");
-
-    for (let i = 0; i < legs.length; i++) {
-      const leg = legs[i] || {};
-      const toId = String(leg.to_id || "");
-      if (!toId) continue;
-
-      let x, y;
-      // For interplanetary legs, snap marker to body-center on current ring
-      if (leg.is_interplanetary && sun) {
-        const toSolar = getLocationSolarGroup(toId);
-        if (toSolar) {
-          const bodyAnchor = getTransitAnchorWorld(toSolar, Number(leg.arrival_time));
-          const bodyLive = locationsById.get(toSolar);
-          const bodyFuture = bodyAnchor || bodyLive;
-          if (bodyFuture && bodyLive) {
-            const fdx = bodyFuture.rx - sun.rx;
-            const fdy = bodyFuture.ry - sun.ry;
-            const futureR = Math.hypot(fdx, fdy);
-            if (futureR > 1e-6) {
-              const angle = Math.atan2(fdy, fdx);
-              const liveR = Math.hypot(bodyLive.rx - sun.rx, bodyLive.ry - sun.ry);
-              x = sun.rx + liveR * Math.cos(angle);
-              y = sun.ry + liveR * Math.sin(angle);
-            }
-          }
-        }
-      }
-      // Fallback: use orbit-location anchor or live position
-      if (x == null || y == null) {
-        const anchor = getTransitAnchorWorld(toId, Number(leg.arrival_time));
-        const live = locationsById.get(toId);
-        x = Number(anchor?.rx ?? live?.rx);
-        y = Number(anchor?.ry ?? live?.ry);
-      }
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-
-      const arr = Number(leg.arrival_time || 0);
-      let color = pendingColor;
-      let alpha = isSelected ? 0.85 : 0.65;
-      if (nowGameS >= arr) {
-        color = doneColor;
-        alpha = isSelected ? 0.68 : 0.45;
-      }
-      if (nowGameS >= Number(leg.departure_time || 0) && nowGameS <= arr) {
-        color = activeColor;
-        alpha = 0.95;
-
-        const haloR = markerR * (1.7 + pulse * 0.75);
-        const haloA = (isSelected ? 0.44 : 0.34) * (0.75 + pulse * 0.5);
-        pathGfx.lineStyle(Math.max(0.85, 1.0 / zoom), activeHaloColor, haloA);
-        pathGfx.beginFill(activeHaloColor, haloA * 0.2);
-        pathGfx.drawCircle(x, y, haloR);
-        pathGfx.endFill();
-
-        pathGfx.lineStyle(Math.max(1.1, 1.3 / zoom), activeHaloColor, 0.95);
-        pathGfx.beginFill(activeColor, 0.98);
-        pathGfx.drawCircle(x, y, markerR * 1.12);
-        pathGfx.endFill();
-        continue;
-      }
-
-      pathGfx.lineStyle(Math.max(0.9, 1.1 / zoom), color, alpha);
-      pathGfx.beginFill(color, alpha * 0.92);
-      pathGfx.drawCircle(x, y, markerR);
-      pathGfx.endFill();
-    }
   }
 
   // ---------- Parking offsets ----------
@@ -5172,50 +5042,44 @@
       } else {
         if (!ship.departed_at || !ship.arrives_at) continue;
 
-        // Build a single composite curve from all transfer legs
-        const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
+        // Build transit curve: trajectory arc (interplanetary) or Bézier (local)
         const overallDepart = Number(ship.departed_at);
         const overallArrive = Number(ship.arrives_at);
+        const fromId = String(ship.from_location_id || "");
+        const toId = String(ship.to_location_id || "");
+        const isIP = !!ship.is_interplanetary;
+        const hasHelioTrajectory = Array.isArray(ship.trajectory) && ship.trajectory.length >= 2;
+        const hasBodyCentricTrajectory = ship.trajectory && !Array.isArray(ship.trajectory) && ship.trajectory.frame === "body_centric";
+        const hasTrajectory = hasHelioTrajectory || hasBodyCentricTrajectory;
 
-        // Build cache key from all leg endpoints + anchors
-        let compositeSig = `${ship.from_location_id}->${ship.to_location_id}|${legs.length}`;
-        const hasTrajectory = Array.isArray(ship.trajectory) && ship.trajectory.length > 0;
-        compositeSig += `|traj=${hasTrajectory ? 1 : 0}`;
-        for (const leg of legs) {
-          const fa = getTransitAnchorWorld(String(leg.from_id || ""), Number(leg.departure_time));
-          const ta = getTransitAnchorWorld(String(leg.to_id || ""), Number(leg.arrival_time));
-          compositeSig += `|${fa ? fa.rx.toFixed(1) : "~"},${ta ? ta.rx.toFixed(1) : "~"}`;
-        }
+        // Build cache key from endpoints + anchors
+        const fa = getTransitAnchorWorld(fromId, overallDepart);
+        const ta = getTransitAnchorWorld(toId, overallArrive);
+        const centerGroupId = hasBodyCentricTrajectory ? ship.trajectory.center_group : "";
+        const centerLive = centerGroupId ? locationsById.get(centerGroupId) : null;
+        const transitSig = `${fromId}->${toId}|traj=${hasTrajectory ? 1 : 0}|${fa ? fa.rx.toFixed(1) : "~"},${ta ? ta.rx.toFixed(1) : "~"}|ctr=${centerLive ? centerLive.rx.toFixed(1) : "~"}`;
 
-        if (!gfx.curve || gfx.transitKey !== compositeSig) {
-          if (legs.length > 0) {
-            const shipTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : null;
-            gfx.curve = buildCompositeCurve(legs, shipTrajectory);
+        if (!gfx.curve || gfx.transitKey !== transitSig) {
+          gfx.curve = null;
+          // Body-centric SOI trajectory (e.g. Earth→Moon Lambert arc)
+          if (hasBodyCentricTrajectory) {
+            gfx.curve = buildBodyCentricArc(ship.trajectory, fromId, toId);
           }
-          // Fallback: single-leg from overall from/to
+          // Interplanetary: use server-computed Lambert trajectory polyline
+          else if (hasHelioTrajectory) {
+            gfx.curve = buildTrajectoryArc(ship.trajectory, fromId, toId);
+          }
+          // Fallback: compute Bézier or Hohmann arc locally
           if (!gfx.curve) {
-            const fromId = String(ship.from_location_id || "");
-            const toId = String(ship.to_location_id || "");
-            // Try trajectory data for single-leg fallback
-            if (hasTrajectory) {
-              const traj = ship.trajectory.find(t => t && String(t.from_id) === fromId && String(t.to_id) === toId);
-              if (traj && Array.isArray(traj.points) && traj.points.length >= 2) {
-                gfx.curve = buildTrajectoryArc(traj.points, fromId, toId);
-              }
-            }
-            if (!gfx.curve) {
-              const A = locationsById.get(fromId);
-              const B = locationsById.get(toId);
-              const fa = getTransitAnchorWorld(fromId, overallDepart) || A;
-              const ta = getTransitAnchorWorld(toId, overallArrive) || B;
-              if (fa && ta) {
-                const fs = getLocationSolarGroup(fromId);
-                const ts = getLocationSolarGroup(toId);
-                gfx.curve = computeTransitCurve(fromId, toId, fa, ta, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
-              }
+            const A = fa || locationsById.get(fromId);
+            const B = ta || locationsById.get(toId);
+            if (A && B) {
+              const fs = getHeliocentricGroup(fromId);
+              const ts = getHeliocentricGroup(toId);
+              gfx.curve = computeTransitCurve(fromId, toId, A, B, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
             }
           }
-          gfx.transitKey = compositeSig;
+          gfx.transitKey = transitSig;
         }
         if (!gfx.curve) continue;
 
@@ -5602,15 +5466,6 @@
       const toBucket = transitAnchorBucket(ship.arrives_at);
       if (fromBucket != null) buckets.add(fromBucket);
       if (toBucket != null) buckets.add(toBucket);
-      // Also collect buckets for every individual transfer leg so that
-      // intermediate interplanetary legs resolve correct future positions.
-      const legs = Array.isArray(ship.transfer_legs) ? ship.transfer_legs : [];
-      for (const leg of legs) {
-        const legDepBucket = transitAnchorBucket(leg.departure_time);
-        const legArrBucket = transitAnchorBucket(leg.arrival_time);
-        if (legDepBucket != null) buckets.add(legDepBucket);
-        if (legArrBucket != null) buckets.add(legArrBucket);
-      }
     }
     await Promise.all(Array.from(buckets).map((bucket) => ensureTransitAnchorSnapshot(bucket)));
   }
@@ -6218,7 +6073,6 @@
 
     function renderQuoteDetails(q, depTime) {
       const destName = locationsById.get(q.to_id)?.name || q.to_id;
-      const path = q.path || [];
       const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, q.dv_m_s);
       const fuelAfterKg = Math.max(0, shipFuel - fuelNeedKg);
       const fuelAfterPct = shipFuelCap > 0 ? Math.round((fuelAfterKg / shipFuelCap) * 100) : 0;
@@ -6264,18 +6118,6 @@
       const pb = ship.power_balance;
       const wasteSurplus = pb ? Number(pb.waste_heat_surplus_mw || 0) : 0;
       const isOverheating = wasteSurplus > 0;
-
-      // Build path display
-      let pathHtml = "";
-      for (let i = 0; i < path.length; i++) {
-        const nid = path[i];
-        const nname = locationsById.get(nid)?.name || nid;
-        let cls = "tpPathNode";
-        if (i === 0) cls += " tpPathOrigin";
-        else if (i === path.length - 1) cls += " tpPathDest";
-        pathHtml += `<span class="${cls}">${_esc(nname)}</span>`;
-        if (i < path.length - 1) pathHtml += `<span class="tpPathArrow">▸</span>`;
-      }
 
       // Orbital alignment section
       let orbitalHtml = "";
@@ -6334,26 +6176,6 @@
           </div>
         </div>
 
-        <!-- Route Overview -->
-        <div class="tpSection" style="display:none">
-          <div class="tpSectionTitle">Route — ${_esc(ship.location_id)} → ${_esc(destName)}</div>
-          <div class="tpPathWrap">${pathHtml}</div>
-          <div style="margin-top:8px;">
-            <div class="tpRow">
-              <span class="tpLabel">Lambert Δv</span>
-              <span class="tpVal">${Math.round(q.base_dv_m_s)} m/s</span>
-            </div>
-            ${q.is_interplanetary ? `<div class="tpRow">
-              <span class="tpLabel">Transfer Δv</span>
-              <span class="tpVal">${Math.round(q.phase_adjusted_dv_m_s)} m/s</span>
-            </div>` : ""}
-            <div class="tpRow">
-              <span class="tpLabel">Hohmann transit time</span>
-              <span class="tpVal">${fmtDuration(q.base_tof_s)}</span>
-            </div>
-          </div>
-        </div>
-
         ${orbitalHtml}
 
         <!-- Transfer — TOF slider + live Δv readout -->
@@ -6378,6 +6200,19 @@
               <span class="tpLabel"><b>Total Δv</b></span>
               <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpTotalDvReadout"><b>${Math.round(q.dv_m_s)} m/s</b></span>
             </div>
+            ${q.interplanetary_dv_m_s != null ? `
+            <div class="tpRow" style="font-size:12px;opacity:0.7;">
+              <span class="tpLabel">${q.gateway_departure ? _esc(locationsById.get(q.gateway_departure)?.name || q.gateway_departure) + ' →' : 'Interplanetary'}</span>
+              <span class="tpVal">${Math.round(q.interplanetary_dv_m_s)} m/s</span>
+            </div>
+            ${q.local_departure_dv_m_s ? `<div class="tpRow" style="font-size:12px;opacity:0.7;">
+              <span class="tpLabel">Local departure</span>
+              <span class="tpVal">${Math.round(q.local_departure_dv_m_s)} m/s</span>
+            </div>` : ''}
+            ${q.local_arrival_dv_m_s ? `<div class="tpRow" style="font-size:12px;opacity:0.7;">
+              <span class="tpLabel">Local arrival</span>
+              <span class="tpVal">${Math.round(q.local_arrival_dv_m_s)} m/s</span>
+            </div>` : ''}` : ''}
             <div class="tpRow">
               <span class="tpLabel">Transit time</span>
               <span class="tpVal" id="tpTransitTimeReadout">${fmtDuration(q.tof_s)}</span>
@@ -7064,11 +6899,6 @@
     const A = locationsById.get(ship.from_location_id);
     const B = locationsById.get(ship.to_location_id);
     const eta = ship.arrives_at ? Math.max(0, ship.arrives_at - serverNow()) : null;
-    const activeLegInfo = pickActiveTransferLeg(ship, serverNow());
-    const activeLeg = activeLegInfo?.leg || null;
-    const legFrom = activeLeg ? (locationsById.get(String(activeLeg.from_id))?.name || String(activeLeg.from_id || "")) : "";
-    const legTo = activeLeg ? (locationsById.get(String(activeLeg.to_id))?.name || String(activeLeg.to_id || "")) : "";
-    const legEta = activeLeg ? Math.max(0, Number(activeLeg.arrival_time || 0) - serverNow()) : null;
 
     setInfo(
       ship.name,
@@ -7076,8 +6906,7 @@
       eta !== null ? `ETA: ${formatEtaDaysHours(eta)}` : "",
       [
         ship.dv_planned_m_s != null ? `Δv planned: ${Math.round(ship.dv_planned_m_s)} m/s` : "",
-        (ship.transfer_path || []).length ? `Path: ${(ship.transfer_path || []).join(" → ")}` : "",
-        activeLeg ? `Current leg ${Number(activeLegInfo.index) + 1}/${Number(activeLegInfo.count)}: ${legFrom} → ${legTo}${legEta != null ? ` • ETA ${formatEtaDaysHours(legEta)}` : ""}` : "",
+        ship.is_interplanetary ? "Interplanetary transfer" : "",
       ].filter(Boolean)
     );
     if (infoList) {
@@ -7227,6 +7056,15 @@
     }
     // Don't clear — the next syncLocationsOnce() call resets locLerp
   }
+
+  // Listen for transfer planner requests from embedded iframes
+  window.addEventListener(TRANSFER_PLANNER_EVENT, (event) => {
+    const payload = event?.detail || {};
+    const shipId = String(payload?.id || "");
+    if (!shipId) return;
+    const ship = ships.find((s) => String(s.id) === shipId);
+    if (ship) openTransferPlanner(ship);
+  });
 
   // Main render loop
   app.ticker.add(() => {

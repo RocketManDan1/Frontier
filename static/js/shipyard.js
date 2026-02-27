@@ -704,7 +704,7 @@
     const thrustExhaust = Number(pb.thrust_exhaust_mw || 0);
     const electricConv = Number(pb.electric_conversion_mw || 0);
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
-    const wasteSurplus = Number(pb.waste_heat_surplus_mw || 0);
+    const wasteSurplus = Math.max(0, Number(pb.waste_heat_surplus_mw || 0));
     const maxThrottle = Number(pb.max_throttle || 0);
 
     const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;

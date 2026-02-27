@@ -128,37 +128,59 @@
 
         <div id="industryContent" style="display:none">
 
-          <!-- Top row: Equipment + Power Balance + Active jobs -->
-          <div class="industryTopRow">
-            <div class="panel industryEquipPanel">
-              <div class="panelHeader">
-                <span class="panelTitle">Deployed Equipment</span>
-                <button class="btnSmall" id="btnDeployEquip">Deploy</button>
-              </div>
-              <div class="industryEquipList" id="industryEquipList"></div>
+          <!-- Power Balance (compact) -->
+          <div class="panel industryPowerPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Power &amp; Thermal</span>
             </div>
+            <div class="industryPowerContent" id="industryPowerContent"></div>
+          </div>
 
-            <div class="panel industryPowerPanel">
-              <div class="panelHeader">
-                <span class="panelTitle">Power &amp; Thermal</span>
-              </div>
-              <div class="industryPowerContent" id="industryPowerContent"></div>
+          <!-- Deploy button -->
+          <div class="industryActionBar">
+            <button class="btnSmall" id="btnDeployEquip">Deploy Equipment</button>
+          </div>
+
+          <!-- ═══ Constructors (collapsible) ═══ -->
+          <div class="panel industryConstructorsPanel">
+            <div class="panelHeader collapsibleHeader" id="constructorsSectionHeader">
+              <span class="collapseToggle">▾</span>
+              <span class="panelTitle">Constructors</span>
+              <span class="badge" id="constructorCountBadge">0</span>
+              <span class="muted" id="constructorSummary"></span>
             </div>
-
-            <div class="panel industryJobsPanel">
-              <div class="panelHeader">
-                <span class="panelTitle">Refinery Jobs</span>
-              </div>
-              <div class="industryJobsList" id="industryRefineJobsList"></div>
+            <div class="collapsibleBody" id="constructorsSectionBody">
+              <div id="constructorsList"></div>
             </div>
           </div>
 
-          <!-- Construction jobs row -->
-          <div class="panel industryConstructPanel">
+          <!-- ═══ Mining Summary (surface sites) ═══ -->
+          <div class="panel industryMiningPanel" id="industryMiningPanel" style="display:none">
             <div class="panelHeader">
-              <span class="panelTitle">Construction Jobs</span>
+              <span class="panelTitle">Mining Output</span>
             </div>
-            <div class="industryJobsList" id="industryConstructJobsList"></div>
+            <div class="industryMiningContent" id="industryMiningContent"></div>
+          </div>
+
+          <!-- ═══ Refinery Slots (priority ordered) ═══ -->
+          <div class="panel industryRefinerySlotsPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Refinery Slots</span>
+              <span class="badge" id="refinerySlotCountBadge">0</span>
+            </div>
+            <div id="refinerySlotsList" class="refinerySlotsList"></div>
+          </div>
+
+          <!-- ═══ Construction Queue (pooled speed) ═══ -->
+          <div class="panel industryConstructionPanel">
+            <div class="panelHeader">
+              <span class="panelTitle">Construction Queue</span>
+              <span class="muted" id="constructionPoolInfo"></span>
+            </div>
+            <div id="constructionQueueList" class="constructionQueueList"></div>
+            <div class="constructionQueueActions">
+              <button class="btnSmall" id="btnAddConstruction">+ Add to Queue</button>
+            </div>
           </div>
 
           <!-- ═══ Production Chain Flow ═══ -->
@@ -167,69 +189,29 @@
               <span class="panelTitle">Production Chain</span>
             </div>
             <div class="chainFlow" id="chainFlow">
-              <!-- Column 1: Raw Materials / Inputs -->
               <div class="chainColumn">
-                <div class="chainColumnHeader">
-                  <span class="chainColumnIcon">◆</span>
-                  Raw Materials
-                </div>
+                <div class="chainColumnHeader"><span class="chainColumnIcon">◆</span> Raw Materials</div>
                 <div class="chainColumnBody" id="chainRawMaterials"></div>
               </div>
-
               <div class="chainArrow">
                 <div class="chainArrowLine"></div>
                 <div class="chainArrowHead">▶</div>
                 <div class="chainArrowLabel">REFINE</div>
               </div>
-
-              <!-- Column 2: Refinery Outputs / Processed -->
               <div class="chainColumn">
-                <div class="chainColumnHeader">
-                  <span class="chainColumnIcon">⬡</span>
-                  Refined Materials
-                </div>
+                <div class="chainColumnHeader"><span class="chainColumnIcon">⬡</span> Refined Materials</div>
                 <div class="chainColumnBody" id="chainRefined"></div>
               </div>
-
               <div class="chainArrow">
                 <div class="chainArrowLine"></div>
                 <div class="chainArrowHead">▶</div>
                 <div class="chainArrowLabel">BUILD</div>
               </div>
-
-              <!-- Column 3: Constructable Items -->
               <div class="chainColumn">
-                <div class="chainColumnHeader">
-                  <span class="chainColumnIcon">⚙</span>
-                  Constructable
-                </div>
+                <div class="chainColumnHeader"><span class="chainColumnIcon">⚙</span> Constructable</div>
                 <div class="chainColumnBody" id="chainConstructable"></div>
               </div>
             </div>
-          </div>
-
-          <!-- Refining Recipes -->
-          <div class="panel industryRecipesPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Refining Recipes</span>
-            </div>
-            <div class="industryRecipesList" id="industryRefineRecipesList"></div>
-          </div>
-
-          <!-- Construction Recipes -->
-          <div class="panel industryRecipesPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Construction Recipes</span>
-            </div>
-            <div class="industryRecipesList" id="industryConstructRecipesList"></div>
-          </div>
-
-          <!-- Mining (surface sites only) -->
-          <div class="panel industryMiningPanel" id="industryMiningPanel" style="display:none">
-            <div class="panelHeader">
-              <span class="panelTitle">Mining Operations</span>
-            </div>
-            <div class="industryMiningContent" id="industryMiningContent"></div>
           </div>
 
           <!-- Job History -->
@@ -336,27 +318,15 @@
         </div>
       </div>
 
-      <!-- Start Job Modal -->
-      <div class="modal" id="startJobModal" style="display:none">
+      <!-- Recipe Select Modal (for refinery slot assignment and construction queue) -->
+      <div class="modal" id="recipeSelectModal" style="display:none">
         <div class="modalOverlay"></div>
-        <div class="modalBody startJobModalBody">
+        <div class="modalBody recipeSelectModalBody">
           <div class="panelHeader">
-            <span class="panelTitle">Start Production</span>
-            <button class="btnSmall" id="startJobModalClose">✕</button>
+            <span class="panelTitle" id="recipeSelectTitle">Select Recipe</span>
+            <button class="btnSmall" id="recipeSelectModalClose">✕</button>
           </div>
-          <div id="startJobContent"></div>
-        </div>
-      </div>
-
-      <!-- Start Mining Modal -->
-      <div class="modal" id="miningModal" style="display:none">
-        <div class="modalOverlay"></div>
-        <div class="modalBody miningModalBody">
-          <div class="panelHeader">
-            <span class="panelTitle">Start Mining</span>
-            <button class="btnSmall" id="miningModalClose">✕</button>
-          </div>
-          <div id="miningModalContent"></div>
+          <div id="recipeSelectContent"></div>
         </div>
       </div>
 

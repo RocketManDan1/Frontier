@@ -34,7 +34,6 @@ if [ -f "$TEST_DB" ]; then
           to_location_id    = NULL,
           departed_at        = NULL,
           arrives_at         = NULL,
-          transfer_path_json = '[]',
           transit_from_x     = NULL,
           transit_from_y     = NULL,
           transit_to_x       = NULL,

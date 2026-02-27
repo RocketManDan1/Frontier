@@ -607,6 +607,97 @@ def _migration_0014_trajectory_json(conn: sqlite3.Connection) -> None:
     _safe_add_column(conn, "ships", "trajectory_json", "TEXT")
 
 
+def _migration_0015_industry_v2(conn: sqlite3.Connection) -> None:
+    """Redesign industry: constructor mode toggle, refinery priority slots, construction queue.
+
+    - deployed_equipment gains 'mode' column for constructors (mine/construct/idle).
+    - New refinery_slots table for priority-ordered recipe assignments.
+    - New construction_queue table for pooled-speed construction jobs.
+    - Cancel all existing mining/production jobs (incompatible with new system).
+    """
+    # Add mode column to deployed_equipment
+    _safe_add_column(conn, "deployed_equipment", "mode", "TEXT DEFAULT 'idle'")
+
+    # Refinery slots: each refinery gets N slots (max_concurrent_recipes).
+    # Slots are ordered by priority across the whole site.
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS refinery_slots (
+            id TEXT PRIMARY KEY,
+            equipment_id TEXT NOT NULL REFERENCES deployed_equipment(id) ON DELETE CASCADE,
+            location_id TEXT NOT NULL,
+            slot_index INTEGER NOT NULL DEFAULT 0,
+            recipe_id TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'idle',
+            current_job_id TEXT,
+            corp_id TEXT DEFAULT '',
+            UNIQUE(equipment_id, slot_index)
+        );
+        CREATE INDEX IF NOT EXISTS idx_refinery_slots_location
+            ON refinery_slots(location_id, priority);
+        CREATE INDEX IF NOT EXISTS idx_refinery_slots_equipment
+            ON refinery_slots(equipment_id);
+    """)
+
+    # Construction queue: pooled-speed construction, ordered by user priority.
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS construction_queue (
+            id TEXT PRIMARY KEY,
+            location_id TEXT NOT NULL,
+            recipe_id TEXT NOT NULL,
+            queue_order INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'queued',
+            started_at REAL,
+            completes_at REAL,
+            inputs_json TEXT DEFAULT '[]',
+            outputs_json TEXT DEFAULT '[]',
+            created_by TEXT NOT NULL,
+            completed_at REAL,
+            corp_id TEXT DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_construction_queue_location
+            ON construction_queue(location_id, status, queue_order);
+    """)
+
+    # Cancel all existing active mining and production jobs (old system incompatible)
+    conn.execute("UPDATE production_jobs SET status = 'cancelled', completed_at = ? WHERE status = 'active'", (time.time(),))
+    # Reset all deployed equipment to idle
+    conn.execute("UPDATE deployed_equipment SET status = 'idle'")
+
+    # Create refinery slots for all already-deployed refineries
+    import json as _json, uuid as _uuid
+    refineries = conn.execute(
+        "SELECT id, location_id, config_json, corp_id FROM deployed_equipment WHERE category = 'refinery'"
+    ).fetchall()
+    for ref in refineries:
+        config = _json.loads(ref["config_json"] or "{}")
+        max_slots = int(config.get("max_concurrent_recipes") or 1)
+        for i in range(max_slots):
+            slot_id = str(_uuid.uuid4())
+            conn.execute(
+                "INSERT OR IGNORE INTO refinery_slots (id, equipment_id, location_id, slot_index, priority, corp_id) VALUES (?,?,?,?,?,?)",
+                (slot_id, ref["id"], ref["location_id"], i, 0, str(ref["corp_id"] or "")),
+            )
+
+    conn.commit()
+
+
+def _migration_0016_refinery_cumulative(conn: sqlite3.Connection) -> None:
+    _safe_add_column(conn, "refinery_slots", "cumulative_output_qty", "REAL NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def _migration_0017_deprecate_transfer_path(conn: sqlite3.Connection) -> None:
+    """Clear all legacy transfer_path_json values.
+
+    The multi-step path system has been replaced by direct A→B transfers.
+    This migration blanks out any stale path data; the column is kept for
+    backward compatibility but is no longer written with real path data.
+    """
+    conn.execute("UPDATE ships SET transfer_path_json = '[]' WHERE transfer_path_json IS NOT NULL AND transfer_path_json != '[]'")
+    conn.commit()
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -623,6 +714,9 @@ def _migrations() -> List[Migration]:
     Migration("0012_transit_coord_snapshot", "Add transit coordinate snapshot columns to ships", _migration_0012_transit_coord_snapshot),
     Migration("0013_edge_type", "Add edge_type column to transfer_edges", _migration_0013_edge_type),
     Migration("0014_trajectory_json", "Add trajectory_json column to ships", _migration_0014_trajectory_json),
+    Migration("0015_industry_v2", "Industry v2: constructor modes, refinery slots, construction queue", _migration_0015_industry_v2),
+    Migration("0016_refinery_cumulative", "Add cumulative output tracking to refinery slots", _migration_0016_refinery_cumulative),
+    Migration("0017_deprecate_transfer_path", "Clear legacy transfer_path_json on all ships", _migration_0017_deprecate_transfer_path),
     ]
 
 

@@ -171,20 +171,48 @@ def get_synodic_period_s(body_a: str, body_b: str) -> Optional[float]:
 
 
 def _parking_orbit_radius_km(body_id: str, location_id: Optional[str] = None) -> float:
-    """Get parking orbit radius (km from body center).
+    """Get parking orbit radius (km from body center) for patched-conic Δv.
 
-    If location_id is an orbit_node with a radius_km, use that.
-    Otherwise fall back to body radius + default altitude.
+    Cases handled:
+    1. ``location_id`` directly orbits ``body_id``
+       → use the orbit node's configured radius_km.
+       E.g. _parking_orbit_radius_km("earth", "LEO") → 6778 km.
+
+    2. ``location_id`` orbits a *sub-body* (moon) of ``body_id``
+       → use that moon's orbital semi-major axis around ``body_id``.
+       This is the physically correct patched-conic arrival radius:
+       the spacecraft arrives at the moon's orbital distance from the
+       planet, then a separate local leg covers the remaining transfer.
+       E.g. _parking_orbit_radius_km("jupiter", "CALLISTO_LO")
+            → callisto's a_km ≈ 1,882,700 km (not Callisto's surface).
+
+    3. Fallback → body radius + default parking altitude.
     """
     cfg = _get_config()
 
-    # Try orbit_node radius first
     if location_id:
-        r = celestial_config.get_orbit_node_radius(cfg, location_id)
-        if r is not None and r > 0:
-            return r
+        node_body = celestial_config.get_orbit_node_body_id(cfg, location_id)
+        if node_body:
+            # Case 1: location directly orbits the requested body
+            if node_body == body_id:
+                r = celestial_config.get_orbit_node_radius(cfg, location_id)
+                if r is not None and r > 0:
+                    return r
 
-    # Fall back to body radius + default parking altitude
+            # Case 2: location orbits a sub-body (moon) of body_id.
+            # Use the sub-body's orbital distance from body_id as the
+            # patched-conic arrival/departure radius.
+            else:
+                sub_body = _get_body(node_body)
+                if sub_body:
+                    pos = sub_body.get("position", {})
+                    center = str(pos.get("center_body_id", "")).strip()
+                    if center == body_id:
+                        a_km = pos.get("a_km")
+                        if a_km is not None and float(a_km) > 0:
+                            return float(a_km)
+
+    # Case 3: Fall back to body radius + default parking altitude
     body = _get_body(body_id)
     if not body:
         return 6578.0  # default LEO fallback
@@ -919,6 +947,213 @@ def compute_porkchop(
         "dv_grid": dv_grid,
         "grid_size": grid_size,
         "best_solutions": best_solutions,
+    }
+
+
+def _find_soi_parent(from_body: str, to_body: str) -> Optional[str]:
+    """Find the common SOI parent for two different bodies.
+
+    Returns the common ancestor body that is NOT 'sun', or None if
+    the bodies don't share a non-sun common ancestor (i.e. they are
+    interplanetary or on the same body).
+
+    Examples:
+      _find_soi_parent("earth", "moon") → "earth"
+      _find_soi_parent("moon", "earth") → "earth"
+      _find_soi_parent("io", "europa") → "jupiter"
+    """
+    if from_body == to_body:
+        return None
+
+    # Build ancestor chains (body → parent → grandparent → ...)
+    def _ancestor_chain(body_id: str) -> List[str]:
+        chain = [body_id]
+        visited = {body_id}
+        current = body_id
+        while True:
+            parent = _body_parent_id(current)
+            if not parent or parent in visited:
+                break
+            chain.append(parent)
+            visited.add(parent)
+            current = parent
+        return chain
+
+    from_chain = _ancestor_chain(from_body)
+    to_chain = _ancestor_chain(to_body)
+    to_set = set(to_chain)
+
+    for ancestor in from_chain:
+        if ancestor in to_set and ancestor != "sun":
+            return ancestor
+    return None
+
+
+def is_soi_transfer(from_location: str, to_location: str) -> bool:
+    """True if the transfer is within a body's SOI (different sub-bodies, same helio parent).
+
+    E.g. LEO → LLO (Earth orbit → Moon orbit) returns True.
+    E.g. LEO → GEO (both Earth orbit) returns False.
+    E.g. LEO → LMO (Earth → Mars) returns False (interplanetary).
+    """
+    loc_map = _get_location_body_map()
+    a = loc_map.get(from_location, "")
+    b = loc_map.get(to_location, "")
+    if not a or not b or a == b:
+        return False
+    return _find_soi_parent(a, b) is not None
+
+
+def compute_soi_transfer_trajectory(
+    from_location: str,
+    to_location: str,
+    departure_time_s: float,
+    tof_s: float,
+    n_points: int = 64,
+) -> Optional[Dict[str, Any]]:
+    """Compute a body-centric trajectory for a transfer within a body's SOI.
+
+    Used for transfers like LEO→LLO where both endpoints are within
+    Earth's SOI but on different sub-bodies (Earth and Moon).
+
+    Generates a Keplerian Hohmann-like half-ellipse in the parent body's
+    gravitational field, producing a classic KSP-style transfer orbit arc.
+
+    Returns a dict with body-centric trajectory points and metadata:
+        {"frame": "body_centric", "center_group": "grp_earth",
+         "points": [[x_km, y_km], ...]}
+    or None if this is not an SOI transfer.
+    """
+    cfg = _get_config()
+    loc_map = _get_location_body_map()
+
+    from_body = loc_map.get(from_location, "")
+    to_body = loc_map.get(to_location, "")
+    if not from_body or not to_body or from_body == to_body:
+        return None
+
+    parent_body = _find_soi_parent(from_body, to_body)
+    if parent_body is None:
+        return None
+
+    arrival_time_s = departure_time_s + tof_s
+
+    # Get body positions relative to the common parent
+    def _body_pos_in_parent_frame(body_id: str, time_s: float) -> Vec3:
+        if body_id == parent_body:
+            return (0.0, 0.0, 0.0)
+        body_r, _ = celestial_config.compute_body_state(cfg, body_id, time_s)
+        parent_r, _ = celestial_config.compute_body_state(cfg, parent_body, time_s)
+        return (body_r[0] - parent_r[0], body_r[1] - parent_r[1], body_r[2] - parent_r[2])
+
+    # Determine departure and arrival radii + target direction
+    r_park_from = _parking_orbit_radius_km(from_body, from_location)
+    r_park_to = _parking_orbit_radius_km(to_body, to_location)
+
+    from_body_pos = _body_pos_in_parent_frame(from_body, departure_time_s)
+    to_body_pos = _body_pos_in_parent_frame(to_body, arrival_time_s)
+
+    if from_body == parent_body:
+        # Earth → Moon: periapsis at LEO, apoapsis toward Moon
+        r_peri = r_park_from
+        r_apo = _norm(to_body_pos)
+        target_angle = math.atan2(to_body_pos[1], to_body_pos[0])
+        outbound = True
+    elif to_body == parent_body:
+        # Moon → Earth: periapsis at LEO (Earth side), apoapsis from Moon
+        r_apo = _norm(from_body_pos)
+        r_peri = r_park_to
+        target_angle = math.atan2(from_body_pos[1], from_body_pos[0])
+        outbound = False
+    else:
+        # Sub-body to sub-body (e.g. Io → Europa)
+        r_from = _norm(from_body_pos)
+        r_to = _norm(to_body_pos)
+        if r_from < 1.0 or r_to < 1.0:
+            return None
+        if r_to >= r_from:
+            r_peri, r_apo = r_from, r_to
+            target_angle = math.atan2(to_body_pos[1], to_body_pos[0])
+            outbound = True
+        else:
+            r_peri, r_apo = r_to, r_from
+            target_angle = math.atan2(from_body_pos[1], from_body_pos[0])
+            outbound = False
+
+    if r_peri < 1.0 or r_apo < 1.0 or r_apo <= r_peri:
+        return None
+
+    # Build a Hohmann transfer ellipse: periapsis = r_peri, apoapsis = r_apo
+    a = (r_peri + r_apo) / 2.0
+    e = (r_apo - r_peri) / (r_apo + r_peri)
+    p = a * (1.0 - e * e)  # semi-latus rectum
+
+    # Orient the orbit so apoapsis points toward the target direction.
+    # In the perifocal frame, apoapsis is at true anomaly ν=π → direction (-1, 0).
+    # Rotation angle to make apoapsis align with target_angle:
+    #   rotate (-1,0) by rot_angle → (cos(target_angle), sin(target_angle))
+    #   → rot_angle = target_angle + π
+    rot_angle = target_angle + math.pi
+
+    cos_rot = math.cos(rot_angle)
+    sin_rot = math.sin(rot_angle)
+
+    # Generate points along the half-ellipse (ν from 0 to π)
+    # For outbound: ν = 0 (periapsis) → π (apoapsis) — ship moves away
+    # For inbound: ν = π (apoapsis) → 2π (periapsis) — ship moves toward parent
+    points: List[Tuple[float, float]] = []
+    for i in range(n_points):
+        if outbound:
+            nu = math.pi * i / (n_points - 1)
+        else:
+            nu = math.pi + math.pi * i / (n_points - 1)
+
+        r = p / (1.0 + e * math.cos(nu))
+        # Position in perifocal frame
+        x_pf = r * math.cos(nu)
+        y_pf = r * math.sin(nu)
+        # Rotate to parent-centered frame
+        x = x_pf * cos_rot - y_pf * sin_rot
+        y = x_pf * sin_rot + y_pf * cos_rot
+        points.append((round(x, 1), round(y, 1)))
+
+    parent_group = f"grp_{parent_body}"
+
+    # First and last trajectory points (body-centric km)
+    first_pt = points[0] if points else (0, 0)
+    last_pt = points[-1] if points else (0, 0)
+    first_r_km = math.hypot(first_pt[0], first_pt[1])
+    last_r_km = math.hypot(last_pt[0], last_pt[1])
+
+    return {
+        "frame": "body_centric",
+        "center_group": parent_group,
+        "points": [list(pt) for pt in points],
+        # ── Debug metadata (visible in browser F12 → Network → /api/state) ──
+        "_debug": {
+            "parent_body": parent_body,
+            "from_body": from_body,
+            "to_body": to_body,
+            "from_location": from_location,
+            "to_location": to_location,
+            "outbound": outbound,
+            "r_peri_km": round(r_peri, 2),
+            "r_apo_km": round(r_apo, 2),
+            "semi_major_axis_km": round(a, 2),
+            "eccentricity": round(e, 6),
+            "target_angle_deg": round(math.degrees(target_angle), 2),
+            "rot_angle_deg": round(math.degrees(rot_angle), 2),
+            "from_body_pos_km": [round(c, 1) for c in from_body_pos],
+            "to_body_pos_km": [round(c, 1) for c in to_body_pos],
+            "to_body_distance_from_parent_km": round(_norm(to_body_pos), 2) if to_body != parent_body else 0,
+            "from_body_distance_from_parent_km": round(_norm(from_body_pos), 2) if from_body != parent_body else 0,
+            "first_point_km": [round(first_pt[0], 1), round(first_pt[1], 1)],
+            "last_point_km": [round(last_pt[0], 1), round(last_pt[1], 1)],
+            "first_point_radius_km": round(first_r_km, 2),
+            "last_point_radius_km": round(last_r_km, 2),
+            "n_points": len(points),
+            "note": "Trajectory points are body-centric km offsets from center_group. Frontend scales by HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT (3.2x). Compare last_point_radius_km to actual destination distance on map."
+        },
     }
 
 

@@ -103,6 +103,35 @@ class StopMiningRequest(BaseModel):
     job_id: str
 
 
+class SetConstructorModeRequest(BaseModel):
+    equipment_id: str
+    mode: str  # "mine" | "construct" | "idle"
+
+
+class AssignSlotRequest(BaseModel):
+    slot_id: str
+    recipe_id: str = ""  # empty to clear
+
+
+class ReorderSlotsRequest(BaseModel):
+    location_id: str
+    slot_ids: list
+
+
+class QueueConstructionRequest(BaseModel):
+    location_id: str
+    recipe_id: str
+
+
+class DequeueConstructionRequest(BaseModel):
+    queue_id: str
+
+
+class ReorderQueueRequest(BaseModel):
+    location_id: str
+    queue_ids: list
+
+
 # ── Sites Overview ─────────────────────────────────────────────────────────────
 
 
@@ -365,8 +394,14 @@ def api_industry_overview(
     idle_constructors = [
         {"id": e["id"], "name": e["name"], "config": e["config"]}
         for e in equipment
-        if e["category"] in ("constructor", "robonaut") and e["status"] == "idle"
+        if e["category"] in ("constructor", "robonaut") and e.get("mode", "idle") == "idle"
     ]
+
+    # Refinery slots
+    refinery_slots = industry_service.get_refinery_slots(conn, location_id)
+
+    # Construction queue and pool stats
+    construction_data = industry_service.get_construction_queue(conn, location_id)
 
     # Power & thermal balance
     power_balance = industry_service.compute_site_power_balance(equipment)
@@ -382,6 +417,10 @@ def api_industry_overview(
         "is_prospected": bool(site_prospected),
         "minable_resources": minable,
         "idle_constructors": idle_constructors,
+        "refinery_slots": refinery_slots,
+        "construction_queue": construction_data.get("queue", []),
+        "construction_pool_speed": construction_data.get("pool_speed_kg_per_hr", 0),
+        "construction_pool_mult": construction_data.get("pool_throughput_mult", 0),
         "power_balance": power_balance,
     }
 
@@ -504,3 +543,127 @@ def api_stop_mining(
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Constructor Mode ───────────────────────────────────────────────────────────
+
+
+@router.post("/api/industry/constructor/mode")
+def api_set_constructor_mode(
+    body: SetConstructorModeRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Set a constructor's mode: mine, construct, or idle."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
+    industry_service.settle_industry(conn)
+    try:
+        result = industry_service.set_constructor_mode(
+            conn, body.equipment_id, body.mode, actor_name, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Refinery Slots ─────────────────────────────────────────────────────────────
+
+
+@router.post("/api/industry/refinery/assign")
+def api_assign_refinery_slot(
+    body: AssignSlotRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Assign or clear a recipe on a refinery slot."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
+    try:
+        result = industry_service.assign_refinery_slot(
+            conn, body.slot_id, body.recipe_id or None, actor_name, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/api/industry/refinery/reorder")
+def api_reorder_refinery_slots(
+    body: ReorderSlotsRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Reorder refinery slot priorities."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    try:
+        result = industry_service.reorder_refinery_slots(
+            conn, body.location_id, body.slot_ids, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Construction Queue ─────────────────────────────────────────────────────────
+
+
+@router.post("/api/industry/construction/queue")
+def api_queue_construction(
+    body: QueueConstructionRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Add a recipe to the construction queue."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
+    industry_service.settle_industry(conn)
+    try:
+        result = industry_service.queue_construction(
+            conn, body.location_id, body.recipe_id, actor_name, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/api/industry/construction/dequeue")
+def api_dequeue_construction(
+    body: DequeueConstructionRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Remove an item from the construction queue."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    actor_name = _get_actor_name(user)
+    try:
+        result = industry_service.dequeue_construction(
+            conn, body.queue_id, actor_name, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/api/industry/construction/reorder")
+def api_reorder_construction_queue(
+    body: ReorderQueueRequest,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Reorder the construction queue."""
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    try:
+        result = industry_service.reorder_construction_queue(
+            conn, body.location_id, body.queue_ids, corp_id=corp_id
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
