@@ -667,12 +667,34 @@ def estimate_next_window_s(
     return best_wait
 
 
+_TROJAN_CLUSTER_GROUP_IDS = {"grp_sj_l4_greeks", "grp_sj_l5_trojans"}
+
+
+def _trojan_cluster_group_for_body(body_id: str) -> str:
+    body = _get_body(body_id)
+    if not body:
+        return ""
+    parent_group_id = str(body.get("parent_group_id", "")).strip()
+    if parent_group_id in _TROJAN_CLUSTER_GROUP_IDS:
+        return parent_group_id
+    return ""
+
+
+def _is_same_trojan_cluster(body_a: str, body_b: str) -> bool:
+    group_a = _trojan_cluster_group_for_body(body_a)
+    if not group_a:
+        return False
+    return group_a == _trojan_cluster_group_for_body(body_b)
+
+
 def is_interplanetary(from_location: str, to_location: str) -> bool:
     """True if the transfer crosses between different heliocentric bodies."""
     loc_map = _get_location_body_map()
     a = loc_map.get(from_location, "")
     b = loc_map.get(to_location, "")
     if not a or not b or a == "sun" or b == "sun":
+        return False
+    if _is_same_trojan_cluster(a, b):
         return False
     return _resolve_heliocentric_body(a) != _resolve_heliocentric_body(b)
 

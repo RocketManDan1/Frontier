@@ -546,6 +546,7 @@ def load_resource_catalog() -> Dict[str, Dict[str, Any]]:
                 "phase": str(entry.get("phase") or ""),
                 "description": str(entry.get("description") or ""),
                 "price_per_kg": max(0.0, float(entry.get("price_per_kg") or 0.0)),
+                "icon": str(entry.get("icon") or ""),
             }
     return catalog
 

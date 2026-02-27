@@ -284,6 +284,7 @@
           itemId: item?.item_id || "",
           category: category,
           phase: phase,
+          icon: String(item?.icon || ""),
           mass_kg: item?.mass_kg,
           volume_m3: item?.volume_m3,
           quantity: qty > 1 ? qty : 0,

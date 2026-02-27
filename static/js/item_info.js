@@ -215,9 +215,11 @@ window.ItemInfo = (function () {
 
     title.textContent = itemName;
     sub.textContent = titleCase(category);
-    icon.src = window.ItemDisplay
-      ? window.ItemDisplay.iconDataUri(item.item_id || item.id, itemName, category)
-      : "";
+    icon.src = item.icon
+      ? `/static/img/icons/${item.icon}`
+      : (window.ItemDisplay
+        ? window.ItemDisplay.iconDataUri(item.item_id || item.id, itemName, category, item.phase || "")
+        : "");
 
     renderDescription(item);
     renderAttributes(item);

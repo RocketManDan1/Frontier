@@ -1859,9 +1859,6 @@ def assign_refinery_slot(
     if not slot:
         raise ValueError("Refinery slot not found")
 
-    if slot["status"] == "active":
-        raise ValueError("Cannot change recipe on an active slot — wait for current job to complete")
-
     # Verify corp ownership
     slot_corp_id = str(slot["corp_id"] or "")
     if corp_id and slot_corp_id and corp_id != slot_corp_id:

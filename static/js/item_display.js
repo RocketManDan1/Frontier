@@ -56,8 +56,8 @@ window.ItemDisplay = (function () {
     radiator:           { hueBase: 200, shape: "circle"  },
     storage:            { hueBase: 260, shape: "square"  },
     fuel:               { hueBase: 30,  shape: "drop"    },
-    raw_material:       { hueBase: 95,  shape: "ore"     },
-    finished_material:  { hueBase: 175, shape: "cube"    },
+    raw_material:       { hueBase: 95,  shape: "stone"   },
+    finished_material:  { hueBase: 175, shape: "pallet"  },
     resource:           { hueBase: 130, shape: "drop"    },
     container:          { hueBase: 260, shape: "square"  },
     robonaut:           { hueBase: 310, shape: "gear"    },
@@ -103,6 +103,12 @@ window.ItemDisplay = (function () {
         return `<rect x='8' y='8' width='48' height='48' rx='4' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/>`;
       case "gear":
         return `<circle cx='32' cy='32' r='22' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/><circle cx='32' cy='32' r='10' fill='rgba(0,0,0,0.25)' stroke='none'/>`;
+      case "stone":
+        return `<polygon points='6,56 14,40 20,44 26,30 34,34 40,24 48,20 54,32 58,38 60,56' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/><polygon points='18,56 24,46 32,42 40,46 36,56' fill='rgba(255,255,255,0.08)' stroke='none'/>`;
+      case "steam":
+        return `<path d='M14,48 C4,48 2,38 12,35 C9,24 20,16 30,22 C34,12 48,12 50,22 C58,17 64,28 56,36 C64,38 62,48 52,48 Z' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/>`;
+      case "pallet":
+        return `<rect x='6' y='48' width='52' height='8' rx='2' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1' opacity='0.7'/><rect x='10' y='30' width='20' height='18' rx='2' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/><rect x='34' y='30' width='20' height='18' rx='2' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/><rect x='16' y='12' width='32' height='18' rx='2' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/>`;
       default: // "square"
         return `<rect x='6' y='6' width='52' height='52' rx='9' fill='${fill}' stroke='rgba(220,238,255,0.22)' stroke-width='1.5'/>`;
     }
@@ -110,8 +116,8 @@ window.ItemDisplay = (function () {
 
   /* ── Icon data-URI generator ───────────────────────────── */
 
-  function iconDataUri(seed, label, category) {
-    const cacheKey = `${String(seed || "")}::${String(label || "")}::${String(category || "")}`;
+  function iconDataUri(seed, label, category, phase) {
+    const cacheKey = `${String(seed || "")}::${String(label || "")}::${String(category || "")}::${String(phase || "")}`;
     const cached = iconCache.get(cacheKey);
     if (cached) return cached;
 
@@ -119,7 +125,16 @@ window.ItemDisplay = (function () {
     const hash = hashCode(seed || label || "item");
     const hue = vis ? (vis.hueBase + (hash % 40) - 20) : hash % 360;
     const hue2 = (hue + 52) % 360;
-    const shape = vis ? vis.shape : "square";
+    let shape = vis ? vis.shape : "square";
+
+    // Phase-aware shape override for raw materials
+    const ph = String(phase || "").trim().toLowerCase();
+    const cat = String(category || "").trim().toLowerCase();
+    if (cat === "raw_material" || (cat === "resource" && ph)) {
+      if (ph === "gas")         shape = "steam";
+      else if (ph === "liquid") shape = "drop";
+      else if (ph === "solid")  shape = cat === "raw_material" ? "stone" : shape;
+    }
     const glyph = itemGlyph(label);
     const fillId = `g${hash % 10000}`;
 
@@ -179,7 +194,7 @@ window.ItemDisplay = (function () {
     const icon = document.createElement("img");
     icon.className = "invCellIcon";
     icon.alt = String(o.label || "Item");
-    icon.src = iconDataUri(o.iconSeed, o.label, o.category);
+    icon.src = o.icon ? `/static/img/icons/${o.icon}` : iconDataUri(o.iconSeed, o.label, o.category, o.phase);
     icon.draggable = false;
     cell.appendChild(icon);
 
@@ -328,7 +343,7 @@ window.ItemDisplay = (function () {
     const icon = document.createElement("img");
     icon.className = "inventoryItemIcon";
     icon.alt = `${String(o.label || "Item")} icon`;
-    icon.src = iconDataUri(o.iconSeed, o.label, o.category);
+    icon.src = iconDataUri(o.iconSeed, o.label, o.category, o.phase);
 
     const body = document.createElement("div");
     body.className = "inventoryItemBody";

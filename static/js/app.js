@@ -1630,7 +1630,9 @@
           label: String(r?.name || r?.item_id || "Resource"),
           iconSeed: `resource::${r?.resource_id || r?.item_id || ""}`,
           itemId: r?.resource_id || r?.item_id || "",
-          category: "resource",
+          category: String(r?.category_id || "resource"),
+          phase: String(r?.phase || ""),
+          icon: String(r?.icon || ""),
           mass_kg: Number(r?.mass_kg) || 0,
           volume_m3: Number(r?.volume_m3) || 0,
           quantity: Number(r?.mass_kg) || 0,
@@ -2461,10 +2463,11 @@
         label: String(item?.label || item?.item_id || "Cargo"),
         iconSeed: `resource::${item?.resource_id || item?.item_id || ""}`,
         itemId: item?.resource_id || item?.item_id || "",
-        category: "resource",
+        category: String(item?.category_id || item?.category || "resource"),
         mass_kg: Number(item?.mass_kg) || 0,
         volume_m3: Number(item?.volume_m3) || 0,
         phase: String(item?.phase || ""),
+        icon: String(item?.icon || ""),
         subtitle: `${String(item?.phase || "solid")} cargo`,
       });
       grid.appendChild(cell);
@@ -2598,6 +2601,8 @@
     "EUROPA_LO", "EUROPA_HO",
     "GANYMEDE_LO", "GANYMEDE_HO",
     "CALLISTO_LO", "CALLISTO_HO",
+    "HEKTOR_LO", "AGAMEMNON_LO", "ACHILLES_LO", "DIOMEDES_LO", "ODYSSEUS_LO",
+    "PATROCLUS_LO", "MENTOR_LO", "PARIS_LO", "DEIPHOBUS_LO", "AENEAS_LO",
   ]);
   const LPOINT_IDS = new Set(["L1", "L2", "L3", "L4", "L5", "SJ_L1", "SJ_L2", "SJ_L3", "SJ_L4", "SJ_L5"]);
   // Jupiter L4 (Greeks) and L5 (Trojans) stay visible at all zoom levels
@@ -3558,10 +3563,30 @@
       y: p3.y - arriveTan.y * c2Dist + bendVec.y * 0.35,
     };
 
-    // Track solar-group body positions so Bézier endpoints follow planet movement
+    // Track body positions so Bézier endpoints follow celestial motion.
+    // For same-body transfers (e.g. Europa orbit → Europa surface), track
+    // the local body center (grp_europa) so the curve follows the moon's
+    // orbit around its planet.  For cross-body transfers, track each
+    // endpoint's body center.  Falls back to the top-level solar group.
     const bezier = { p0, c1, c2, p3 };
-    const fromTrackId = getLocationSolarGroup(fromLocId) || fromLocId;
-    const toTrackId = getLocationSolarGroup(toLocId) || toLocId;
+    const fromBodyCenter = getLocationBodyCenter(fromLocId);
+    const toBodyCenter = getLocationBodyCenter(toLocId);
+    const sameBody = fromBodyCenter && toBodyCenter && fromBodyCenter.id === toBodyCenter.id;
+    let fromTrackId, toTrackId;
+    if (sameBody) {
+      // Both endpoints orbit the same body — track that body so the curve
+      // follows its orbit (e.g. Europa orbiting Jupiter).
+      fromTrackId = fromBodyCenter.id;
+      toTrackId = toBodyCenter.id;
+    } else if (fromBodyCenter && toBodyCenter) {
+      // Cross-body SOI transfer — track each body independently
+      fromTrackId = fromBodyCenter.id;
+      toTrackId = toBodyCenter.id;
+    } else {
+      // Fallback to heliocentric solar group
+      fromTrackId = getLocationSolarGroup(fromLocId) || fromLocId;
+      toTrackId = getLocationSolarGroup(toLocId) || toLocId;
+    }
     const fromTrack = locationsById.get(fromTrackId);
     const toTrack = locationsById.get(toTrackId);
     if (fromTrack) { bezier.trackStartId = fromTrackId; bezier.trackStartOrig = { x: fromTrack.rx, y: fromTrack.ry }; }
@@ -4076,6 +4101,16 @@
       { id: "GANYMEDE_HO", center: "GANYMEDE", period_s: 240 },
       { id: "CALLISTO_LO", center: "CALLISTO", period_s: 220 },
       { id: "CALLISTO_HO", center: "CALLISTO", period_s: 260 },
+      { id: "HEKTOR_LO", center: "HEKTOR", period_s: 120 },
+      { id: "AGAMEMNON_LO", center: "AGAMEMNON", period_s: 120 },
+      { id: "ACHILLES_LO", center: "ACHILLES", period_s: 120 },
+      { id: "DIOMEDES_LO", center: "DIOMEDES", period_s: 120 },
+      { id: "ODYSSEUS_LO", center: "ODYSSEUS", period_s: 120 },
+      { id: "PATROCLUS_LO", center: "PATROCLUS", period_s: 120 },
+      { id: "MENTOR_LO", center: "MENTOR", period_s: 120 },
+      { id: "PARIS_LO", center: "PARIS", period_s: 120 },
+      { id: "DEIPHOBUS_LO", center: "DEIPHOBUS", period_s: 120 },
+      { id: "AENEAS_LO", center: "AENEAS", period_s: 120 },
     ];
 
     for (const od of orbitDefs) {
@@ -5307,10 +5342,10 @@
       let rx = deep.rx;
       let ry = deep.ry;
 
-      if (!l.is_group && hasAncestor(l.id, "grp_earth_orbits", parentById) && earth) {
+      if (!l.is_group && (hasAncestor(l.id, "grp_earth_orbits", parentById) || hasAncestor(l.id, "grp_earth_sites", parentById)) && earth) {
         rx = earthRx + (Number(l.x) - Number(earth.x)) * EARTH_ORBIT_SCALE;
         ry = earthRy + (Number(l.y) - Number(earth.y)) * EARTH_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_moon_orbits", parentById) && moon) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_moon_orbits", parentById) || hasAncestor(l.id, "grp_moon_sites", parentById)) && moon) {
         rx = moonRx + (Number(l.x) - Number(moon.x)) * MOON_ORBIT_SCALE;
         ry = moonRy + (Number(l.y) - Number(moon.y)) * MOON_ORBIT_SCALE;
       } else if (!l.is_group && hasAncestor(l.id, "grp_mercury_orbits", parentById) && mercury) {
@@ -5319,28 +5354,28 @@
       } else if (!l.is_group && hasAncestor(l.id, "grp_venus_orbits", parentById) && venus) {
         rx = venusRx + (Number(l.x) - Number(venus.x)) * VENUS_ORBIT_SCALE;
         ry = venusRy + (Number(l.y) - Number(venus.y)) * VENUS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_mars_orbits", parentById) && mars) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_mars_orbits", parentById) || hasAncestor(l.id, "grp_mars_sites", parentById)) && mars) {
         rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
         ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
       } else if (!l.is_group && hasAncestor(l.id, "grp_mars_moons", parentById) && mars) {
         rx = marsRx + (Number(l.x) - Number(mars.x)) * MARS_ORBIT_SCALE;
         ry = marsRy + (Number(l.y) - Number(mars.y)) * MARS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_ceres_orbits", parentById) && ceres) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_ceres_orbits", parentById) || hasAncestor(l.id, "grp_ceres_sites", parentById)) && ceres) {
         rx = ceresRx + (Number(l.x) - Number(ceres.x)) * CERES_ORBIT_SCALE;
         ry = ceresRy + (Number(l.y) - Number(ceres.y)) * CERES_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_vesta_orbits", parentById) && vesta) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_vesta_orbits", parentById) || hasAncestor(l.id, "grp_vesta_sites", parentById)) && vesta) {
         rx = vestaRx + (Number(l.x) - Number(vesta.x)) * VESTA_ORBIT_SCALE;
         ry = vestaRy + (Number(l.y) - Number(vesta.y)) * VESTA_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_pallas_orbits", parentById) && pallas) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_pallas_orbits", parentById) || hasAncestor(l.id, "grp_pallas_sites", parentById)) && pallas) {
         rx = pallasRx + (Number(l.x) - Number(pallas.x)) * PALLAS_ORBIT_SCALE;
         ry = pallasRy + (Number(l.y) - Number(pallas.y)) * PALLAS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_hygiea_orbits", parentById) && hygiea) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_hygiea_orbits", parentById) || hasAncestor(l.id, "grp_hygiea_sites", parentById)) && hygiea) {
         rx = hygieaRx + (Number(l.x) - Number(hygiea.x)) * HYGIEA_ORBIT_SCALE;
         ry = hygieaRy + (Number(l.y) - Number(hygiea.y)) * HYGIEA_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_phobos_orbits", parentById) && phobosLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_phobos_orbits", parentById) || hasAncestor(l.id, "grp_phobos_sites", parentById)) && phobosLoc) {
         rx = phobosRx + (Number(l.x) - Number(phobosLoc.x)) * PHOBOS_ORBIT_SCALE;
         ry = phobosRy + (Number(l.y) - Number(phobosLoc.y)) * PHOBOS_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_deimos_orbits", parentById) && deimosLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_deimos_orbits", parentById) || hasAncestor(l.id, "grp_deimos_sites", parentById)) && deimosLoc) {
         rx = deimosRx + (Number(l.x) - Number(deimosLoc.x)) * DEIMOS_ORBIT_SCALE;
         ry = deimosRy + (Number(l.y) - Number(deimosLoc.y)) * DEIMOS_ORBIT_SCALE;
       } else if (!l.is_group && hasAncestor(l.id, "grp_zoozve_orbits", parentById) && zoozve) {
@@ -5353,10 +5388,12 @@
         rx = jupiterRx + (Number(l.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE;
         ry = jupiterRy + (Number(l.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE;
       } else if (!l.is_group && hasAncestor(l.id, "grp_jupiter_lpoints", parentById) && jupiter) {
-        // L4/L5 are heliocentric (60° from Jupiter on its orbit) — use solar projection
+        // L4/L5 and their Trojan/Greek asteroid descendants are heliocentric — use solar projection
         // L1/L2/L3 are near Jupiter — use local orbit scale
         const sjId = String(l.id);
-        if (sjId === "SJ_L4" || sjId === "SJ_L5") {
+        if (sjId === "SJ_L4" || sjId === "SJ_L5"
+            || hasAncestor(l.id, "grp_sj_l4_greeks", parentById)
+            || hasAncestor(l.id, "grp_sj_l5_trojans", parentById)) {
           const proj = projectDeepPosition(l.x, l.y);
           rx = proj.rx;
           ry = proj.ry;
@@ -5364,16 +5401,16 @@
           rx = jupiterRx + (Number(l.x) - Number(jupiter.x)) * JUPITER_ORBIT_SCALE;
           ry = jupiterRy + (Number(l.y) - Number(jupiter.y)) * JUPITER_ORBIT_SCALE;
         }
-      } else if (!l.is_group && hasAncestor(l.id, "grp_io_orbits", parentById) && ioLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_io_orbits", parentById) || hasAncestor(l.id, "grp_io_sites", parentById)) && ioLoc) {
         rx = ioRx + (Number(l.x) - Number(ioLoc.x)) * IO_ORBIT_SCALE;
         ry = ioRy + (Number(l.y) - Number(ioLoc.y)) * IO_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_europa_orbits", parentById) && europaLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_europa_orbits", parentById) || hasAncestor(l.id, "grp_europa_sites", parentById)) && europaLoc) {
         rx = europaRx + (Number(l.x) - Number(europaLoc.x)) * EUROPA_ORBIT_SCALE;
         ry = europaRy + (Number(l.y) - Number(europaLoc.y)) * EUROPA_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_ganymede_orbits", parentById) && ganymedeLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_ganymede_orbits", parentById) || hasAncestor(l.id, "grp_ganymede_sites", parentById)) && ganymedeLoc) {
         rx = ganymRx + (Number(l.x) - Number(ganymedeLoc.x)) * GANYMEDE_ORBIT_SCALE;
         ry = ganymRy + (Number(l.y) - Number(ganymedeLoc.y)) * GANYMEDE_ORBIT_SCALE;
-      } else if (!l.is_group && hasAncestor(l.id, "grp_callisto_orbits", parentById) && callistoLoc) {
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_callisto_orbits", parentById) || hasAncestor(l.id, "grp_callisto_sites", parentById)) && callistoLoc) {
         rx = callistoRx + (Number(l.x) - Number(callistoLoc.x)) * CALLISTO_ORBIT_SCALE;
         ry = callistoRy + (Number(l.y) - Number(callistoLoc.y)) * CALLISTO_ORBIT_SCALE;
       } else if (l.id === "grp_mercury") {

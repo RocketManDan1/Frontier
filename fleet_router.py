@@ -376,10 +376,11 @@ def _compute_direct_quote(
         "SELECT dv_m_s, tof_s, edge_type FROM transfer_edges WHERE from_id=? AND to_id=?",
         (from_id, to_id),
     ).fetchone()
+    direct_edge_type = str((direct["edge_type"] if direct else "") or "")
 
     is_ip = _is_interplanetary(from_id, to_id)
 
-    if direct and not is_ip:
+    if direct and not is_ip and direct_edge_type != "interplanetary":
         # Local direct edge — simple case
         base_dv = float(direct["dv_m_s"])
         base_tof = float(direct["tof_s"])

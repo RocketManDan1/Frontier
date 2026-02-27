@@ -1625,15 +1625,19 @@ def compute_ship_inventory_resources(
 
             entry = by_resource.get(resource_id)
             if not entry:
+                res_category_id = str(meta.get("category_id") or "resource")
+                res_icon = str(meta.get("icon") or "")
                 entry = {
                     "item_uid": f"ship:{ship_id}:resource:{resource_id}",
                     "item_kind": "resource",
                     "item_id": resource_id,
                     "label": label,
                     "subtitle": f"{phase.title()} cargo",
-                    "category": "resource",
+                    "category": res_category_id,
+                    "category_id": res_category_id,
                     "resource_id": resource_id,
                     "phase": phase,
+                    "icon": res_icon,
                     "mass_kg": 0.0,
                     "volume_m3": 0.0,
                     "quantity": 0.0,
@@ -1862,7 +1866,11 @@ def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *
         }
         payload = json.loads(r["payload_json"] or "{}")
         if stack_type == "resource" and not _is_part_like_stack(r, payload, part_catalog_ids, resource_ids):
-            base["resource_id"] = str(payload.get("resource_id") or base["item_id"])
+            rid = str(payload.get("resource_id") or base["item_id"])
+            base["resource_id"] = rid
+            res_meta = load_resource_catalog().get(rid) or {}
+            base["phase"] = str(res_meta.get("phase") or "solid").strip().lower()
+            base["category_id"] = str(res_meta.get("category_id") or "resource")
             resources.append(base)
             continue
         if stack_type in ("part", "resource"):
@@ -2385,6 +2393,9 @@ def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dic
                 if not res_id or res_mass < 1e-9:
                     continue
                 res_label = str(entry.get("resource_name") or res_id).replace("_", " ").title()
+                _res_meta = load_resource_catalog().get(res_id) or {}
+                _res_cat_id = str(_res_meta.get("category_id") or "resource")
+                _res_icon = str(_res_meta.get("icon") or "")
                 items.append(
                     {
                         "item_uid": f"ship:{ship_id}:container:{idx}:resource:{res_id}",
@@ -2392,9 +2403,11 @@ def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dic
                         "item_id": res_id,
                         "label": res_label,
                         "subtitle": f"{phase.title()} cargo · {res_vol:.2f} m³",
-                        "category": "resource",
+                        "category": _res_cat_id,
+                        "category_id": _res_cat_id,
                         "resource_id": res_id,
                         "phase": phase,
+                        "icon": _res_icon,
                         "mass_kg": res_mass,
                         "volume_m3": res_vol,
                         "quantity": res_mass,
@@ -2414,6 +2427,9 @@ def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dic
             resource_id = str(container.get("resource_id") or "").strip()
             resource_name = str(container.get("resource_name") or resource_id or "Cargo")
             if resource_id and cargo_mass_kg > 1e-9:
+                _res_meta2 = load_resource_catalog().get(resource_id) or {}
+                _res_cat_id2 = str(_res_meta2.get("category_id") or "resource")
+                _res_icon2 = str(_res_meta2.get("icon") or "")
                 items.append(
                     {
                         "item_uid": f"ship:{ship_id}:container:{idx}:resource:{resource_id}",
@@ -2421,9 +2437,11 @@ def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dic
                         "item_id": resource_id,
                         "label": resource_name,
                         "subtitle": f"{phase.title()} cargo · {used_m3:.2f} m³",
-                        "category": "resource",
+                        "category": _res_cat_id2,
+                        "category_id": _res_cat_id2,
                         "resource_id": resource_id,
                         "phase": phase,
+                        "icon": _res_icon2,
                         "mass_kg": cargo_mass_kg,
                         "volume_m3": used_m3,
                         "quantity": cargo_mass_kg,
@@ -2742,19 +2760,27 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
 
 def _inventory_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     location_id = str(location_payload.get("location_id") or "")
+    resources_catalog = load_resource_catalog()
     rows: List[Dict[str, Any]] = []
     for resource in location_payload.get("resources") or []:
         stack_key = str(resource.get("stack_key") or "")
         mass_kg = max(0.0, float(resource.get("mass_kg") or 0.0))
+        rid = str(resource.get("resource_id") or resource.get("item_id") or "resource")
+        res_meta = resources_catalog.get(rid) or {}
+        res_phase = str(resource.get("phase") or res_meta.get("phase") or "solid").strip().lower()
+        res_category_id = str(resource.get("category_id") or res_meta.get("category_id") or "resource")
         rows.append(
             {
                 "item_uid": f"location:{location_id}:resource:{stack_key}",
                 "item_kind": "resource",
-                "item_id": str(resource.get("resource_id") or resource.get("item_id") or "resource"),
+                "item_id": rid,
                 "label": str(resource.get("name") or resource.get("item_id") or "Resource"),
                 "subtitle": "Location Resource",
-                "category": "resource",
+                "category": res_category_id,
+                "category_id": res_category_id,
                 "resource_id": str(resource.get("resource_id") or resource.get("item_id") or ""),
+                "phase": res_phase,
+                "icon": str(res_meta.get("icon") or ""),
                 "mass_kg": mass_kg,
                 "volume_m3": max(0.0, float(resource.get("volume_m3") or 0.0)),
                 "quantity": mass_kg,

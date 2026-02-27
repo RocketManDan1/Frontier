@@ -232,6 +232,21 @@ class TestOrbitalHelpers:
         assert _is_interplanetary("LEO", "LMO") is True
         assert _is_interplanetary("LEO", "VEN_ORB") is True
 
+    def test_is_interplanetary_same_trojan_cluster_is_local(self):
+        from fleet_router import _is_interplanetary
+
+        assert _is_interplanetary("HEKTOR_LO", "AGAMEMNON_LO") is False
+
+    def test_is_interplanetary_greek_to_non_greek(self):
+        from fleet_router import _is_interplanetary
+
+        assert _is_interplanetary("HEKTOR_LO", "CERES_LO") is True
+
+    def test_is_interplanetary_same_l5_trojan_cluster_is_local(self):
+        from fleet_router import _is_interplanetary
+
+        assert _is_interplanetary("PATROCLUS_LO", "MENTOR_LO") is False
+
     def test_is_interplanetary_unknown_locations(self):
         from fleet_router import _is_interplanetary
 
@@ -641,6 +656,30 @@ class TestAdvancedTransferQuote:
         assert data.get("is_interplanetary") is True
         orbital = data.get("orbital") or {}
         assert orbital.get("to_body") == "ceres"
+
+    def test_greek_cluster_quote_uses_fast_local_route(self, client):
+        r = client.get("/api/transfer_quote_advanced", params={
+            "from_id": "HEKTOR_LO",
+            "to_id": "AGAMEMNON_LO",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("is_interplanetary") is False
+        assert data.get("route_mode") in {"direct-local", "local-multihop"}
+        # Expect a short local hop via SJ_L4, not a long Lambert leg.
+        assert float(data.get("tof_s") or 0.0) <= 4.0 * 86400.0
+
+    def test_l5_cluster_quote_uses_fast_local_route(self, client):
+        r = client.get("/api/transfer_quote_advanced", params={
+            "from_id": "PATROCLUS_LO",
+            "to_id": "MENTOR_LO",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("is_interplanetary") is False
+        assert data.get("route_mode") in {"direct-local", "local-multihop"}
+        # Expect a short local hop via SJ_L5, not a long Lambert leg.
+        assert float(data.get("tof_s") or 0.0) <= 4.0 * 86400.0
 
 
 # ────────────────────────────────────────────────────────────────────

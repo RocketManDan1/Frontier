@@ -856,9 +856,11 @@
           label: name,
           iconSeed: item.resource_id || name,
           itemId: item.resource_id || "",
-          category: "resource",
+          category: item.category_id || item.category || "resource",
+          phase: item.phase || "",
+          icon: item.icon || "",
           mass_kg: massKg,
-          subtitle: "resource",
+          subtitle: item.category_id || "resource",
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         });
         grid.appendChild(cell);

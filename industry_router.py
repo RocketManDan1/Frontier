@@ -142,6 +142,15 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     _main().settle_arrivals(conn, _main().game_now_s())
     industry_service.settle_industry(conn)
 
+    org_id = _get_org_id(conn, user)
+    prospected_site_ids = set()
+    if org_id:
+        for row in conn.execute(
+            "SELECT DISTINCT site_location_id FROM prospecting_results WHERE org_id = ?",
+            (org_id,),
+        ).fetchall():
+            prospected_site_ids.add(str(row["site_location_id"]))
+
     # Get all non-group locations
     locations = conn.execute(
         """
@@ -264,6 +273,7 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "parent_id": loc["parent_id"],
             "body_name": _resolve_body(loc["parent_id"]) or "",
             "is_surface_site": is_surface,
+            "is_prospected": bool(loc_id in prospected_site_ids),
             "body_id": site_info.get("body_id") or meta.get("body_id", ""),
             "gravity_m_s2": site_info.get("gravity_m_s2", 0),
             "symbol": meta.get("symbol", ""),

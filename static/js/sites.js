@@ -18,6 +18,7 @@
   let currentFilter = "all";
   let overviewGroupByBody = false;
   let cargoGroupByBody = false;
+  let cargoOnlyWithCargo = false;
   let industryLocationId = null;
   let industryData = null;
   let pollTimer = null;
@@ -268,7 +269,9 @@
       resources.forEach(r => {
         const cell = itemDisplay.createGridCell({
           label: r.name, iconSeed: r.item_id, itemId: r.item_id,
-          category: "resource",
+          category: r.category_id || "resource",
+          phase: r.phase || "",
+          icon: r.icon || "",
           mass_kg: r.mass_kg, quantity: r.quantity, subtitle: fmtKg(r.mass_kg),
         });
         invGrid.appendChild(cell);
@@ -334,26 +337,53 @@
     const sel = document.getElementById("industryLocationSelect");
     const current = sel.value;
 
-    const withIndustry = [];
-    const others = [];
+    const industrial = [];      // deployed constructors or refineries
+    const otherPresence = [];   // ships docked / robonauts / active jobs but no constructor/refinery
+    const prospectedOnly = [];  // prospected but no presence
     allSites.forEach(s => {
       const eq = s.equipment || {};
-      const hasInd = (eq.refinery || {}).total || (eq.constructor || {}).total || (eq.robonaut || {}).total || s.active_jobs > 0;
-      if (hasInd) withIndustry.push(s); else others.push(s);
+      const hasConstructorOrRefinery = ((eq.refinery || {}).total || 0) + ((eq.constructor || {}).total || 0) > 0;
+      const hasRobonaut = ((eq.robonaut || {}).total || 0) > 0;
+      const hasShipLanded = Number(s.ships_docked || 0) > 0;
+      const hasActivity = Number(s.active_jobs || 0) > 0;
+      const hasPresence = hasConstructorOrRefinery || hasRobonaut || hasShipLanded || hasActivity;
+      const isProspected = !!s.is_prospected;
+
+      if (!hasPresence && !isProspected) return;
+      if (hasConstructorOrRefinery) industrial.push(s);
+      else if (hasPresence) otherPresence.push(s);
+      else prospectedOnly.push(s);
     });
 
     let html = '<option value="">— Select a location —</option>';
-    if (withIndustry.length) {
+    if (industrial.length) {
       html += '<optgroup label="Industrial Sites">';
-      withIndustry.forEach(s => html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`);
+      industrial.forEach(s => html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`);
       html += '</optgroup>';
     }
-    html += '<optgroup label="All Locations">';
-    others.forEach(s => html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`);
-    html += '</optgroup>';
+    if (otherPresence.length) {
+      html += '<optgroup label="Occupied">';
+      otherPresence.forEach(s => html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`);
+      html += '</optgroup>';
+    }
+    if (prospectedOnly.length) {
+      html += '<optgroup label="Prospected Sites">';
+      prospectedOnly.forEach(s => html += `<option value="${esc(s.id)}">${esc(s.name)}</option>`);
+      html += '</optgroup>';
+    }
+    if (!industrial.length && !otherPresence.length && !prospectedOnly.length) {
+      html += '<option value="" disabled>No prospected or occupied sites</option>';
+    }
 
     sel.innerHTML = html;
     if (current) sel.value = current;
+
+    if (sel.value !== current) {
+      industryLocationId = sel.value || null;
+      if (!industryLocationId) {
+        document.getElementById("industryContent").style.display = "none";
+      }
+    }
   }
 
   function initIndustryLocationSelect() {
@@ -600,16 +630,16 @@
         <div class="slotEquipName">${esc(slot.equipment_name)}</div>
         <div class="slotRecipe ${hasRecipe ? '' : 'slotEmpty'}" data-slot-id="${slot.id}">${recipeName}</div>
         ${statsHtml}
-        ${hasRecipe && !isActive ? `<button class="btnSmall btnClearSlot" data-slot-id="${slot.id}">Clear</button>` : ''}
+        ${hasRecipe ? `<button class="btnSmall btnClearSlot" data-slot-id="${slot.id}">${isActive ? 'Clear Next' : 'Clear'}</button>` : ''}
       </div>`;
     }).join("");
 
-    // Wire click-to-assign on empty/idle slots
+    // Wire click-to-assign on any slot (recipe change takes effect after current job)
     list.querySelectorAll(".slotRecipe").forEach(el => {
       el.addEventListener("click", () => {
         const slotId = el.dataset.slotId;
         const slot = slots.find(s => s.id === slotId);
-        if (slot && slot.status !== "active") {
+        if (slot) {
           openRecipeSelectModal("refinery", slotId, slot.specialization);
         }
       });
@@ -1418,6 +1448,10 @@
     const search = (document.getElementById("cargoSearchInput")?.value || "").toLowerCase();
     const filtered = allSites.filter(s => {
       if (search && !(s.name || "").toLowerCase().includes(search) && !(s.id || "").toLowerCase().includes(search)) return false;
+      if (cargoOnlyWithCargo) {
+        const invCount = Number(s.inventory?.stack_count || 0) + Number(s.inventory?.resource_count || 0);
+        if (invCount <= 0) return false;
+      }
       return true;
     });
 
@@ -1902,6 +1936,16 @@
       cargoGroupBtn.addEventListener("click", () => {
         cargoGroupByBody = !cargoGroupByBody;
         cargoGroupBtn.classList.toggle("active", cargoGroupByBody);
+        renderCargoSitesTable();
+      });
+    }
+
+    // Filter to only sites with cargo
+    const cargoOnlyBtn = document.getElementById("cargoOnlyWithCargo");
+    if (cargoOnlyBtn) {
+      cargoOnlyBtn.addEventListener("click", () => {
+        cargoOnlyWithCargo = !cargoOnlyWithCargo;
+        cargoOnlyBtn.classList.toggle("active", cargoOnlyWithCargo);
         renderCargoSitesTable();
       });
     }

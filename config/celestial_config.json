@@ -1,5 +1,6 @@
 {
   "version": "1.0",
+  "auto_interplanetary_edges": true,
   "notes": "Solar system bodies and gameplay nodes. Edit this file to tune body positions, orbit markers, and transfer network.",
   "bodies": [
     {
@@ -477,6 +478,266 @@
         "epoch_jd": 2451544.5,
         "period_s": 1441931.2
       }
+    },
+    {
+      "id": "hektor",
+      "name": "624 Hektor",
+      "group_id": "grp_hektor",
+      "wikipedia_title": "624 Hektor",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/624_Hektor",
+      "parent_group_id": "grp_sj_l4_greeks",
+      "sort_order": 10,
+      "mass_kg": 7.9e+18,
+      "mu_km3_s2": 0.527,
+      "soi_radius_km": 22000.0,
+      "gravity_m_s2": 0.042,
+      "radius_km": 112.5,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 789200000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 86.1,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "agamemnon",
+      "name": "911 Agamemnon",
+      "group_id": "grp_agamemnon",
+      "wikipedia_title": "911 Agamemnon",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/911_Agamemnon",
+      "parent_group_id": "grp_sj_l4_greeks",
+      "sort_order": 20,
+      "mass_kg": 2.4e+18,
+      "mu_km3_s2": 0.16,
+      "soi_radius_km": 13000.0,
+      "gravity_m_s2": 0.023,
+      "radius_km": 83.5,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 771100000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 93.0,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "achilles",
+      "name": "588 Achilles",
+      "group_id": "grp_achilles",
+      "wikipedia_title": "588 Achilles",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/588_Achilles",
+      "parent_group_id": "grp_sj_l4_greeks",
+      "sort_order": 30,
+      "mass_kg": 1.3e+18,
+      "mu_km3_s2": 0.087,
+      "soi_radius_km": 11000.0,
+      "gravity_m_s2": 0.019,
+      "radius_km": 67.5,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 798700000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 95.8,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "diomedes",
+      "name": "1437 Diomedes",
+      "group_id": "grp_diomedes",
+      "wikipedia_title": "1437 Diomedes",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/1437_Diomedes",
+      "parent_group_id": "grp_sj_l4_greeks",
+      "sort_order": 40,
+      "mass_kg": 2.3e+18,
+      "mu_km3_s2": 0.154,
+      "soi_radius_km": 13000.0,
+      "gravity_m_s2": 0.023,
+      "radius_km": 82.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 763400000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 103.2,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "odysseus",
+      "name": "1143 Odysseus",
+      "group_id": "grp_odysseus",
+      "wikipedia_title": "1143 Odysseus",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/1143_Odysseus",
+      "parent_group_id": "grp_sj_l4_greeks",
+      "sort_order": 50,
+      "mass_kg": 1.0e+18,
+      "mu_km3_s2": 0.068,
+      "soi_radius_km": 10000.0,
+      "gravity_m_s2": 0.017,
+      "radius_km": 62.5,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 784200000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 107.6,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "patroclus",
+      "name": "617 Patroclus",
+      "group_id": "grp_patroclus",
+      "wikipedia_title": "617 Patroclus",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/617_Patroclus",
+      "parent_group_id": "grp_sj_l5_trojans",
+      "sort_order": 60,
+      "mass_kg": 1.38e+18,
+      "mu_km3_s2": 0.092,
+      "soi_radius_km": 11000.0,
+      "gravity_m_s2": 0.017,
+      "radius_km": 70.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 791100000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 331.4,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "mentor",
+      "name": "3451 Mentor",
+      "group_id": "grp_mentor",
+      "wikipedia_title": "3451 Mentor",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/3451_Mentor",
+      "parent_group_id": "grp_sj_l5_trojans",
+      "sort_order": 70,
+      "mass_kg": 3.1e+18,
+      "mu_km3_s2": 0.207,
+      "soi_radius_km": 14000.0,
+      "gravity_m_s2": 0.026,
+      "radius_km": 95.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 777900000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 338.9,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "paris",
+      "name": "3317 Paris",
+      "group_id": "grp_paris",
+      "wikipedia_title": "3317 Paris",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/3317_Paris",
+      "parent_group_id": "grp_sj_l5_trojans",
+      "sort_order": 80,
+      "mass_kg": 1.4e+18,
+      "mu_km3_s2": 0.093,
+      "soi_radius_km": 11000.0,
+      "gravity_m_s2": 0.018,
+      "radius_km": 75.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 803800000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 343.2,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "deiphobus",
+      "name": "1867 Deiphobus",
+      "group_id": "grp_deiphobus",
+      "wikipedia_title": "1867 Deiphobus",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/1867_Deiphobus",
+      "parent_group_id": "grp_sj_l5_trojans",
+      "sort_order": 90,
+      "mass_kg": 2.2e+18,
+      "mu_km3_s2": 0.147,
+      "soi_radius_km": 13000.0,
+      "gravity_m_s2": 0.022,
+      "radius_km": 86.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 769200000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 350.8,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
+    },
+    {
+      "id": "aeneas",
+      "name": "1172 Äneas",
+      "group_id": "grp_aeneas",
+      "wikipedia_title": "1172 Aneas",
+      "wikipedia_url": "https://en.wikipedia.org/wiki/1172_Aneas",
+      "parent_group_id": "grp_sj_l5_trojans",
+      "sort_order": 100,
+      "mass_kg": 4.5e+18,
+      "mu_km3_s2": 0.3,
+      "soi_radius_km": 15000.0,
+      "gravity_m_s2": 0.032,
+      "radius_km": 120.0,
+      "position": {
+        "type": "keplerian",
+        "center_body_id": "sun",
+        "a_km": 785100000.0,
+        "e": 0,
+        "i_deg": 0,
+        "Omega_deg": 0,
+        "omega_deg": 0,
+        "M0_deg": 355.3,
+        "epoch_jd": 2451544.5,
+        "period_s": 374335700.0
+      }
     }
   ],
   "groups": [
@@ -689,6 +950,188 @@
       "parent_id": "grp_callisto",
       "sort_order": 5,
       "anchor_body_id": "callisto"
+    },
+    {
+      "id": "grp_io_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_io",
+      "sort_order": 10,
+      "anchor_body_id": "io"
+    },
+    {
+      "id": "grp_europa_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_europa",
+      "sort_order": 10,
+      "anchor_body_id": "europa"
+    },
+    {
+      "id": "grp_ganymede_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_ganymede",
+      "sort_order": 10,
+      "anchor_body_id": "ganymede"
+    },
+    {
+      "id": "grp_callisto_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_callisto",
+      "sort_order": 10,
+      "anchor_body_id": "callisto"
+    },
+    {
+      "id": "grp_sj_l4_greeks",
+      "name": "L4 Greek Trojans",
+      "parent_id": "grp_jupiter_lpoints",
+      "sort_order": 45,
+      "anchor_body_id": "jupiter"
+    },
+    {
+      "id": "grp_hektor_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_hektor",
+      "sort_order": 10,
+      "anchor_body_id": "hektor"
+    },
+    {
+      "id": "grp_hektor_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_hektor",
+      "sort_order": 30,
+      "anchor_body_id": "hektor"
+    },
+    {
+      "id": "grp_agamemnon_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_agamemnon",
+      "sort_order": 10,
+      "anchor_body_id": "agamemnon"
+    },
+    {
+      "id": "grp_agamemnon_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_agamemnon",
+      "sort_order": 30,
+      "anchor_body_id": "agamemnon"
+    },
+    {
+      "id": "grp_achilles_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_achilles",
+      "sort_order": 10,
+      "anchor_body_id": "achilles"
+    },
+    {
+      "id": "grp_achilles_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_achilles",
+      "sort_order": 30,
+      "anchor_body_id": "achilles"
+    },
+    {
+      "id": "grp_diomedes_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_diomedes",
+      "sort_order": 10,
+      "anchor_body_id": "diomedes"
+    },
+    {
+      "id": "grp_diomedes_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_diomedes",
+      "sort_order": 30,
+      "anchor_body_id": "diomedes"
+    },
+    {
+      "id": "grp_odysseus_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_odysseus",
+      "sort_order": 10,
+      "anchor_body_id": "odysseus"
+    },
+    {
+      "id": "grp_odysseus_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_odysseus",
+      "sort_order": 30,
+      "anchor_body_id": "odysseus"
+    },
+    {
+      "id": "grp_sj_l5_trojans",
+      "name": "L5 Trojan Camp",
+      "parent_id": "grp_jupiter_lpoints",
+      "sort_order": 55,
+      "anchor_body_id": "jupiter"
+    },
+    {
+      "id": "grp_patroclus_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_patroclus",
+      "sort_order": 10,
+      "anchor_body_id": "patroclus"
+    },
+    {
+      "id": "grp_patroclus_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_patroclus",
+      "sort_order": 30,
+      "anchor_body_id": "patroclus"
+    },
+    {
+      "id": "grp_mentor_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_mentor",
+      "sort_order": 10,
+      "anchor_body_id": "mentor"
+    },
+    {
+      "id": "grp_mentor_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_mentor",
+      "sort_order": 30,
+      "anchor_body_id": "mentor"
+    },
+    {
+      "id": "grp_paris_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_paris",
+      "sort_order": 10,
+      "anchor_body_id": "paris"
+    },
+    {
+      "id": "grp_paris_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_paris",
+      "sort_order": 30,
+      "anchor_body_id": "paris"
+    },
+    {
+      "id": "grp_deiphobus_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_deiphobus",
+      "sort_order": 10,
+      "anchor_body_id": "deiphobus"
+    },
+    {
+      "id": "grp_deiphobus_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_deiphobus",
+      "sort_order": 30,
+      "anchor_body_id": "deiphobus"
+    },
+    {
+      "id": "grp_aeneas_orbits",
+      "name": "Orbits",
+      "parent_id": "grp_aeneas",
+      "sort_order": 10,
+      "anchor_body_id": "aeneas"
+    },
+    {
+      "id": "grp_aeneas_sites",
+      "name": "Surface Sites",
+      "parent_id": "grp_aeneas",
+      "sort_order": 30,
+      "anchor_body_id": "aeneas"
     }
   ],
   "orbit_nodes": [
@@ -1006,6 +1449,96 @@
       "body_id": "callisto",
       "radius_km": 8000.0,
       "angle_deg": 0.0
+    },
+    {
+      "id": "HEKTOR_LO",
+      "name": "Hektor Orbit",
+      "parent_id": "grp_hektor_orbits",
+      "sort_order": 10,
+      "body_id": "hektor",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "AGAMEMNON_LO",
+      "name": "Agamemnon Orbit",
+      "parent_id": "grp_agamemnon_orbits",
+      "sort_order": 10,
+      "body_id": "agamemnon",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "ACHILLES_LO",
+      "name": "Achilles Orbit",
+      "parent_id": "grp_achilles_orbits",
+      "sort_order": 10,
+      "body_id": "achilles",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "DIOMEDES_LO",
+      "name": "Diomedes Orbit",
+      "parent_id": "grp_diomedes_orbits",
+      "sort_order": 10,
+      "body_id": "diomedes",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "ODYSSEUS_LO",
+      "name": "Odysseus Orbit",
+      "parent_id": "grp_odysseus_orbits",
+      "sort_order": 10,
+      "body_id": "odysseus",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "PATROCLUS_LO",
+      "name": "Patroclus Orbit",
+      "parent_id": "grp_patroclus_orbits",
+      "sort_order": 10,
+      "body_id": "patroclus",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "MENTOR_LO",
+      "name": "Mentor Orbit",
+      "parent_id": "grp_mentor_orbits",
+      "sort_order": 10,
+      "body_id": "mentor",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "PARIS_LO",
+      "name": "Paris Orbit",
+      "parent_id": "grp_paris_orbits",
+      "sort_order": 10,
+      "body_id": "paris",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "DEIPHOBUS_LO",
+      "name": "Deiphobus Orbit",
+      "parent_id": "grp_deiphobus_orbits",
+      "sort_order": 10,
+      "body_id": "deiphobus",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
+    },
+    {
+      "id": "AENEAS_LO",
+      "name": "Äneas Orbit",
+      "parent_id": "grp_aeneas_orbits",
+      "sort_order": 10,
+      "body_id": "aeneas",
+      "radius_km": 20000.0,
+      "angle_deg": 0.0
     }
   ],
   "lagrange_systems": [
@@ -1148,6 +1681,76 @@
       "parent_id": "grp_jupiter_moons",
       "sort_order": 40,
       "body_id": "callisto"
+    },
+    {
+      "id": "HEKTOR",
+      "name": "624 Hektor",
+      "parent_id": "grp_sj_l4_greeks",
+      "sort_order": 10,
+      "body_id": "hektor"
+    },
+    {
+      "id": "AGAMEMNON",
+      "name": "911 Agamemnon",
+      "parent_id": "grp_sj_l4_greeks",
+      "sort_order": 20,
+      "body_id": "agamemnon"
+    },
+    {
+      "id": "ACHILLES",
+      "name": "588 Achilles",
+      "parent_id": "grp_sj_l4_greeks",
+      "sort_order": 30,
+      "body_id": "achilles"
+    },
+    {
+      "id": "DIOMEDES",
+      "name": "1437 Diomedes",
+      "parent_id": "grp_sj_l4_greeks",
+      "sort_order": 40,
+      "body_id": "diomedes"
+    },
+    {
+      "id": "ODYSSEUS",
+      "name": "1143 Odysseus",
+      "parent_id": "grp_sj_l4_greeks",
+      "sort_order": 50,
+      "body_id": "odysseus"
+    },
+    {
+      "id": "PATROCLUS",
+      "name": "617 Patroclus",
+      "parent_id": "grp_sj_l5_trojans",
+      "sort_order": 60,
+      "body_id": "patroclus"
+    },
+    {
+      "id": "MENTOR",
+      "name": "3451 Mentor",
+      "parent_id": "grp_sj_l5_trojans",
+      "sort_order": 70,
+      "body_id": "mentor"
+    },
+    {
+      "id": "PARIS",
+      "name": "3317 Paris",
+      "parent_id": "grp_sj_l5_trojans",
+      "sort_order": 80,
+      "body_id": "paris"
+    },
+    {
+      "id": "DEIPHOBUS",
+      "name": "1867 Deiphobus",
+      "parent_id": "grp_sj_l5_trojans",
+      "sort_order": 90,
+      "body_id": "deiphobus"
+    },
+    {
+      "id": "AENEAS",
+      "name": "1172 Äneas",
+      "parent_id": "grp_sj_l5_trojans",
+      "sort_order": 100,
+      "body_id": "aeneas"
     }
   ],
   "transfer_edges": [
@@ -2480,6 +3083,706 @@
       "dv_m_s": 24000,
       "tof_s": 23328000,
       "type": "local"
+    },
+    {
+      "from_id": "SJ_L4",
+      "to_id": "HEKTOR_LO",
+      "dv_m_s": 150,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "HEKTOR_LO",
+      "to_id": "SJ_L4",
+      "dv_m_s": 150,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L4",
+      "to_id": "AGAMEMNON_LO",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "AGAMEMNON_LO",
+      "to_id": "SJ_L4",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L4",
+      "to_id": "ACHILLES_LO",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "ACHILLES_LO",
+      "to_id": "SJ_L4",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L4",
+      "to_id": "DIOMEDES_LO",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "DIOMEDES_LO",
+      "to_id": "SJ_L4",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L4",
+      "to_id": "ODYSSEUS_LO",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "ODYSSEUS_LO",
+      "to_id": "SJ_L4",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "HEKTOR_LO",
+      "to_id": "HEKTOR",
+      "dv_m_s": 5,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR",
+      "to_id": "HEKTOR_LO",
+      "dv_m_s": 5,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR",
+      "to_id": "HEKTOR_THOLIN",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR_THOLIN",
+      "to_id": "HEKTOR",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR",
+      "to_id": "HEKTOR_SKAMANDRIOS",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR_SKAMANDRIOS",
+      "to_id": "HEKTOR",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR_THOLIN",
+      "to_id": "HEKTOR_SKAMANDRIOS",
+      "dv_m_s": 5,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "HEKTOR_SKAMANDRIOS",
+      "to_id": "HEKTOR_THOLIN",
+      "dv_m_s": 5,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON_LO",
+      "to_id": "AGAMEMNON",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON",
+      "to_id": "AGAMEMNON_LO",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES_LO",
+      "to_id": "ACHILLES",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES",
+      "to_id": "ACHILLES_LO",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES_LO",
+      "to_id": "DIOMEDES",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES",
+      "to_id": "DIOMEDES_LO",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS_LO",
+      "to_id": "ODYSSEUS",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS",
+      "to_id": "ODYSSEUS_LO",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON",
+      "to_id": "AGAMEMNON_MYCENAE",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON_MYCENAE",
+      "to_id": "AGAMEMNON",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON",
+      "to_id": "AGAMEMNON_AULIS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON_AULIS",
+      "to_id": "AGAMEMNON",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON_MYCENAE",
+      "to_id": "AGAMEMNON_AULIS",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "AGAMEMNON_AULIS",
+      "to_id": "AGAMEMNON_MYCENAE",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES",
+      "to_id": "ACHILLES_PELEUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES_PELEUS",
+      "to_id": "ACHILLES",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES",
+      "to_id": "ACHILLES_STYX",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES_STYX",
+      "to_id": "ACHILLES",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES_PELEUS",
+      "to_id": "ACHILLES_STYX",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "ACHILLES_STYX",
+      "to_id": "ACHILLES_PELEUS",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES",
+      "to_id": "DIOMEDES_ARGOS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES_ARGOS",
+      "to_id": "DIOMEDES",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES",
+      "to_id": "DIOMEDES_AETOLIAN",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES_AETOLIAN",
+      "to_id": "DIOMEDES",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES_ARGOS",
+      "to_id": "DIOMEDES_AETOLIAN",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "DIOMEDES_AETOLIAN",
+      "to_id": "DIOMEDES_ARGOS",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS",
+      "to_id": "ODYSSEUS_ITHACA",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS_ITHACA",
+      "to_id": "ODYSSEUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS",
+      "to_id": "ODYSSEUS_CYCLOPS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS_CYCLOPS",
+      "to_id": "ODYSSEUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS_ITHACA",
+      "to_id": "ODYSSEUS_CYCLOPS",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "ODYSSEUS_CYCLOPS",
+      "to_id": "ODYSSEUS_ITHACA",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "SJ_L5",
+      "to_id": "PATROCLUS_LO",
+      "dv_m_s": 150,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "PATROCLUS_LO",
+      "to_id": "SJ_L5",
+      "dv_m_s": 150,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L5",
+      "to_id": "MENTOR_LO",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "MENTOR_LO",
+      "to_id": "SJ_L5",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L5",
+      "to_id": "PARIS_LO",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "PARIS_LO",
+      "to_id": "SJ_L5",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L5",
+      "to_id": "DEIPHOBUS_LO",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "DEIPHOBUS_LO",
+      "to_id": "SJ_L5",
+      "dv_m_s": 200,
+      "tof_s": 86400,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "SJ_L5",
+      "to_id": "AENEAS_LO",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "AENEAS_LO",
+      "to_id": "SJ_L5",
+      "dv_m_s": 250,
+      "tof_s": 172800,
+      "type": "lagrange"
+    },
+    {
+      "from_id": "PATROCLUS_LO",
+      "to_id": "PATROCLUS",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS",
+      "to_id": "PATROCLUS_LO",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR_LO",
+      "to_id": "MENTOR",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR",
+      "to_id": "MENTOR_LO",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS_LO",
+      "to_id": "PARIS",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS",
+      "to_id": "PARIS_LO",
+      "dv_m_s": 3,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS_LO",
+      "to_id": "DEIPHOBUS",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS",
+      "to_id": "DEIPHOBUS_LO",
+      "dv_m_s": 4,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS_LO",
+      "to_id": "AENEAS",
+      "dv_m_s": 5,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS",
+      "to_id": "AENEAS_LO",
+      "dv_m_s": 5,
+      "tof_s": 300,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS",
+      "to_id": "PATROCLUS_MENOETIUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS_MENOETIUS",
+      "to_id": "PATROCLUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS",
+      "to_id": "PATROCLUS_RUBBLE_NECK",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS_RUBBLE_NECK",
+      "to_id": "PATROCLUS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS_MENOETIUS",
+      "to_id": "PATROCLUS_RUBBLE_NECK",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "PATROCLUS_RUBBLE_NECK",
+      "to_id": "PATROCLUS_MENOETIUS",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR",
+      "to_id": "MENTOR_X_PLAINS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR_X_PLAINS",
+      "to_id": "MENTOR",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR",
+      "to_id": "MENTOR_SARPEDON_SCARP",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR_SARPEDON_SCARP",
+      "to_id": "MENTOR",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR_X_PLAINS",
+      "to_id": "MENTOR_SARPEDON_SCARP",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "MENTOR_SARPEDON_SCARP",
+      "to_id": "MENTOR_X_PLAINS",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS",
+      "to_id": "PARIS_DARK_MARE",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS_DARK_MARE",
+      "to_id": "PARIS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS",
+      "to_id": "PARIS_DISCORD_CRATER",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS_DISCORD_CRATER",
+      "to_id": "PARIS",
+      "dv_m_s": 3,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS_DARK_MARE",
+      "to_id": "PARIS_DISCORD_CRATER",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "PARIS_DISCORD_CRATER",
+      "to_id": "PARIS_DARK_MARE",
+      "dv_m_s": 3,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS",
+      "to_id": "DEIPHOBUS_DUNEFIELDS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS_DUNEFIELDS",
+      "to_id": "DEIPHOBUS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS",
+      "to_id": "DEIPHOBUS_ENNOMOS_SCAR",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS_ENNOMOS_SCAR",
+      "to_id": "DEIPHOBUS",
+      "dv_m_s": 4,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS_DUNEFIELDS",
+      "to_id": "DEIPHOBUS_ENNOMOS_SCAR",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "DEIPHOBUS_ENNOMOS_SCAR",
+      "to_id": "DEIPHOBUS_DUNEFIELDS",
+      "dv_m_s": 4,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS",
+      "to_id": "AENEAS_REGOLITH_SEA",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS_REGOLITH_SEA",
+      "to_id": "AENEAS",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS",
+      "to_id": "AENEAS_ANCHISES_TRENCH",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS_ANCHISES_TRENCH",
+      "to_id": "AENEAS",
+      "dv_m_s": 5,
+      "tof_s": 600,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS_REGOLITH_SEA",
+      "to_id": "AENEAS_ANCHISES_TRENCH",
+      "dv_m_s": 5,
+      "tof_s": 400,
+      "type": "local"
+    },
+    {
+      "from_id": "AENEAS_ANCHISES_TRENCH",
+      "to_id": "AENEAS_REGOLITH_SEA",
+      "dv_m_s": 5,
+      "tof_s": 400,
+      "type": "local"
     }
   ],
   "surface_sites": [
@@ -3313,6 +4616,1186 @@
         "nitrogen_volatiles": 0.02,
         "sulfur_compounds": 0.03,
         "strategic_elements": 0.03
+      }
+    },
+    {
+      "id": "HEKTOR_THOLIN",
+      "name": "Tholin Mantle Plains",
+      "body_id": "hektor",
+      "orbit_node_id": "HEKTOR",
+      "parent_group_id": "grp_hektor_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 5,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6584,
+        "iron_oxides": 0.055,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.004,
+        "water_ice": 0.008,
+        "carbon_volatiles": 0.18,
+        "nitrogen_volatiles": 0.0035,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0008,
+        "strategic_elements": 0.005
+      }
+    },
+    {
+      "id": "HEKTOR_SKAMANDRIOS",
+      "name": "Skamandrios Ejecta Apron",
+      "body_id": "hektor",
+      "orbit_node_id": "HEKTOR",
+      "parent_group_id": "grp_hektor_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 5,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6205,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.004,
+        "water_ice": 0.065,
+        "carbon_volatiles": 0.155,
+        "nitrogen_volatiles": 0.008,
+        "sulfur_compounds": 0.017,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0022,
+        "strategic_elements": 0.009
+      }
+    },
+    {
+      "id": "AGAMEMNON_MYCENAE",
+      "name": "Mycenae Dark Plains",
+      "body_id": "agamemnon",
+      "orbit_node_id": "AGAMEMNON",
+      "parent_group_id": "grp_agamemnon_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6803,
+        "iron_oxides": 0.065,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.007,
+        "water_ice": 0.012,
+        "carbon_volatiles": 0.15,
+        "nitrogen_volatiles": 0.0025,
+        "sulfur_compounds": 0.012,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.001,
+        "strategic_elements": 0.005
+      }
+    },
+    {
+      "id": "AGAMEMNON_AULIS",
+      "name": "Aulis Basin Floor",
+      "body_id": "agamemnon",
+      "orbit_node_id": "AGAMEMNON",
+      "parent_group_id": "grp_agamemnon_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6457,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.007,
+        "water_ice": 0.05,
+        "carbon_volatiles": 0.13,
+        "nitrogen_volatiles": 0.006,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0018,
+        "strategic_elements": 0.008
+      }
+    },
+    {
+      "id": "ACHILLES_PELEUS",
+      "name": "Peleus Regolith Sea",
+      "body_id": "achilles",
+      "orbit_node_id": "ACHILLES",
+      "parent_group_id": "grp_achilles_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6939,
+        "iron_oxides": 0.065,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.008,
+        "water_ice": 0.009,
+        "carbon_volatiles": 0.14,
+        "nitrogen_volatiles": 0.0025,
+        "sulfur_compounds": 0.013,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0008,
+        "strategic_elements": 0.005
+      }
+    },
+    {
+      "id": "ACHILLES_STYX",
+      "name": "Styx Sulfide Rubble",
+      "body_id": "achilles",
+      "orbit_node_id": "ACHILLES",
+      "parent_group_id": "grp_achilles_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6637,
+        "iron_oxides": 0.085,
+        "aluminum_oxides": 0.035,
+        "magnesium_oxides": 0.035,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.012,
+        "water_ice": 0.015,
+        "carbon_volatiles": 0.125,
+        "nitrogen_volatiles": 0.003,
+        "sulfur_compounds": 0.022,
+        "precious_rare_metals": 0.0014,
+        "radioactives": 0.0006,
+        "deuterium": 0.0007,
+        "strategic_elements": 0.002
+      }
+    },
+    {
+      "id": "DIOMEDES_ARGOS",
+      "name": "Argos Driftplain",
+      "body_id": "diomedes",
+      "orbit_node_id": "DIOMEDES",
+      "parent_group_id": "grp_diomedes_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.7177,
+        "iron_oxides": 0.075,
+        "aluminum_oxides": 0.035,
+        "magnesium_oxides": 0.035,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.006,
+        "water_ice": 0.015,
+        "carbon_volatiles": 0.09,
+        "nitrogen_volatiles": 0.002,
+        "sulfur_compounds": 0.014,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0008,
+        "strategic_elements": 0.0035
+      }
+    },
+    {
+      "id": "DIOMEDES_AETOLIAN",
+      "name": "Aetolian Fresh Scarp",
+      "body_id": "diomedes",
+      "orbit_node_id": "DIOMEDES",
+      "parent_group_id": "grp_diomedes_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.681,
+        "iron_oxides": 0.07,
+        "aluminum_oxides": 0.035,
+        "magnesium_oxides": 0.035,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.045,
+        "carbon_volatiles": 0.09,
+        "nitrogen_volatiles": 0.004,
+        "sulfur_compounds": 0.018,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0014,
+        "strategic_elements": 0.006
+      }
+    },
+    {
+      "id": "ODYSSEUS_ITHACA",
+      "name": "Ithaca Dark Regolith",
+      "body_id": "odysseus",
+      "orbit_node_id": "ODYSSEUS",
+      "parent_group_id": "grp_odysseus_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6674,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.009,
+        "carbon_volatiles": 0.17,
+        "nitrogen_volatiles": 0.0035,
+        "sulfur_compounds": 0.014,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0009,
+        "strategic_elements": 0.0045
+      }
+    },
+    {
+      "id": "ODYSSEUS_CYCLOPS",
+      "name": "Cyclops Crater Ejecta",
+      "body_id": "odysseus",
+      "orbit_node_id": "ODYSSEUS",
+      "parent_group_id": "grp_odysseus_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6375,
+        "iron_oxides": 0.055,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.055,
+        "carbon_volatiles": 0.15,
+        "nitrogen_volatiles": 0.007,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.002,
+        "strategic_elements": 0.008
+      }
+    },
+    {
+      "id": "PATROCLUS_MENOETIUS",
+      "name": "Menoetius Lag Plain",
+      "body_id": "patroclus",
+      "orbit_node_id": "PATROCLUS",
+      "parent_group_id": "grp_patroclus_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.635,
+        "iron_oxides": 0.055,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.025,
+        "carbon_volatiles": 0.18,
+        "nitrogen_volatiles": 0.004,
+        "sulfur_compounds": 0.015,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0012,
+        "strategic_elements": 0.0105
+      }
+    },
+    {
+      "id": "PATROCLUS_RUBBLE_NECK",
+      "name": "Rubble-Neck Ejecta",
+      "body_id": "patroclus",
+      "orbit_node_id": "PATROCLUS",
+      "parent_group_id": "grp_patroclus_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.604,
+        "iron_oxides": 0.05,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.085,
+        "carbon_volatiles": 0.15,
+        "nitrogen_volatiles": 0.008,
+        "sulfur_compounds": 0.017,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0025,
+        "strategic_elements": 0.0092
+      }
+    },
+    {
+      "id": "MENTOR_X_PLAINS",
+      "name": "Mentor X-Plains",
+      "body_id": "mentor",
+      "orbit_node_id": "MENTOR",
+      "parent_group_id": "grp_mentor_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.72,
+        "iron_oxides": 0.065,
+        "aluminum_oxides": 0.035,
+        "magnesium_oxides": 0.035,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.009,
+        "water_ice": 0.012,
+        "carbon_volatiles": 0.085,
+        "nitrogen_volatiles": 0.0025,
+        "sulfur_compounds": 0.014,
+        "precious_rare_metals": 0.001,
+        "radioactives": 0.0005,
+        "deuterium": 0.0008,
+        "strategic_elements": 0.0102
+      }
+    },
+    {
+      "id": "MENTOR_SARPEDON_SCARP",
+      "name": "Sarpedon Scarp",
+      "body_id": "mentor",
+      "orbit_node_id": "MENTOR",
+      "parent_group_id": "grp_mentor_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.698,
+        "iron_oxides": 0.062,
+        "aluminum_oxides": 0.035,
+        "magnesium_oxides": 0.035,
+        "titanium_oxides": 0.01,
+        "metallic_alloys_native_metal": 0.009,
+        "water_ice": 0.04,
+        "carbon_volatiles": 0.08,
+        "nitrogen_volatiles": 0.005,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.001,
+        "radioactives": 0.0005,
+        "deuterium": 0.0015,
+        "strategic_elements": 0.007
+      }
+    },
+    {
+      "id": "PARIS_DARK_MARE",
+      "name": "Paridian Dark Mare",
+      "body_id": "paris",
+      "orbit_node_id": "PARIS",
+      "parent_group_id": "grp_paris_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.665,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.006,
+        "water_ice": 0.01,
+        "carbon_volatiles": 0.165,
+        "nitrogen_volatiles": 0.0035,
+        "sulfur_compounds": 0.015,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.001,
+        "strategic_elements": 0.0052
+      }
+    },
+    {
+      "id": "PARIS_DISCORD_CRATER",
+      "name": "Discord Crater",
+      "body_id": "paris",
+      "orbit_node_id": "PARIS",
+      "parent_group_id": "grp_paris_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 3,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6417,
+        "iron_oxides": 0.055,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.006,
+        "water_ice": 0.05,
+        "carbon_volatiles": 0.145,
+        "nitrogen_volatiles": 0.007,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.002,
+        "strategic_elements": 0.008
+      }
+    },
+    {
+      "id": "DEIPHOBUS_DUNEFIELDS",
+      "name": "Deiphobian Dunefields",
+      "body_id": "deiphobus",
+      "orbit_node_id": "DEIPHOBUS",
+      "parent_group_id": "grp_deiphobus_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6737,
+        "iron_oxides": 0.065,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.006,
+        "water_ice": 0.012,
+        "carbon_volatiles": 0.15,
+        "nitrogen_volatiles": 0.003,
+        "sulfur_compounds": 0.015,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.001,
+        "strategic_elements": 0.005
+      }
+    },
+    {
+      "id": "DEIPHOBUS_ENNOMOS_SCAR",
+      "name": "Ennomos-Clan Scar",
+      "body_id": "deiphobus",
+      "orbit_node_id": "DEIPHOBUS",
+      "parent_group_id": "grp_deiphobus_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 4,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6514,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.006,
+        "water_ice": 0.045,
+        "carbon_volatiles": 0.135,
+        "nitrogen_volatiles": 0.0055,
+        "sulfur_compounds": 0.018,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0018,
+        "strategic_elements": 0.008
+      }
+    },
+    {
+      "id": "AENEAS_REGOLITH_SEA",
+      "name": "Aenean Regolith Sea",
+      "body_id": "aeneas",
+      "orbit_node_id": "AENEAS",
+      "parent_group_id": "grp_aeneas_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 5,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.6872,
+        "iron_oxides": 0.065,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.015,
+        "carbon_volatiles": 0.135,
+        "nitrogen_volatiles": 0.003,
+        "sulfur_compounds": 0.014,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.001,
+        "strategic_elements": 0.0055
+      }
+    },
+    {
+      "id": "AENEAS_ANCHISES_TRENCH",
+      "name": "Anchises Trench",
+      "body_id": "aeneas",
+      "orbit_node_id": "AENEAS",
+      "parent_group_id": "grp_aeneas_sites",
+      "sort_order": 20,
+      "angle_deg": 180,
+      "landing_dv_m_s": 5,
+      "landing_tof_s": 600,
+      "resource_distribution": {
+        "silicate_rock": 0.647,
+        "iron_oxides": 0.06,
+        "aluminum_oxides": 0.03,
+        "magnesium_oxides": 0.03,
+        "titanium_oxides": 0.008,
+        "metallic_alloys_native_metal": 0.005,
+        "water_ice": 0.06,
+        "carbon_volatiles": 0.125,
+        "nitrogen_volatiles": 0.0065,
+        "sulfur_compounds": 0.016,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0022,
+        "strategic_elements": 0.009
+      }
+    },
+
+    {
+      "id": "EUROPA_CONAMARA",
+      "name": "Conamara Chaos",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0700,
+        "iron_oxides": 0.0060,
+        "aluminum_oxides": 0.0040,
+        "magnesium_oxides": 0.0070,
+        "titanium_oxides": 0.0010,
+        "metallic_alloys_native_metal": 0.0020,
+        "water_ice": 0.7800,
+        "carbon_volatiles": 0.0400,
+        "nitrogen_volatiles": 0.0030,
+        "sulfur_compounds": 0.0600,
+        "precious_rare_metals": 0.0005,
+        "radioactives": 0.0003,
+        "deuterium": 0.0012,
+        "strategic_elements": 0.0250
+      }
+    },
+    {
+      "id": "EUROPA_THERA_THRACE",
+      "name": "Thera & Thrace Macula",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 20,
+      "angle_deg": 60,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0800,
+        "iron_oxides": 0.0050,
+        "aluminum_oxides": 0.0040,
+        "magnesium_oxides": 0.0080,
+        "titanium_oxides": 0.0010,
+        "metallic_alloys_native_metal": 0.0020,
+        "water_ice": 0.7400,
+        "carbon_volatiles": 0.0600,
+        "nitrogen_volatiles": 0.0040,
+        "sulfur_compounds": 0.0700,
+        "precious_rare_metals": 0.0005,
+        "radioactives": 0.0003,
+        "deuterium": 0.0017,
+        "strategic_elements": 0.0235
+      }
+    },
+    {
+      "id": "EUROPA_TARA",
+      "name": "Tara Regio",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 30,
+      "angle_deg": 120,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0900,
+        "iron_oxides": 0.0060,
+        "aluminum_oxides": 0.0050,
+        "magnesium_oxides": 0.0090,
+        "titanium_oxides": 0.0010,
+        "metallic_alloys_native_metal": 0.0025,
+        "water_ice": 0.7500,
+        "carbon_volatiles": 0.0500,
+        "nitrogen_volatiles": 0.0035,
+        "sulfur_compounds": 0.0600,
+        "precious_rare_metals": 0.0005,
+        "radioactives": 0.0003,
+        "deuterium": 0.0012,
+        "strategic_elements": 0.0210
+      }
+    },
+    {
+      "id": "EUROPA_AGENOR",
+      "name": "Agenor Linea",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 40,
+      "angle_deg": 180,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0600,
+        "iron_oxides": 0.0040,
+        "aluminum_oxides": 0.0030,
+        "magnesium_oxides": 0.0040,
+        "titanium_oxides": 0.0005,
+        "metallic_alloys_native_metal": 0.0015,
+        "water_ice": 0.8570,
+        "carbon_volatiles": 0.0200,
+        "nitrogen_volatiles": 0.0020,
+        "sulfur_compounds": 0.0300,
+        "precious_rare_metals": 0.0003,
+        "radioactives": 0.0002,
+        "deuterium": 0.0015,
+        "strategic_elements": 0.0160
+      }
+    },
+    {
+      "id": "EUROPA_PWYLL",
+      "name": "Pwyll Crater Rays",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 50,
+      "angle_deg": 240,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0500,
+        "iron_oxides": 0.0035,
+        "aluminum_oxides": 0.0025,
+        "magnesium_oxides": 0.0035,
+        "titanium_oxides": 0.0005,
+        "metallic_alloys_native_metal": 0.0012,
+        "water_ice": 0.8850,
+        "carbon_volatiles": 0.0150,
+        "nitrogen_volatiles": 0.0015,
+        "sulfur_compounds": 0.0250,
+        "precious_rare_metals": 0.0003,
+        "radioactives": 0.0002,
+        "deuterium": 0.0028,
+        "strategic_elements": 0.0090
+      }
+    },
+    {
+      "id": "EUROPA_ANNWN",
+      "name": "Annwn Regio",
+      "body_id": "europa",
+      "orbit_node_id": "EUROPA_LO",
+      "parent_group_id": "grp_europa_sites",
+      "sort_order": 60,
+      "angle_deg": 300,
+      "landing_dv_m_s": 1350,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.0650,
+        "iron_oxides": 0.0050,
+        "aluminum_oxides": 0.0040,
+        "magnesium_oxides": 0.0060,
+        "titanium_oxides": 0.0008,
+        "metallic_alloys_native_metal": 0.0018,
+        "water_ice": 0.8000,
+        "carbon_volatiles": 0.0350,
+        "nitrogen_volatiles": 0.0025,
+        "sulfur_compounds": 0.0550,
+        "precious_rare_metals": 0.0004,
+        "radioactives": 0.0003,
+        "deuterium": 0.0025,
+        "strategic_elements": 0.0217
+      }
+    },
+
+    {
+      "id": "IO_LOKI",
+      "name": "Loki Patera",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.7120,
+        "iron_oxides": 0.0650,
+        "aluminum_oxides": 0.0400,
+        "magnesium_oxides": 0.0400,
+        "titanium_oxides": 0.0150,
+        "metallic_alloys_native_metal": 0.0150,
+        "carbon_volatiles": 0.0150,
+        "nitrogen_volatiles": 0.0005,
+        "sulfur_compounds": 0.0850,
+        "precious_rare_metals": 0.0015,
+        "radioactives": 0.0010,
+        "strategic_elements": 0.0100
+      }
+    },
+    {
+      "id": "IO_PELE",
+      "name": "Pele",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 20,
+      "angle_deg": 60,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.4725,
+        "iron_oxides": 0.0500,
+        "aluminum_oxides": 0.0300,
+        "magnesium_oxides": 0.0300,
+        "titanium_oxides": 0.0100,
+        "metallic_alloys_native_metal": 0.0100,
+        "carbon_volatiles": 0.0150,
+        "nitrogen_volatiles": 0.0010,
+        "sulfur_compounds": 0.3500,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0005,
+        "strategic_elements": 0.0300
+      }
+    },
+    {
+      "id": "IO_PROMETHEUS",
+      "name": "Prometheus",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 30,
+      "angle_deg": 120,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.5635,
+        "iron_oxides": 0.0600,
+        "aluminum_oxides": 0.0350,
+        "magnesium_oxides": 0.0350,
+        "titanium_oxides": 0.0120,
+        "metallic_alloys_native_metal": 0.0100,
+        "carbon_volatiles": 0.0120,
+        "nitrogen_volatiles": 0.0008,
+        "sulfur_compounds": 0.2500,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0007,
+        "strategic_elements": 0.0200
+      }
+    },
+    {
+      "id": "IO_TVASHTAR",
+      "name": "Tvashtar",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 40,
+      "angle_deg": 180,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.6705,
+        "iron_oxides": 0.0700,
+        "aluminum_oxides": 0.0400,
+        "magnesium_oxides": 0.0400,
+        "titanium_oxides": 0.0150,
+        "metallic_alloys_native_metal": 0.0150,
+        "carbon_volatiles": 0.0120,
+        "nitrogen_volatiles": 0.0005,
+        "sulfur_compounds": 0.1200,
+        "precious_rare_metals": 0.0012,
+        "radioactives": 0.0008,
+        "strategic_elements": 0.0150
+      }
+    },
+    {
+      "id": "IO_AMIRANI",
+      "name": "Amirani Flow Field",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 50,
+      "angle_deg": 240,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.7225,
+        "iron_oxides": 0.0700,
+        "aluminum_oxides": 0.0400,
+        "magnesium_oxides": 0.0400,
+        "titanium_oxides": 0.0150,
+        "metallic_alloys_native_metal": 0.0150,
+        "carbon_volatiles": 0.0100,
+        "nitrogen_volatiles": 0.0005,
+        "sulfur_compounds": 0.0700,
+        "precious_rare_metals": 0.0012,
+        "radioactives": 0.0008,
+        "strategic_elements": 0.0150
+      }
+    },
+    {
+      "id": "IO_SO2_PLAINS",
+      "name": "SO2 Frost Plains",
+      "body_id": "io",
+      "orbit_node_id": "IO_LO",
+      "parent_group_id": "grp_io_sites",
+      "sort_order": 60,
+      "angle_deg": 300,
+      "landing_dv_m_s": 1850,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3320,
+        "iron_oxides": 0.0400,
+        "aluminum_oxides": 0.0250,
+        "magnesium_oxides": 0.0250,
+        "titanium_oxides": 0.0080,
+        "metallic_alloys_native_metal": 0.0080,
+        "carbon_volatiles": 0.0100,
+        "nitrogen_volatiles": 0.0010,
+        "sulfur_compounds": 0.4500,
+        "precious_rare_metals": 0.0005,
+        "radioactives": 0.0005,
+        "strategic_elements": 0.1000
+      }
+    },
+
+    {
+      "id": "GANYMEDE_URUK",
+      "name": "Uruk Sulcus",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3000,
+        "iron_oxides": 0.0300,
+        "aluminum_oxides": 0.0180,
+        "magnesium_oxides": 0.0180,
+        "titanium_oxides": 0.0050,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.5540,
+        "carbon_volatiles": 0.0250,
+        "nitrogen_volatiles": 0.0030,
+        "sulfur_compounds": 0.0100,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0017,
+        "strategic_elements": 0.0280
+      }
+    },
+    {
+      "id": "GANYMEDE_GALILEO",
+      "name": "Galileo Regio",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 20,
+      "angle_deg": 60,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3986,
+        "iron_oxides": 0.0320,
+        "aluminum_oxides": 0.0180,
+        "magnesium_oxides": 0.0180,
+        "titanium_oxides": 0.0050,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.3800,
+        "carbon_volatiles": 0.0970,
+        "nitrogen_volatiles": 0.0060,
+        "sulfur_compounds": 0.0150,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0006,
+        "deuterium": 0.0008,
+        "strategic_elements": 0.0220
+      }
+    },
+    {
+      "id": "GANYMEDE_NIPPUR",
+      "name": "Nippur Sulcus / Epigeus",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 30,
+      "angle_deg": 120,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3340,
+        "iron_oxides": 0.0350,
+        "aluminum_oxides": 0.0200,
+        "magnesium_oxides": 0.0200,
+        "titanium_oxides": 0.0060,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.5000,
+        "carbon_volatiles": 0.0400,
+        "nitrogen_volatiles": 0.0040,
+        "sulfur_compounds": 0.0120,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0017,
+        "strategic_elements": 0.0200
+      }
+    },
+    {
+      "id": "GANYMEDE_GILGAMESH",
+      "name": "Gilgamesh Basin",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 40,
+      "angle_deg": 180,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3660,
+        "iron_oxides": 0.0380,
+        "aluminum_oxides": 0.0210,
+        "magnesium_oxides": 0.0210,
+        "titanium_oxides": 0.0060,
+        "metallic_alloys_native_metal": 0.0070,
+        "water_ice": 0.4500,
+        "carbon_volatiles": 0.0500,
+        "nitrogen_volatiles": 0.0040,
+        "sulfur_compounds": 0.0120,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0006,
+        "deuterium": 0.0014,
+        "strategic_elements": 0.0220
+      }
+    },
+    {
+      "id": "GANYMEDE_NORTH_POLAR",
+      "name": "North Polar Frost Cap",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 50,
+      "angle_deg": 240,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.2000,
+        "iron_oxides": 0.0200,
+        "aluminum_oxides": 0.0120,
+        "magnesium_oxides": 0.0120,
+        "titanium_oxides": 0.0030,
+        "metallic_alloys_native_metal": 0.0040,
+        "water_ice": 0.6900,
+        "carbon_volatiles": 0.0202,
+        "nitrogen_volatiles": 0.0040,
+        "sulfur_compounds": 0.0080,
+        "precious_rare_metals": 0.0005,
+        "radioactives": 0.0003,
+        "deuterium": 0.0020,
+        "strategic_elements": 0.0240
+      }
+    },
+    {
+      "id": "GANYMEDE_KITTU",
+      "name": "Kittu Dark-Ray Crater",
+      "body_id": "ganymede",
+      "orbit_node_id": "GANYMEDE_LO",
+      "parent_group_id": "grp_ganymede_sites",
+      "sort_order": 60,
+      "angle_deg": 300,
+      "landing_dv_m_s": 1500,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3350,
+        "iron_oxides": 0.0320,
+        "aluminum_oxides": 0.0180,
+        "magnesium_oxides": 0.0180,
+        "titanium_oxides": 0.0050,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.5200,
+        "carbon_volatiles": 0.0300,
+        "nitrogen_volatiles": 0.0030,
+        "sulfur_compounds": 0.0100,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0017,
+        "strategic_elements": 0.0200
+      }
+    },
+
+    {
+      "id": "CALLISTO_VALHALLA",
+      "name": "Valhalla Basin",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 10,
+      "angle_deg": 0,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.4190,
+        "iron_oxides": 0.0250,
+        "aluminum_oxides": 0.0130,
+        "magnesium_oxides": 0.0130,
+        "titanium_oxides": 0.0035,
+        "metallic_alloys_native_metal": 0.0050,
+        "water_ice": 0.4000,
+        "carbon_volatiles": 0.0700,
+        "nitrogen_volatiles": 0.0060,
+        "sulfur_compounds": 0.0120,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0006,
+        "deuterium": 0.0019,
+        "strategic_elements": 0.0300
+      }
+    },
+    {
+      "id": "CALLISTO_ASGARD",
+      "name": "Asgard Basin",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 20,
+      "angle_deg": 60,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.4395,
+        "iron_oxides": 0.0280,
+        "aluminum_oxides": 0.0140,
+        "magnesium_oxides": 0.0140,
+        "titanium_oxides": 0.0035,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.3500,
+        "carbon_volatiles": 0.0900,
+        "nitrogen_volatiles": 0.0070,
+        "sulfur_compounds": 0.0120,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0006,
+        "deuterium": 0.0024,
+        "strategic_elements": 0.0320
+      }
+    },
+    {
+      "id": "CALLISTO_BURR",
+      "name": "Burr Ray Crater",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 30,
+      "angle_deg": 120,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3400,
+        "iron_oxides": 0.0260,
+        "aluminum_oxides": 0.0130,
+        "magnesium_oxides": 0.0130,
+        "titanium_oxides": 0.0030,
+        "metallic_alloys_native_metal": 0.0050,
+        "water_ice": 0.5067,
+        "carbon_volatiles": 0.0500,
+        "nitrogen_volatiles": 0.0050,
+        "sulfur_compounds": 0.0100,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0020,
+        "strategic_elements": 0.0250
+      }
+    },
+    {
+      "id": "CALLISTO_CRATERED_PLAINS",
+      "name": "Ancient Cratered Plains",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 40,
+      "angle_deg": 180,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.4700,
+        "iron_oxides": 0.0300,
+        "aluminum_oxides": 0.0160,
+        "magnesium_oxides": 0.0160,
+        "titanium_oxides": 0.0040,
+        "metallic_alloys_native_metal": 0.0060,
+        "water_ice": 0.3000,
+        "carbon_volatiles": 0.1096,
+        "nitrogen_volatiles": 0.0080,
+        "sulfur_compounds": 0.0100,
+        "precious_rare_metals": 0.0012,
+        "radioactives": 0.0007,
+        "deuterium": 0.0005,
+        "strategic_elements": 0.0280
+      }
+    },
+    {
+      "id": "CALLISTO_CO2_TRAPS",
+      "name": "CO2-Rich Cold Traps",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 50,
+      "angle_deg": 240,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.3600,
+        "iron_oxides": 0.0230,
+        "aluminum_oxides": 0.0120,
+        "magnesium_oxides": 0.0120,
+        "titanium_oxides": 0.0030,
+        "metallic_alloys_native_metal": 0.0040,
+        "water_ice": 0.3695,
+        "carbon_volatiles": 0.1500,
+        "nitrogen_volatiles": 0.0120,
+        "sulfur_compounds": 0.0110,
+        "precious_rare_metals": 0.0008,
+        "radioactives": 0.0005,
+        "deuterium": 0.0022,
+        "strategic_elements": 0.0400
+      }
+    },
+    {
+      "id": "CALLISTO_SUBLIMATION",
+      "name": "Sublimation Pits & Dome Craters",
+      "body_id": "callisto",
+      "orbit_node_id": "CALLISTO_LO",
+      "parent_group_id": "grp_callisto_sites",
+      "sort_order": 60,
+      "angle_deg": 300,
+      "landing_dv_m_s": 1250,
+      "landing_tof_s": 3600,
+      "resource_distribution": {
+        "silicate_rock": 0.4200,
+        "iron_oxides": 0.0260,
+        "aluminum_oxides": 0.0130,
+        "magnesium_oxides": 0.0130,
+        "titanium_oxides": 0.0035,
+        "metallic_alloys_native_metal": 0.0050,
+        "water_ice": 0.3854,
+        "carbon_volatiles": 0.0800,
+        "nitrogen_volatiles": 0.0070,
+        "sulfur_compounds": 0.0110,
+        "precious_rare_metals": 0.0010,
+        "radioactives": 0.0006,
+        "deuterium": 0.0025,
+        "strategic_elements": 0.0320
       }
     }
   ]
