@@ -15,10 +15,6 @@
     {
       "item_id": "sulfur_compounds",
       "qty": 0.1
-    },
-    {
-      "item_id": "metallic_alloys_native_metal",
-      "qty": 0.05
     }
   ],
   "build_time_s": 900,
