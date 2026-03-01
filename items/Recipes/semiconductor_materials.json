@@ -13,7 +13,7 @@
       "qty": 0.27
     }
   ],
-  "build_time_s": 1500,
+  "build_time_s": 800,
   "facility_type": "factory",
   "refinery_category": "lithic_processing",
   "min_tech_tier": 2,
