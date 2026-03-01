@@ -103,10 +103,7 @@ def _resolve_leo_location_id(conn: sqlite3.Connection) -> str:
     exact = conn.execute("SELECT id FROM locations WHERE id='LEO' LIMIT 1").fetchone()
     if exact:
         return str(exact["id"])
-    leo_loc = conn.execute(
-        "SELECT id FROM locations WHERE id LIKE '%LEO%' OR id LIKE '%leo%' LIMIT 1"
-    ).fetchone()
-    return str(leo_loc["id"]) if leo_loc else LEO_LOCATION_ID
+    return LEO_LOCATION_ID
 
 
 def _game_month_index(now_s: Optional[float] = None) -> int:
@@ -957,7 +954,7 @@ def boost_manifest_to_leo(
         raise ValueError(f"Insufficient funds. Need ${total_cost:,.0f}, have ${balance:,.0f}")
 
     leo_loc = conn.execute(
-        "SELECT id FROM locations WHERE id LIKE '%LEO%' OR id LIKE '%leo%' LIMIT 1"
+        "SELECT id FROM locations WHERE id = 'LEO' LIMIT 1"
     ).fetchone()
     dest_location_id = str(leo_loc["id"]) if leo_loc else LEO_LOCATION_ID
 

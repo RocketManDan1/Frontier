@@ -1090,6 +1090,8 @@
   let locationsById = new Map();
   let leaves = [];
   let ships = [];
+  let bodyPhysics = {};    // body_id → { mu_km3_s2, soi_radius_km?, radius_km? }
+  let orbitNodeMeta = {};  // location_id → { body_id, radius_km }
   let treeCache = null;
   let mapOverviewRenderKey = "";
   const mapOverviewOpenState = new Map();
@@ -2234,6 +2236,142 @@
     });
   }
 
+  /**
+   * Build HTML for the transit orbit information panel.
+   * Shows current orbit parameters (Ap/Pe/period), predicted orbit segments,
+   * and upcoming burn schedule with countdowns.
+   */
+  function buildTransitOrbitHtml(ship) {
+    const OR = window.OrbitRenderer;
+    if (!OR) return "";
+
+    const orbit = ship.orbit;
+    const bodyId = ship.orbit_body_id;
+    const maneuvers = Array.isArray(ship.maneuvers) ? ship.maneuvers : [];
+    const predictions = Array.isArray(ship.orbit_predictions) ? ship.orbit_predictions : [];
+    const bp = bodyId ? bodyPhysics[bodyId] : null;
+    const mu = bp?.mu_km3_s2;
+    const bodyR = bp?.radius_km || 0;
+    const bodyName = bodyId ? bodyDisplayName("grp_" + bodyId.toLowerCase()) : "Unknown";
+
+    if (!orbit || !mu) return "";
+
+    const now = serverNow();
+
+    // --- Current orbit summary ---
+    const summary = OR.orbitSummary(orbit, mu, bodyR);
+    let orbitType = "Circular";
+    if (orbit.e >= 1.0) orbitType = "Hyperbolic";
+    else if (orbit.e > 0.01) orbitType = "Elliptical";
+
+    let html = `<li><div class="powerBalancePanel">
+      <div class="pbTitle">Current Orbit — ${bodyName}</div>
+      <div class="pbSection">
+        <div class="pbSectionHead">${orbitType} Orbit</div>
+        <div class="pbRow"><span class="pbLabel">Apoapsis</span><span class="pbVal">${summary.apoapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Periapsis</span><span class="pbVal">${summary.periapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Period</span><span class="pbVal">${summary.period}</span></div>
+        <div class="pbRow"><span class="pbLabel">Eccentricity</span><span class="pbVal">${summary.ecc}</span></div>
+        <div class="pbRow"><span class="pbLabel">Semi-major axis</span><span class="pbVal">${summary.sma}</span></div>
+      </div>`;
+
+    // --- Burn schedule ---
+    if (maneuvers.length > 0) {
+      html += `<div class="pbSection"><div class="pbSectionHead">Burn Schedule</div>`;
+      for (let i = 0; i < maneuvers.length; i++) {
+        const burn = maneuvers[i];
+        const burnTime = Number(burn.time_s);
+        const countdown = burnTime - now;
+        const label = burn.label || `Burn ${i + 1}`;
+        const dvPro = Number(burn.prograde_m_s || 0);
+        const dvRad = Number(burn.radial_m_s || 0);
+        const dvTotal = Math.sqrt(dvPro * dvPro + dvRad * dvRad);
+        const isPast = countdown <= 0;
+
+        const status = isPast
+          ? '<span class="pbNegative">COMPLETED</span>'
+          : `T-${OR.formatDuration(countdown)}`;
+
+        html += `<div class="pbRow pbDivider" style="flex-wrap:wrap">
+          <span class="pbLabel"><b>${label}</b></span>
+          <span class="pbVal">${status}</span>
+        </div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Δv</span><span class="pbVal">${Math.round(dvTotal)} m/s</span></div>`;
+        if (Math.abs(dvPro) > 0.1) {
+          html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Prograde</span><span class="pbVal">${dvPro > 0 ? "+" : ""}${dvPro.toFixed(1)} m/s</span></div>`;
+        }
+        if (Math.abs(dvRad) > 0.1) {
+          html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Radial</span><span class="pbVal">${dvRad > 0 ? "+" : ""}${dvRad.toFixed(1)} m/s</span></div>`;
+        }
+      }
+      html += `</div>`;
+    }
+
+    // --- Predicted orbit segments ---
+    if (predictions.length > 0) {
+      html += `<div class="pbSection"><div class="pbSectionHead">Orbit Predictions</div>`;
+      const segLabels = ["Departure", "Transfer", "Arrival"];
+      for (let i = 0; i < predictions.length; i++) {
+        const seg = predictions[i];
+        const el = seg.elements;
+        if (!el) continue;
+        const segMu = seg.body_id && bodyPhysics[seg.body_id]
+          ? bodyPhysics[seg.body_id].mu_km3_s2 : mu;
+        const segBodyR = seg.body_id && bodyPhysics[seg.body_id]
+          ? (bodyPhysics[seg.body_id].radius_km || 0) : bodyR;
+        const segSummary = OR.orbitSummary(el, segMu, segBodyR);
+        const segBodyName = seg.body_id
+          ? bodyDisplayName("grp_" + seg.body_id.toLowerCase()) : "";
+        const baseLbl = segLabels[i] || `Segment ${i + 1}`;
+        const segLabel = segBodyName ? `${baseLbl} — ${segBodyName}` : baseLbl;
+
+        html += `<div class="pbRow pbDivider"><span class="pbLabel"><b>${segLabel}</b></span><span class="pbVal">${segSummary.ecc > 0.01 ? "Elliptical" : "Circular"}</span></div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Ap / Pe</span><span class="pbVal">${segSummary.apoapsis} / ${segSummary.periapsis}</span></div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Period</span><span class="pbVal">${segSummary.period}</span></div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div></li>`;
+    return html;
+  }
+
+  /**
+   * Build HTML for a docked ship's current orbit summary.
+   * Simpler than the transit panel — just shows current orbit parameters.
+   */
+  function buildDockedOrbitHtml(ship) {
+    const OR = window.OrbitRenderer;
+    if (!OR) return "";
+
+    const orbit = ship.orbit;
+    const bodyId = ship.orbit_body_id;
+    if (!orbit || !bodyId) return "";
+
+    const bp = bodyPhysics[bodyId];
+    if (!bp?.mu_km3_s2) return "";
+
+    const mu = bp.mu_km3_s2;
+    const bodyR = bp.radius_km || 0;
+    const bodyName = bodyDisplayName("grp_" + bodyId.toLowerCase());
+    const summary = OR.orbitSummary(orbit, mu, bodyR);
+
+    let orbitType = "Circular";
+    if (orbit.e >= 1.0) orbitType = "Hyperbolic";
+    else if (orbit.e > 0.01) orbitType = "Elliptical";
+
+    return `<li><div class="powerBalancePanel">
+      <div class="pbTitle">Orbit — ${bodyName}</div>
+      <div class="pbSection">
+        <div class="pbSectionHead">${orbitType} Orbit</div>
+        <div class="pbRow"><span class="pbLabel">Apoapsis</span><span class="pbVal">${summary.apoapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Periapsis</span><span class="pbVal">${summary.periapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Period</span><span class="pbVal">${summary.period}</span></div>
+        <div class="pbRow"><span class="pbLabel">Eccentricity</span><span class="pbVal">${summary.ecc}</span></div>
+      </div>
+    </div></li>`;
+  }
+
   function buildDeltaVPanelHtml(ship) {
     const dryMass = Number(ship.dry_mass_kg || 0);
     const fuel = Number(ship.fuel_kg || 0);
@@ -2519,6 +2657,36 @@
   const EUROPA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const GANYMEDE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const CALLISTO_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const LOCAL_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT; // unified value
+
+  // ---------- Orbit-rendering helpers ----------
+
+  // All celestial bodies have "grp_<body_id>" keys in locationsById.
+  function bodyIdToGroupId(bodyId) {
+    if (!bodyId) return null;
+    return "grp_" + bodyId.toLowerCase();
+  }
+
+  /**
+   * Convert body-centric km offset to world-coordinate offset.
+   * For heliocentric bodies (sun), use HELIO_LINEAR_WORLD_PER_KM directly.
+   * For local orbits around planets/moons, use LOCAL_ORBIT_SCALE.
+   */
+  function orbitKmToWorld(dxKm, dyKm, bodyId) {
+    const scale = (bodyId === "sun") ? HELIO_LINEAR_WORLD_PER_KM : LOCAL_ORBIT_SCALE;
+    return { wx: dxKm * scale, wy: dyKm * scale };
+  }
+
+  /**
+   * Get the world position of a body group for orbit rendering.
+   * Returns { rx, ry } or null if not found.
+   */
+  function getBodyWorldPos(bodyId) {
+    const groupId = bodyIdToGroupId(bodyId);
+    if (!groupId) return null;
+    return locationsById.get(groupId) || null;
+  }
+
   const FIT_VIEW_SCALE = 0.86;
   const MAP_SCREEN_SPREAD_MULT = 10;
   const MAX_INITIAL_SCALE = CAMERA_MAX_SCALE;
@@ -2617,10 +2785,12 @@
   const zoomScaledTexts = new Set();
   const BASE_TEXT_RESOLUTION = Math.max(1, window.devicePixelRatio || 1);
   const MAX_TEXT_RESOLUTION = 8;
+  let _nextStableId = 0;
 
   function registerZoomScaledText(t) {
     if (!t) return t;
     if (!Number.isFinite(Number(t.__collisionPriority))) t.__collisionPriority = 10;
+    if (!Number.isFinite(Number(t.__stableId))) t.__stableId = _nextStableId++;
     zoomScaledTexts.add(t);
     const targetRes = Math.min(MAX_TEXT_RESOLUTION, Math.max(1, BASE_TEXT_RESOLUTION * world.scale.x));
     if (t.resolution !== targetRes) {
@@ -2723,14 +2893,21 @@
       if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.width) || !Number.isFinite(b.height)) continue;
       if (b.width <= 0 || b.height <= 0) continue;
 
-      const priority = Number(t.__collisionPriority) || 0;
+      // Hysteresis: labels that were visible last pass get a small priority boost
+      // to prevent toggling when two labels at the same priority overlap.
+      const basePriority = Number(t.__collisionPriority) || 0;
+      const wasVisible = t.__cullPrevVisible !== false; // true on first pass
+      const priority = basePriority + (wasVisible ? 0.5 : 0);
       const area = b.width * b.height;
-      candidates.push({ t, b, priority, area });
+      const stableId = Number(t.__stableId) || 0;
+      candidates.push({ t, b, priority, area, stableId });
     }
 
+    // Stable sort: priority desc, then area asc, then stableId asc as tiebreaker
     candidates.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
-      return a.area - b.area;
+      if (a.area !== b.area) return a.area - b.area;
+      return a.stableId - b.stableId;
     });
 
     const kept = [];
@@ -2744,8 +2921,10 @@
       }
       if (overlaps) {
         c.t.visible = false;
+        c.t.__cullPrevVisible = false;
       } else {
         kept.push(c);
+        c.t.__cullPrevVisible = true;
       }
     }
   }
@@ -3427,6 +3606,12 @@
     const p0 = { x: fromLoc.rx, y: fromLoc.ry };
     const p3 = { x: toLoc.rx, y: toLoc.ry };
 
+    // ── CURVE DEBUG ──
+    if (String(fromLocId).includes("LO") || String(toLocId).includes("LO")) {
+      const _d = Math.hypot(p3.x - p0.x, p3.y - p0.y);
+      console.log(`[CURVE-DBG] ${fromLocId} → ${toLocId}: isIP=${isInterplanetary}, p0=(${p0.x.toFixed(2)},${p0.y.toFixed(2)}), p3=(${p3.x.toFixed(2)},${p3.y.toFixed(2)}), d=${_d.toFixed(4)}`);
+    }
+
     // For solar interplanetary transfers, render a Hohmann transfer arc
     if (isInterplanetary) {
       const fromSolar = getLocationSolarGroup(fromLocId);
@@ -3505,8 +3690,14 @@
     let departTan = pickOrbitTangent(fromBody || primaryBody, p0, p3, dir);
     let arriveTan = pickOrbitTangent(toBody || primaryBody, p3, p0, { x: -dir.x, y: -dir.y });
 
-    let c1Dist = Math.max(12, d * 0.36);
-    let c2Dist = Math.max(12, d * 0.33);
+    // Scale-aware floor: control points must stay proportional to the
+    // actual endpoint distance.  The old hardcoded floor of 12 world-units
+    // was larger than the entire LLO↔HLO gap (~1.6 wu), sending the
+    // Bézier curve wildly off-screen for small-orbit transfers.
+    const cpFloor = d * 0.15;
+
+    let c1Dist = Math.max(cpFloor, d * 0.36);
+    let c2Dist = Math.max(cpFloor, d * 0.33);
     let bendVec = { x: 0, y: 0 };
 
     if (samePrimary && primaryBody) {
@@ -3514,12 +3705,12 @@
       const r1 = Math.hypot(p3.x - primaryBody.rx, p3.y - primaryBody.ry);
       const semiMajor = Math.max(1e-6, (r0 + r1) * 0.5);
 
-      c1Dist = Math.max(12, Math.min(d * 0.62, semiMajor * 0.88));
-      c2Dist = Math.max(12, Math.min(d * 0.58, semiMajor * 0.82));
+      c1Dist = Math.max(cpFloor, Math.min(d * 0.62, semiMajor * 0.88));
+      c2Dist = Math.max(cpFloor, Math.min(d * 0.58, semiMajor * 0.82));
 
       const midToBody = normalizeVec(((p0.x + p3.x) * 0.5) - primaryBody.rx, ((p0.y + p3.y) * 0.5) - primaryBody.ry, 0, 0);
       const outward = r1 >= r0 ? 1 : -1;
-      const bendMag = Math.min(d * 0.18, Math.max(10, Math.abs(r1 - r0) * 0.34));
+      const bendMag = Math.min(d * 0.18, Math.max(d * 0.05, Math.abs(r1 - r0) * 0.34));
       bendVec = { x: midToBody.x * bendMag * outward, y: midToBody.y * bendMag * outward };
     } else if (!samePrimary && fromBody && toBody) {
       // Cross-body transfer (e.g. Earth orbit → Moon orbit).
@@ -3531,7 +3722,7 @@
       const rTo = Math.hypot(p3.x - toBody.rx, p3.y - toBody.ry);
 
       // Departure: orbit tangent scaled to local orbit size
-      c1Dist = Math.max(12, Math.min(d * 0.38, rFrom * 3.0 + d * 0.08));
+      c1Dist = Math.max(cpFloor, Math.min(d * 0.38, rFrom * 3.0 + d * 0.08));
 
       // Arrival: use the approach direction (from→to) so the curve
       // flows smoothly into the destination without hooking sideways.
@@ -3543,14 +3734,14 @@
         approachDir.y * (1 - orbitBlend) + arriveTan.y * orbitBlend,
         approachDir.x, approachDir.y
       );
-      c2Dist = Math.max(12, d * 0.25);
+      c2Dist = Math.max(cpFloor, d * 0.25);
 
       // Gentle outward bend away from the larger parent body
       const parentBody = fromBody;
       const midX = (p0.x + p3.x) * 0.5;
       const midY = (p0.y + p3.y) * 0.5;
       const midToParent = normalizeVec(midX - parentBody.rx, midY - parentBody.ry, dir.x, dir.y);
-      const bendMag = Math.max(6, d * 0.07);
+      const bendMag = Math.max(d * 0.03, d * 0.07);
       bendVec = { x: midToParent.x * bendMag, y: midToParent.y * bendMag };
     }
 
@@ -4516,7 +4707,9 @@
         || (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId));
       if (alwaysLabel) {
         entry.label.alpha = entry.hovered ? detailAlpha : detailAlpha * CELESTIAL_BASE_LABEL_ALPHA;
-        entry.label.visible = detailAlpha > 0.001;
+        // Only force-hide here; collision culling is the sole authority for making
+        // overlapping "always visible" labels visible (prevents stutter).
+        if (detailAlpha <= 0.001) entry.label.visible = false;
       } else {
         entry.label.alpha = entry.hovered ? detailAlpha : 0;
         entry.label.visible = entry.hovered && detailAlpha > 0.001;
@@ -5039,8 +5232,6 @@
         const loc = locationsById.get(ship.location_id);
         if (!loc) continue;
 
-        if (pathGfx) pathGfx.clear();
-
         const dockedCount = dockedCountByLocation.get(ship.location_id) || 1;
         const isSelectedOrHovered = (ship.id === selectedShipId || ship.id === hoveredShipId);
         const isOrbitLocation = ORBIT_IDS.has(ship.location_id);
@@ -5055,27 +5246,222 @@
 
         container.visible = true;
 
-        // Orbit ships: position along the orbit ring with animated rotation
-        const oi = isOrbitLocation ? orbitInfo.get(ship.location_id) : null;
-        if (oi && oi.period_s > 0) {
+        // ── Orbit-element positioning (Phase 3) ──
+        // If this ship has real orbital elements, use the Kepler solver
+        const shipOrbit = ship.orbit;
+        const orbitBodyId = shipOrbit ? shipOrbit.body_id : null;
+        const orbitMu = orbitBodyId && bodyPhysics[orbitBodyId]
+          ? bodyPhysics[orbitBodyId].mu_km3_s2 : null;
+        const orbitBodyPos = orbitBodyId ? getBodyWorldPos(orbitBodyId) : null;
+
+        if (shipOrbit && orbitMu && orbitBodyPos && window.OrbitRenderer) {
+          const OR = window.OrbitRenderer;
           const slotIndex = Number(slot?.index) || 0;
-          const slotSpacing = (2 * Math.PI) / Math.max(1, dockedCount);
-          const elapsed = (performance.now() / 1000);
-          const orbitAngle = oi.baseAngle + (elapsed / oi.period_s) * 2 * Math.PI + slotIndex * slotSpacing;
-          px = oi.cx + oi.radius * Math.cos(orbitAngle);
-          py = oi.cy + oi.radius * Math.sin(orbitAngle);
-          facingAngle = orbitAngle + Math.PI / 2;
-          headingAngle = facingAngle;
-        } else {
-          const slotIndex = Number(slot?.index) || 0;
-          const rowOffset = dockedRowOffsetWorld(slotIndex, zoom, dockedCount);
-          px = loc.rx + rowOffset.dxWorld;
-          py = loc.ry + rowOffset.dyWorld;
-          facingAngle = 0;
-          headingAngle = 0;
+          const slotPhaseOffset = (dockedCount > 1)
+            ? (slotIndex / dockedCount) * 2 * Math.PI : 0;
+
+          // Build a shifted orbit for slot spacing: rotate M0 by slotPhaseOffset
+          const adjustedOrbit = dockedCount > 1
+            ? { ...shipOrbit, M0_deg: (shipOrbit.M0_deg || 0) + slotPhaseOffset * OR.RAD2DEG }
+            : shipOrbit;
+
+          const wp = OR.shipWorldPosition(adjustedOrbit, orbitMu, now, orbitBodyPos, orbitKmToWorld);
+          px = wp.wx;
+          py = wp.wy;
+          facingAngle = wp.angle + Math.PI / 2; // perpendicular to velocity
+          headingAngle = wp.angle;
+
+          // Draw orbit ellipse on pathGfx for selected/hovered ships
+          if (pathGfx) {
+            const isSelOrHov = (ship.id === selectedShipId || ship.id === hoveredShipId);
+            const orbitCacheKey = isSelOrHov
+              ? `orbit|${ship.orbit_body_id}|${(zoom * 100) | 0}|${shipOrbit.a_km}|${shipOrbit.e}`
+              : "";
+            if (pathGfx.__orbitCacheKey !== orbitCacheKey) {
+              pathGfx.__orbitCacheKey = orbitCacheKey;
+              pathGfx.clear();
+              if (isSelOrHov) {
+                const lineW = 1.0 / zoom;
+                OR.drawOrbitPath(pathGfx, shipOrbit, orbitMu, orbitBodyPos, orbitKmToWorld, {
+                  color: 0x4488ff,
+                  alpha: 0.35,
+                  lineWidth: lineW,
+                  numPoints: 96,
+                });
+                // Draw Ap/Pe markers for non-circular orbits
+                const bodyR = bodyPhysics[orbitBodyId]?.radius_km || 0;
+                OR.drawApsisMarkers(pathGfx, shipOrbit, orbitBodyPos, orbitKmToWorld, bodyR, zoom, { color: 0x4488ff });
+              }
+            }
+          }
+        }
+        // ── Legacy cosmetic orbit ring positioning ──
+        else {
+          if (pathGfx) { pathGfx.clear(); pathGfx.__orbitCacheKey = ""; }
+          const oi = isOrbitLocation ? orbitInfo.get(ship.location_id) : null;
+          if (oi && oi.period_s > 0) {
+            const slotIndex = Number(slot?.index) || 0;
+            const slotSpacing = (2 * Math.PI) / Math.max(1, dockedCount);
+            const elapsed = (performance.now() / 1000);
+            const orbitAngle = oi.baseAngle + (elapsed / oi.period_s) * 2 * Math.PI + slotIndex * slotSpacing;
+            px = oi.cx + oi.radius * Math.cos(orbitAngle);
+            py = oi.cy + oi.radius * Math.sin(orbitAngle);
+            facingAngle = orbitAngle + Math.PI / 2;
+            headingAngle = facingAngle;
+          } else {
+            const slotIndex = Number(slot?.index) || 0;
+            const rowOffset = dockedRowOffsetWorld(slotIndex, zoom, dockedCount);
+            px = loc.rx + rowOffset.dxWorld;
+            py = loc.ry + rowOffset.dyWorld;
+            facingAngle = 0;
+            headingAngle = 0;
+          }
         }
       } else {
         if (!ship.departed_at || !ship.arrives_at) continue;
+
+        // ── Orbit-element transit positioning (Phase 4) ──
+        // For transit ships with real orbital elements, use the Kepler solver
+        const transitOrbit = ship.orbit;
+        const transitBodyId = transitOrbit ? transitOrbit.body_id : null;
+        const transitMu = transitBodyId && bodyPhysics[transitBodyId]
+          ? bodyPhysics[transitBodyId].mu_km3_s2 : null;
+        const transitBodyPos = transitBodyId ? getBodyWorldPos(transitBodyId) : null;
+        const hasOrbitPositioning = !!(transitOrbit && transitMu && transitBodyPos && window.OrbitRenderer);
+
+        if (hasOrbitPositioning) {
+          const OR = window.OrbitRenderer;
+
+          // Determine current orbit: find which prediction segment we're in
+          const predictions = Array.isArray(ship.orbit_predictions) ? ship.orbit_predictions : [];
+          let activeOrbit = transitOrbit;
+          let activeBodyId = transitBodyId;
+          let activeMu = transitMu;
+          let activeBodyPos = transitBodyPos;
+
+          if (predictions.length > 0) {
+            // Walk predictions to find current segment based on game time
+            for (const seg of predictions) {
+              if (!seg.elements) continue;
+              const fromS = Number(seg.from_s || 0);
+              const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+              if (now >= fromS && now < toS) {
+                activeOrbit = seg.elements;
+                if (seg.body_id && bodyPhysics[seg.body_id]) {
+                  activeBodyId = seg.body_id;
+                  activeMu = bodyPhysics[seg.body_id].mu_km3_s2;
+                  activeBodyPos = getBodyWorldPos(seg.body_id) || transitBodyPos;
+                }
+                break;
+              }
+            }
+            // If we're past all segments, use the last one
+            const lastSeg = predictions[predictions.length - 1];
+            if (lastSeg?.elements && lastSeg.to_s != null && now >= Number(lastSeg.to_s)) {
+              activeOrbit = lastSeg.elements;
+              if (lastSeg.body_id && bodyPhysics[lastSeg.body_id]) {
+                activeBodyId = lastSeg.body_id;
+                activeMu = bodyPhysics[lastSeg.body_id].mu_km3_s2;
+                activeBodyPos = getBodyWorldPos(lastSeg.body_id) || transitBodyPos;
+              }
+            }
+          }
+
+          const wp = OR.shipWorldPosition(activeOrbit, activeMu, now, activeBodyPos, orbitKmToWorld);
+          px = wp.wx;
+          py = wp.wy;
+          facingAngle = wp.angle + Math.PI / 2;
+          headingAngle = wp.angle;
+
+          // ── Draw predicted orbit segments for selected/hovered transit ships ──
+          if (pathGfx) {
+            const isSelOrHov = (ship.id === selectedShipId || ship.id === hoveredShipId);
+            const orbitCacheKey = isSelOrHov
+              ? `transit-orbit|${transitBodyId}|${(zoom * 100) | 0}|${activeOrbit.a_km}|${activeOrbit.e}|${predictions.length}`
+              : "";
+            if (pathGfx.__orbitCacheKey !== orbitCacheKey) {
+              pathGfx.__orbitCacheKey = orbitCacheKey;
+              pathGfx.__transitCacheKey = "";
+              pathGfx.clear();
+              if (isSelOrHov) {
+                const lineW = 1.0 / zoom;
+                // Draw current active orbit (solid blue)
+                OR.drawOrbitPath(pathGfx, activeOrbit, activeMu, activeBodyPos, orbitKmToWorld, {
+                  color: 0x4488ff,
+                  alpha: 0.5,
+                  lineWidth: lineW,
+                  numPoints: 96,
+                });
+                // Draw Ap/Pe markers on active orbit
+                const activeBodyR = bodyPhysics[activeBodyId]?.radius_km || 0;
+                OR.drawApsisMarkers(pathGfx, activeOrbit, activeBodyPos, orbitKmToWorld, activeBodyR, zoom, { color: 0x4488ff });
+
+                // Draw all predicted orbit segments with distinct colors
+                const segColors = [0x44aaff, 0xffaa22, 0x44ff66]; // departure, transfer, arrival
+                const segAlphas = [0.2, 0.4, 0.3];
+                for (let si = 0; si < predictions.length; si++) {
+                  const seg = predictions[si];
+                  if (!seg.elements) continue;
+                  const segBid = seg.body_id || transitBodyId;
+                  const segMu = bodyPhysics[segBid]?.mu_km3_s2 || activeMu;
+                  const segBody = getBodyWorldPos(segBid) || activeBodyPos;
+                  // Skip drawing the active segment again (already drawn above)
+                  const segE = seg.elements;
+                  if (segE.a_km === activeOrbit.a_km && segE.e === activeOrbit.e &&
+                      segE.omega_deg === activeOrbit.omega_deg) continue;
+                  OR.drawOrbitPath(pathGfx, segE, segMu, segBody, orbitKmToWorld, {
+                    color: segColors[si] || 0xaaaaaa,
+                    alpha: segAlphas[si] || 0.25,
+                    lineWidth: lineW * 0.8,
+                    dashed: true,
+                    numPoints: 96,
+                  });
+                }
+
+                // Draw burn markers
+                const maneuvers = Array.isArray(ship.maneuvers) ? ship.maneuvers : [];
+                for (const burn of maneuvers) {
+                  const burnTime = Number(burn.time_s);
+                  // Find the orbit that's active just before the burn
+                  let burnOrbit = transitOrbit;
+                  let burnMu = transitMu;
+                  let burnBodyPos = transitBodyPos;
+                  for (const seg of predictions) {
+                    if (!seg.elements) continue;
+                    const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+                    if (burnTime <= toS) {
+                      burnOrbit = seg.elements;
+                      const bid = seg.body_id || transitBodyId;
+                      burnMu = bodyPhysics[bid]?.mu_km3_s2 || transitMu;
+                      burnBodyPos = getBodyWorldPos(bid) || transitBodyPos;
+                      break;
+                    }
+                  }
+                  // Compute position at burn time
+                  const burnPos = OR.orbitPosition(burnOrbit, burnMu, burnTime);
+                  const bw = orbitKmToWorld(burnPos.x, burnPos.y, burnOrbit.body_id || transitBodyId);
+                  const bx = burnBodyPos.rx + bw.wx;
+                  const by = burnBodyPos.ry + bw.wy;
+                  // Draw a diamond marker
+                  const markerSize = 4 / zoom;
+                  const isPast = burnTime <= now;
+                  pathGfx.lineStyle(1.2 / zoom, isPast ? 0x666666 : 0xff6622, isPast ? 0.4 : 0.85);
+                  pathGfx.beginFill(isPast ? 0x333333 : 0xff4400, isPast ? 0.3 : 0.6);
+                  pathGfx.moveTo(bx, by - markerSize);
+                  pathGfx.lineTo(bx + markerSize, by);
+                  pathGfx.lineTo(bx, by + markerSize);
+                  pathGfx.lineTo(bx - markerSize, by);
+                  pathGfx.closePath();
+                  pathGfx.endFill();
+                }
+              }
+            }
+          }
+
+          container.visible = true;
+        }
+        // ── Legacy Bézier/arc transit positioning ──
+        else {
 
         // Build transit curve: trajectory arc (interplanetary) or Bézier (local)
         const overallDepart = Number(ship.departed_at);
@@ -5111,7 +5497,30 @@
             if (A && B) {
               const fs = getHeliocentricGroup(fromId);
               const ts = getHeliocentricGroup(toId);
-              gfx.curve = computeTransitCurve(fromId, toId, A, B, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
+              const isIPLocal = !!(fs && ts && fs !== ts);
+              // ── TRANSIT DEBUG ──
+              if (ship.name && ship.name.includes("Orbit Test")) {
+                console.log(`[TRANSIT-DBG] ${ship.name}: ${fromId} → ${toId}`);
+                console.log(`  fa=${!!fa}, ta=${!!ta}, A.rx=${A.rx?.toFixed(2)}, A.ry=${A.ry?.toFixed(2)}, B.rx=${B.rx?.toFixed(2)}, B.ry=${B.ry?.toFixed(2)}`);
+                console.log(`  fs=${fs}, ts=${ts}, isInterplanetary=${isIPLocal}`);
+                console.log(`  dist=${Math.hypot((B.rx||0)-(A.rx||0),(B.ry||0)-(A.ry||0)).toFixed(4)}`);
+                console.log(`  hasHelioTraj=${hasHelioTrajectory}, hasBodyCentricTraj=${hasBodyCentricTrajectory}, ship.is_interplanetary=${ship.is_interplanetary}`);
+              }
+              gfx.curve = computeTransitCurve(fromId, toId, A, B, isIPLocal, overallDepart, overallArrive);
+              // When transit anchors supply A/B, p0/p3 include the body's
+              // position at departure/arrival time, but trackStartOrig
+              // defaults to the body's CURRENT position.  This mismatch
+              // offsets the curve by the body's displacement since departure.
+              // Fix by snapping tracking origins to anchor-time body
+              // positions so the warp bridges departure → render time.
+              if (gfx.curve && fa && gfx.curve.trackStartId) {
+                const ab = getTransitAnchorWorld(gfx.curve.trackStartId, overallDepart);
+                if (ab) gfx.curve.trackStartOrig = { x: ab.rx, y: ab.ry };
+              }
+              if (gfx.curve && ta && gfx.curve.trackEndId) {
+                const ab = getTransitAnchorWorld(gfx.curve.trackEndId, overallArrive);
+                if (ab) gfx.curve.trackEndOrig = { x: ab.rx, y: ab.ry };
+              }
             }
           }
           gfx.transitKey = transitSig;
@@ -5148,6 +5557,7 @@
         }
 
         container.visible = true;
+        } // end legacy Bézier/arc transit
       }
 
       const displayPose = { x: px, y: py, facingAngle, headingAngle };
@@ -6895,6 +7305,7 @@
         ]
       );
       if (infoList) {
+        infoList.innerHTML += buildDockedOrbitHtml(ship);
         infoList.innerHTML += buildPartsStackHtml(ship);
         infoList.innerHTML += buildDeltaVPanelHtml(ship);
         infoList.innerHTML += buildPowerBalanceHtml(ship);
@@ -6947,6 +7358,8 @@
       ].filter(Boolean)
     );
     if (infoList) {
+      // ── Orbital readout panel ──
+      infoList.innerHTML += buildTransitOrbitHtml(ship);
       infoList.innerHTML += buildPartsStackHtml(ship);
       infoList.innerHTML += buildDeltaVPanelHtml(ship);
       infoList.innerHTML += buildPowerBalanceHtml(ship);
@@ -6960,6 +7373,10 @@
     const shouldRefit = options.refit !== false;
     const data = await (await fetch("/api/locations?dynamic=1", { cache: "no-store" })).json();
     const projected = projectLocationsForMap(data.locations || []);
+
+    // Store orbit physics data from the API
+    bodyPhysics = data.body_physics || {};
+    orbitNodeMeta = data.orbit_nodes || {};
 
     // --- Capture previous positions for smooth interpolation ---
     const prevById = locationsById;          // old map (empty on first call)

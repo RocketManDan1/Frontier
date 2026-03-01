@@ -905,6 +905,48 @@ def get_orbit_node_body_id(config: Dict[str, Any], location_id: str) -> Optional
     return None
 
 
+def get_surface_site_info(config: Dict[str, Any], location_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a surface site by id.
+
+    Returns dict with body_id, orbit_node_id, landing_dv_m_s, landing_tof_s,
+    or None if not a surface site.
+    """
+    for site in (config.get("surface_sites") or []):
+        if isinstance(site, dict) and str(site.get("id", "")) == location_id:
+            body_id = str(site.get("body_id", "")).strip()
+            if not body_id:
+                return None
+            return {
+                "body_id": body_id,
+                "orbit_node_id": str(site.get("orbit_node_id", "")),
+                "landing_dv_m_s": float(site.get("landing_dv_m_s", 1870)),
+                "landing_tof_s": float(site.get("landing_tof_s", 3600)),
+            }
+    return None
+
+
+def get_lagrange_point_info(config: Dict[str, Any], location_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a Lagrange point by id.
+
+    Returns dict with primary_body_id, secondary_body_id, model, distance_km,
+    or None if not a Lagrange point.
+    """
+    for lsys in (config.get("lagrange_systems") or []):
+        if not isinstance(lsys, dict):
+            continue
+        primary = str(lsys.get("primary_body_id", "")).strip()
+        secondary = str(lsys.get("secondary_body_id", "")).strip()
+        for pt in (lsys.get("points") or []):
+            if isinstance(pt, dict) and str(pt.get("id", "")) == location_id:
+                return {
+                    "primary_body_id": primary,
+                    "secondary_body_id": secondary,
+                    "model": str(pt.get("model", "")),
+                    "distance_km": float(pt.get("distance_km", 0.0)) if pt.get("distance_km") else None,
+                }
+    return None
+
+
 # ── Auto-generation of interplanetary transfer edges ────────
 
 

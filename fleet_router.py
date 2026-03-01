@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from auth_service import require_login
 import catalog_service
 import celestial_config
+import orbit_bridge
 import transfer_planner
 from db import get_db
 from sim_service import (
@@ -35,6 +36,24 @@ from sim_service import (
 )
 
 router = APIRouter(tags=["fleet"])
+
+
+def _ship_status(r) -> str:
+    """Derive ship status from DB row fields.
+
+    Returns one of: "transit", "stranded", "docked".
+    """
+    # Legacy transit (arrives_at timer)
+    if r["arrives_at"]:
+        return "transit"
+    # Orbit-model transit (has pending maneuvers)
+    mj = r["maneuver_json"]
+    if r["orbit_json"] and mj and mj not in ("", "[]"):
+        return "transit"
+    # Stranded: in orbit but not docked, no pending maneuvers
+    if r["orbit_json"] and not r["location_id"]:
+        return "stranded"
+    return "docked"
 
 
 def _main():
@@ -801,7 +820,9 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                  parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
                  corp_id,
                  transit_from_x,transit_from_y,transit_to_x,transit_to_y,
-                 trajectory_json
+                 trajectory_json,
+                 orbit_json,maneuver_json,orbit_body_id,
+                 orbit_predictions_json
         FROM ships
         ORDER BY id
         """
@@ -837,7 +858,7 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "to_location_id": r["to_location_id"],
             "departed_at": r["departed_at"],
             "arrives_at": r["arrives_at"],
-            "status": "transit" if r["arrives_at"] else "docked",
+            "status": _ship_status(r),
             "corp_id": ship_corp_id,
             "is_own": is_own,
         }
@@ -871,6 +892,29 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             ship_data["is_interplanetary"] = _is_interplanetary(
                 str(r["from_location_id"]), str(r["to_location_id"])
             )
+
+        # Orbit model data (Phase 2)
+        if r["orbit_json"]:
+            try:
+                ship_data["orbit"] = json.loads(r["orbit_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if r["maneuver_json"]:
+            try:
+                maneuvers = json.loads(r["maneuver_json"])
+                if maneuvers:
+                    ship_data["maneuvers"] = maneuvers
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if r["orbit_body_id"]:
+            ship_data["orbit_body_id"] = r["orbit_body_id"]
+        if r["orbit_predictions_json"]:
+            try:
+                preds = json.loads(r["orbit_predictions_json"])
+                if preds:
+                    ship_data["orbit_predictions"] = preds
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         # Only include detailed data for own ships
         if is_own:
@@ -1098,6 +1142,35 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
 
     trajectory_json_str = json.dumps(trajectory_data) if trajectory_data else None
 
+    # ── Orbit model: compute burn plan (Phase 2) ──
+    orbit_json_str: Optional[str] = None
+    maneuver_json_str: Optional[str] = None
+    orbit_body_id_str: Optional[str] = None
+    orbit_predictions_json_str: Optional[str] = None
+    burn_plan = None
+
+    try:
+        burn_plan = orbit_bridge.compute_transfer_burn_plan(
+            conn, from_id, to_id, dep,
+        )
+    except Exception:
+        logging.exception("Failed to compute orbit burn plan for ship %s (%s → %s)", ship_id, from_id, to_id)
+
+    if burn_plan:
+        orbit_json_str = json.dumps(burn_plan["initial_orbit"])
+        maneuver_json_str = json.dumps(burn_plan["burns"])
+        orbit_body_id_str = burn_plan.get("orbit_body_id", "")
+        predictions = burn_plan.get("orbit_predictions", [])
+        if predictions:
+            orbit_predictions_json_str = json.dumps(predictions)
+        # Skip legacy trajectory — orbit predictions supersede it
+        trajectory_json_str = None
+        # Override arrives_at with orbit model's physical TOF so the ETA
+        # displayed on the frontend matches the actual burn schedule.
+        model_tof = burn_plan.get("total_tof_s")
+        if model_tof and model_tof > 0:
+            arr = dep + model_tof
+
     conn.execute(
         """
         UPDATE ships
@@ -1113,15 +1186,20 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
           transit_from_y=?,
           transit_to_x=?,
           transit_to_y=?,
-          trajectory_json=?
+          trajectory_json=?,
+          orbit_json=?,
+          maneuver_json=?,
+          orbit_body_id=?,
+          orbit_predictions_json=?
         WHERE id=?
         """,
         (from_id, to_id, dep, arr, dv, fuel_remaining_kg,
-         from_xy[0], from_xy[1], to_xy[0], to_xy[1], trajectory_json_str, ship_id),
+         from_xy[0], from_xy[1], to_xy[0], to_xy[1], trajectory_json_str,
+         orbit_json_str, maneuver_json_str, orbit_body_id_str, orbit_predictions_json_str, ship_id),
     )
     conn.commit()
 
-    return {
+    resp: Dict[str, Any] = {
         "ok": True,
         "ship_id": ship_id,
         "from": from_id,
@@ -1135,6 +1213,12 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         "departed_at": dep,
         "arrives_at": arr,
     }
+    if burn_plan:
+        resp["orbit"] = burn_plan["initial_orbit"]
+        resp["maneuvers"] = burn_plan["burns"]
+        resp["orbit_predictions"] = burn_plan.get("orbit_predictions", [])
+        resp["transfer_type"] = burn_plan.get("transfer_type", "")
+    return resp
 
 
 @router.post("/api/ships/{ship_id}/inventory/jettison")

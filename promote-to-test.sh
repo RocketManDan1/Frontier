@@ -165,7 +165,7 @@ mkdir -p "$TEST_DIR"
 find . -mindepth 1 \
   -not -path './.git/*' -not -name '.git' \
   -not -path './__pycache__/*' -not -name '__pycache__' \
-  -not -path './data/*' -not -name 'data' \
+  -not -path './data/*' -not -path './data' \
   -not -path './tests/__pycache__/*' \
   | while IFS= read -r f; do
     if [ -d "$f" ]; then
