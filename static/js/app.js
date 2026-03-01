@@ -909,6 +909,10 @@
   const planetLayer = new PIXI.Container();    // earth/luna
   const locLayer = new PIXI.Container();       // node dots (excluding orbits)
   const transitPathLayer = new PIXI.Container(); // faint full transit paths
+  const faintOrbitGfx = new PIXI.Graphics();     // batch faint orbits for non-selected ships
+  transitPathLayer.addChild(faintOrbitGfx);
+  const ghostGfx = new PIXI.Graphics();          // ghost projection overlay
+  transitPathLayer.addChild(ghostGfx);
   const shipLayer = new PIXI.Container();      // ships
   const labelLayer = new PIXI.Container();     // labels (nodes + orbit hover labels + planet labels)
   const shipClusterLayer = new PIXI.Container(); // +N docked ship cluster markers
@@ -1090,6 +1094,9 @@
   let locationsById = new Map();
   let leaves = [];
   let ships = [];
+  let bodyPhysics = {};    // body_id → { mu_km3_s2, soi_radius_km?, radius_km? }
+  let bodyOrbits = {};     // body_id → { center_body_id, a_km, e, omega_deg, M0_deg, epoch_s, direction }
+  let orbitNodeMeta = {};  // location_id → { body_id, radius_km }
   let treeCache = null;
   let mapOverviewRenderKey = "";
   const mapOverviewOpenState = new Map();
@@ -1113,6 +1120,12 @@
   const dockedChipGfx = new Map(); // location_id -> {container,bg,text,hitRadiusWorld}
   let selectedShipId = null;
   let hoveredShipId = null;
+  let visibleBurnMarkers = []; // [{shipId, burnIdx, wx, wy, burn, predBefore, predAfter}]
+  // Ghost projection state (Phase 6)
+  let ghostProjection = null; // { arcWx, arcWy, gameTime, destBodyId, destWx, destWy, distKm, shipId }
+  let ghostProjectionCache = { bodyId: null, gameTime: 0, wx: 0, wy: 0 }; // cached body pos
+  // Segments data captured during render for ghost hit-testing
+  let ghostArcSegments = []; // [{ orbit, mu, bodyWorldPos, scaler, startNu, endNu, bodyId, shipId, destBodyId }]
   let shipInfoTab = "details";
   let shipInfoTabShipId = null;
   let locationInfoTab = "details";
@@ -2234,6 +2247,142 @@
     });
   }
 
+  /**
+   * Build HTML for the transit orbit information panel.
+   * Shows current orbit parameters (Ap/Pe/period), predicted orbit segments,
+   * and upcoming burn schedule with countdowns.
+   */
+  function buildTransitOrbitHtml(ship) {
+    const OR = window.OrbitRenderer;
+    if (!OR) return "";
+
+    const orbit = ship.orbit;
+    const bodyId = ship.orbit_body_id;
+    const maneuvers = Array.isArray(ship.maneuvers) ? ship.maneuvers : [];
+    const predictions = Array.isArray(ship.orbit_predictions) ? ship.orbit_predictions : [];
+    const bp = bodyId ? bodyPhysics[bodyId] : null;
+    const mu = bp?.mu_km3_s2;
+    const bodyR = bp?.radius_km || 0;
+    const bodyName = bodyId ? bodyDisplayName("grp_" + bodyId.toLowerCase()) : "Unknown";
+
+    if (!orbit || !mu) return "";
+
+    const now = serverNow();
+
+    // --- Current orbit summary ---
+    const summary = OR.orbitSummary(orbit, mu, bodyR);
+    let orbitType = "Circular";
+    if (orbit.e >= 1.0) orbitType = "Hyperbolic";
+    else if (orbit.e > 0.01) orbitType = "Elliptical";
+
+    let html = `<li><div class="powerBalancePanel">
+      <div class="pbTitle">Current Orbit — ${bodyName}</div>
+      <div class="pbSection">
+        <div class="pbSectionHead">${orbitType} Orbit</div>
+        <div class="pbRow"><span class="pbLabel">Apoapsis</span><span class="pbVal">${summary.apoapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Periapsis</span><span class="pbVal">${summary.periapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Period</span><span class="pbVal">${summary.period}</span></div>
+        <div class="pbRow"><span class="pbLabel">Eccentricity</span><span class="pbVal">${summary.ecc}</span></div>
+        <div class="pbRow"><span class="pbLabel">Semi-major axis</span><span class="pbVal">${summary.sma}</span></div>
+      </div>`;
+
+    // --- Burn schedule ---
+    if (maneuvers.length > 0) {
+      html += `<div class="pbSection"><div class="pbSectionHead">Burn Schedule</div>`;
+      for (let i = 0; i < maneuvers.length; i++) {
+        const burn = maneuvers[i];
+        const burnTime = Number(burn.time_s);
+        const countdown = burnTime - now;
+        const label = burn.label || `Burn ${i + 1}`;
+        const dvPro = Number(burn.prograde_m_s || 0);
+        const dvRad = Number(burn.radial_m_s || 0);
+        const dvTotal = Math.sqrt(dvPro * dvPro + dvRad * dvRad);
+        const isPast = countdown <= 0;
+
+        const status = isPast
+          ? '<span class="pbNegative">COMPLETED</span>'
+          : `T-${OR.formatDuration(countdown)}`;
+
+        html += `<div class="pbRow pbDivider" style="flex-wrap:wrap">
+          <span class="pbLabel"><b>${label}</b></span>
+          <span class="pbVal">${status}</span>
+        </div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Δv</span><span class="pbVal">${Math.round(dvTotal)} m/s</span></div>`;
+        if (Math.abs(dvPro) > 0.1) {
+          html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Prograde</span><span class="pbVal">${dvPro > 0 ? "+" : ""}${dvPro.toFixed(1)} m/s</span></div>`;
+        }
+        if (Math.abs(dvRad) > 0.1) {
+          html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Radial</span><span class="pbVal">${dvRad > 0 ? "+" : ""}${dvRad.toFixed(1)} m/s</span></div>`;
+        }
+      }
+      html += `</div>`;
+    }
+
+    // --- Predicted orbit segments ---
+    if (predictions.length > 0) {
+      html += `<div class="pbSection"><div class="pbSectionHead">Orbit Predictions</div>`;
+      const segLabels = ["Departure", "Transfer", "Arrival"];
+      for (let i = 0; i < predictions.length; i++) {
+        const seg = predictions[i];
+        const el = seg.elements;
+        if (!el) continue;
+        const segMu = seg.body_id && bodyPhysics[seg.body_id]
+          ? bodyPhysics[seg.body_id].mu_km3_s2 : mu;
+        const segBodyR = seg.body_id && bodyPhysics[seg.body_id]
+          ? (bodyPhysics[seg.body_id].radius_km || 0) : bodyR;
+        const segSummary = OR.orbitSummary(el, segMu, segBodyR);
+        const segBodyName = seg.body_id
+          ? bodyDisplayName("grp_" + seg.body_id.toLowerCase()) : "";
+        const baseLbl = segLabels[i] || `Segment ${i + 1}`;
+        const segLabel = segBodyName ? `${baseLbl} — ${segBodyName}` : baseLbl;
+
+        html += `<div class="pbRow pbDivider"><span class="pbLabel"><b>${segLabel}</b></span><span class="pbVal">${segSummary.ecc > 0.01 ? "Elliptical" : "Circular"}</span></div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Ap / Pe</span><span class="pbVal">${segSummary.apoapsis} / ${segSummary.periapsis}</span></div>`;
+        html += `<div class="pbRow"><span class="pbLabel" style="padding-left:8px">Period</span><span class="pbVal">${segSummary.period}</span></div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div></li>`;
+    return html;
+  }
+
+  /**
+   * Build HTML for a docked ship's current orbit summary.
+   * Simpler than the transit panel — just shows current orbit parameters.
+   */
+  function buildDockedOrbitHtml(ship) {
+    const OR = window.OrbitRenderer;
+    if (!OR) return "";
+
+    const orbit = ship.orbit;
+    const bodyId = ship.orbit_body_id;
+    if (!orbit || !bodyId) return "";
+
+    const bp = bodyPhysics[bodyId];
+    if (!bp?.mu_km3_s2) return "";
+
+    const mu = bp.mu_km3_s2;
+    const bodyR = bp.radius_km || 0;
+    const bodyName = bodyDisplayName("grp_" + bodyId.toLowerCase());
+    const summary = OR.orbitSummary(orbit, mu, bodyR);
+
+    let orbitType = "Circular";
+    if (orbit.e >= 1.0) orbitType = "Hyperbolic";
+    else if (orbit.e > 0.01) orbitType = "Elliptical";
+
+    return `<li><div class="powerBalancePanel">
+      <div class="pbTitle">Orbit — ${bodyName}</div>
+      <div class="pbSection">
+        <div class="pbSectionHead">${orbitType} Orbit</div>
+        <div class="pbRow"><span class="pbLabel">Apoapsis</span><span class="pbVal">${summary.apoapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Periapsis</span><span class="pbVal">${summary.periapsis}</span></div>
+        <div class="pbRow"><span class="pbLabel">Period</span><span class="pbVal">${summary.period}</span></div>
+        <div class="pbRow"><span class="pbLabel">Eccentricity</span><span class="pbVal">${summary.ecc}</span></div>
+      </div>
+    </div></li>`;
+  }
+
   function buildDeltaVPanelHtml(ship) {
     const dryMass = Number(ship.dry_mass_kg || 0);
     const fuel = Number(ship.fuel_kg || 0);
@@ -2519,6 +2668,134 @@
   const EUROPA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const GANYMEDE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const CALLISTO_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const LOCAL_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT; // unified value
+
+  // ---------- Orbit-rendering helpers ----------
+
+  // All celestial bodies have "grp_<body_id>" keys in locationsById.
+  function bodyIdToGroupId(bodyId) {
+    if (!bodyId) return null;
+    return "grp_" + bodyId.toLowerCase();
+  }
+
+  /**
+   * Convert body-centric km offset to world-coordinate offset.
+   * For heliocentric bodies (sun), use HELIO_LINEAR_WORLD_PER_KM directly.
+   * For local orbits around planets/moons, use LOCAL_ORBIT_SCALE.
+   */
+  function orbitKmToWorld(dxKm, dyKm, bodyId) {
+    const scale = (bodyId === "sun") ? HELIO_LINEAR_WORLD_PER_KM : LOCAL_ORBIT_SCALE;
+    return { wx: dxKm * scale, wy: dyKm * scale };
+  }
+
+  /**
+   * Return an orbitKmToWorld-compatible function with the correct scale
+   * for the given orbit elements.
+   *
+   * Map projection uses two scales:
+   *   LOCAL_ORBIT_SCALE  (3.2× HELIO) — orbit nodes around a body
+   *   HELIO_LINEAR_WORLD_PER_KM (1×)  — heliocentric projection
+   *
+   * For most bodies every child (orbit nodes AND moons) is projected at
+   * LOCAL_ORBIT_SCALE, so orbits always use 3.2×.  Earth is the exception:
+   * Earth orbit nodes (LEO, HEO, GEO) are at 3.2×, but the Moon is placed
+   * at its heliocentric position (1×).  Transfer orbits that span both
+   * regimes need endpoint-anchored scaling so the rendered curve
+   * connects the departure location (3.2×) to the destination (1×)
+   * without distorting the ellipse shape.
+   *
+   * Fix A: Instead of smoothstep (which warps the Keplerian ellipse into
+   * a non-physical pinched curve), use linear radial interpolation
+   * between the two endpoint scale factors.  The inner scale is anchored
+   * to the map position of the departure orbit ring, the outer scale is
+   * anchored to the destination body's map position.  This preserves the
+   * visual arc shape while correctly connecting both locations.
+   */
+  function orbitScaler(orbit) {
+    if (!orbit) return orbitKmToWorld;
+    const bodyId = orbit.body_id || '';
+    if (bodyId === 'sun') return orbitKmToWorld;
+
+    // Earth is the only body whose distant child (the Moon) is projected
+    // heliocentrically while local orbit nodes use expansion.  All other
+    // bodies (Jupiter, Mars, etc.) have ALL children at LOCAL_ORBIT_SCALE.
+    if (bodyId === 'earth') {
+      const e = orbit.e || 0;
+      if (e < 1 && orbit.a_km > 0) {
+        const periKm = orbit.a_km * (1 - e);
+        const apoKm  = orbit.a_km * (1 + e);
+
+        // Orbit spans both the local-expansion zone and heliocentric zone.
+        // Endpoint-anchored linear interpolation: 3.2× at periapsis (LEO),
+        // 1× at apoapsis (Moon).  The curve remains a true Keplerian shape.
+        if (apoKm > 50000 && periKm < 50000) {
+          // Inner endpoint: departure orbit ring uses LOCAL_ORBIT_SCALE
+          const innerScale = LOCAL_ORBIT_SCALE;
+          // Outer endpoint: destination body is at HELIO scale on the map.
+          // Compute the effective scale that maps apoapsis km → the correct
+          // world-space distance.  For the Moon this equals HELIO_LINEAR_WORLD_PER_KM.
+          const moonBodyPos = getBodyWorldPos('moon');
+          const earthBodyPos = getBodyWorldPos('earth');
+          let outerScale = HELIO_LINEAR_WORLD_PER_KM; // default
+          if (moonBodyPos && earthBodyPos && apoKm > 0) {
+            const mapDist = Math.hypot(moonBodyPos.rx - earthBodyPos.rx, moonBodyPos.ry - earthBodyPos.ry);
+            outerScale = mapDist / apoKm;
+          }
+          const rInner = periKm;
+          const rRange = Math.max(1, apoKm - periKm);
+          return (dxKm, dyKm, _bodyId) => {
+            const r = Math.hypot(dxKm, dyKm);
+            const t = Math.max(0, Math.min(1, (r - rInner) / rRange));
+            // Linear interpolation — preserves the arc shape
+            const scale = innerScale + (outerScale - innerScale) * t;
+            return { wx: dxKm * scale, wy: dyKm * scale };
+          };
+        }
+
+        // Orbit fully in heliocentric zone (e.g. circular at Moon distance)
+        if (apoKm > 50000) {
+          return (dxKm, dyKm, _bodyId) => ({
+            wx: dxKm * HELIO_LINEAR_WORLD_PER_KM,
+            wy: dyKm * HELIO_LINEAR_WORLD_PER_KM,
+          });
+        }
+      }
+
+      // Hyperbolic or parabolic Earth-centric orbits (SOI approach):
+      // these can span a wide radial range too — use endpoint-anchored scaling.
+      if (e >= 1.0 && orbit.a_km) {
+        const peri_km = Math.abs(orbit.a_km) * (e - 1);
+        if (peri_km < 50000) {
+          const innerScale = LOCAL_ORBIT_SCALE;
+          const outerScale = HELIO_LINEAR_WORLD_PER_KM;
+          // SOI radius of Earth ≈ 924,000 km; use a reasonable outer bound
+          const rOuter = 500000; // km — well beyond transfer orbit range
+          const rRange = Math.max(1, rOuter - peri_km);
+          return (dxKm, dyKm, _bodyId) => {
+            const r = Math.hypot(dxKm, dyKm);
+            const t = Math.max(0, Math.min(1, (r - peri_km) / rRange));
+            const scale = innerScale + (outerScale - innerScale) * t;
+            return { wx: dxKm * scale, wy: dyKm * scale };
+          };
+        }
+      }
+    }
+
+    // All non-Sun, non-Earth bodies: always LOCAL_ORBIT_SCALE
+    // (Jupiter moons, Mars moons, etc. are all at 3.2× expansion)
+    return orbitKmToWorld;
+  }
+
+  /**
+   * Get the world position of a body group for orbit rendering.
+   * Returns { rx, ry } or null if not found.
+   */
+  function getBodyWorldPos(bodyId) {
+    const groupId = bodyIdToGroupId(bodyId);
+    if (!groupId) return null;
+    return locationsById.get(groupId) || null;
+  }
+
   const FIT_VIEW_SCALE = 0.86;
   const MAP_SCREEN_SPREAD_MULT = 10;
   const MAX_INITIAL_SCALE = CAMERA_MAX_SCALE;
@@ -2617,10 +2894,12 @@
   const zoomScaledTexts = new Set();
   const BASE_TEXT_RESOLUTION = Math.max(1, window.devicePixelRatio || 1);
   const MAX_TEXT_RESOLUTION = 8;
+  let _nextStableId = 0;
 
   function registerZoomScaledText(t) {
     if (!t) return t;
     if (!Number.isFinite(Number(t.__collisionPriority))) t.__collisionPriority = 10;
+    if (!Number.isFinite(Number(t.__stableId))) t.__stableId = _nextStableId++;
     zoomScaledTexts.add(t);
     const targetRes = Math.min(MAX_TEXT_RESOLUTION, Math.max(1, BASE_TEXT_RESOLUTION * world.scale.x));
     if (t.resolution !== targetRes) {
@@ -2723,14 +3002,21 @@
       if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.width) || !Number.isFinite(b.height)) continue;
       if (b.width <= 0 || b.height <= 0) continue;
 
-      const priority = Number(t.__collisionPriority) || 0;
+      // Hysteresis: labels that were visible last pass get a small priority boost
+      // to prevent toggling when two labels at the same priority overlap.
+      const basePriority = Number(t.__collisionPriority) || 0;
+      const wasVisible = t.__cullPrevVisible !== false; // true on first pass
+      const priority = basePriority + (wasVisible ? 0.5 : 0);
       const area = b.width * b.height;
-      candidates.push({ t, b, priority, area });
+      const stableId = Number(t.__stableId) || 0;
+      candidates.push({ t, b, priority, area, stableId });
     }
 
+    // Stable sort: priority desc, then area asc, then stableId asc as tiebreaker
     candidates.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
-      return a.area - b.area;
+      if (a.area !== b.area) return a.area - b.area;
+      return a.stableId - b.stableId;
     });
 
     const kept = [];
@@ -2744,8 +3030,10 @@
       }
       if (overlaps) {
         c.t.visible = false;
+        c.t.__cullPrevVisible = false;
       } else {
         kept.push(c);
+        c.t.__cullPrevVisible = true;
       }
     }
   }
@@ -3326,19 +3614,7 @@
     const outerScale = outerR > 1 ? outerDist / outerR : ORBIT_SCALE;
     const rRange = outerR - innerR;
 
-    // ── SOI TRAJECTORY DEBUG ──────────────────────────────────────────
-    // Visible in browser F12 → Console. Search: "[SOI-TRAJ]"
-    const dbg = trajectoryData._debug || {};
-    console.group(`%c[SOI-TRAJ] ${fromLocId} → ${toLocId}`, 'color: #ff6600; font-weight: bold');
-    console.log('Backend debug:', dbg);
-    console.log('Scales:', { ORBIT_SCALE, innerScale: innerScale.toFixed(6), outerScale: outerScale.toFixed(6), ratio: (innerScale / outerScale).toFixed(2) });
-    console.log('Center body:', centerGroup, '→ map pos:', { rx: centerLoc.rx, ry: centerLoc.ry });
-    console.log('From:', fromLocId, fromLoc ? { rx: fromLoc.rx, ry: fromLoc.ry, distFromCenter: fromDist.toFixed(4) } : 'NOT FOUND');
-    console.log('To:', toLocId, toLoc ? { rx: toLoc.rx, ry: toLoc.ry, distFromCenter: toDist.toFixed(4) } : 'NOT FOUND');
-    console.log('Trajectory radii (km):', { firstR: firstR.toFixed(1), lastR: lastR.toFixed(1), innerR: innerR.toFixed(1), outerR: outerR.toFixed(1) });
-    console.log('Adaptive scaling:', { innerScale: innerScale.toFixed(6), outerScale: outerScale.toFixed(6), compressionRatio: (innerScale / outerScale).toFixed(2) + 'x' });
-    console.groupEnd();
-    // ── END DEBUG ────────────────────────────────────────────────────
+
 
     const points = [];
     const cumDist = [0];
@@ -3505,8 +3781,14 @@
     let departTan = pickOrbitTangent(fromBody || primaryBody, p0, p3, dir);
     let arriveTan = pickOrbitTangent(toBody || primaryBody, p3, p0, { x: -dir.x, y: -dir.y });
 
-    let c1Dist = Math.max(12, d * 0.36);
-    let c2Dist = Math.max(12, d * 0.33);
+    // Scale-aware floor: control points must stay proportional to the
+    // actual endpoint distance.  The old hardcoded floor of 12 world-units
+    // was larger than the entire LLO↔HLO gap (~1.6 wu), sending the
+    // Bézier curve wildly off-screen for small-orbit transfers.
+    const cpFloor = d * 0.15;
+
+    let c1Dist = Math.max(cpFloor, d * 0.36);
+    let c2Dist = Math.max(cpFloor, d * 0.33);
     let bendVec = { x: 0, y: 0 };
 
     if (samePrimary && primaryBody) {
@@ -3514,12 +3796,12 @@
       const r1 = Math.hypot(p3.x - primaryBody.rx, p3.y - primaryBody.ry);
       const semiMajor = Math.max(1e-6, (r0 + r1) * 0.5);
 
-      c1Dist = Math.max(12, Math.min(d * 0.62, semiMajor * 0.88));
-      c2Dist = Math.max(12, Math.min(d * 0.58, semiMajor * 0.82));
+      c1Dist = Math.max(cpFloor, Math.min(d * 0.62, semiMajor * 0.88));
+      c2Dist = Math.max(cpFloor, Math.min(d * 0.58, semiMajor * 0.82));
 
       const midToBody = normalizeVec(((p0.x + p3.x) * 0.5) - primaryBody.rx, ((p0.y + p3.y) * 0.5) - primaryBody.ry, 0, 0);
       const outward = r1 >= r0 ? 1 : -1;
-      const bendMag = Math.min(d * 0.18, Math.max(10, Math.abs(r1 - r0) * 0.34));
+      const bendMag = Math.min(d * 0.18, Math.max(d * 0.05, Math.abs(r1 - r0) * 0.34));
       bendVec = { x: midToBody.x * bendMag * outward, y: midToBody.y * bendMag * outward };
     } else if (!samePrimary && fromBody && toBody) {
       // Cross-body transfer (e.g. Earth orbit → Moon orbit).
@@ -3531,7 +3813,7 @@
       const rTo = Math.hypot(p3.x - toBody.rx, p3.y - toBody.ry);
 
       // Departure: orbit tangent scaled to local orbit size
-      c1Dist = Math.max(12, Math.min(d * 0.38, rFrom * 3.0 + d * 0.08));
+      c1Dist = Math.max(cpFloor, Math.min(d * 0.38, rFrom * 3.0 + d * 0.08));
 
       // Arrival: use the approach direction (from→to) so the curve
       // flows smoothly into the destination without hooking sideways.
@@ -3543,14 +3825,14 @@
         approachDir.y * (1 - orbitBlend) + arriveTan.y * orbitBlend,
         approachDir.x, approachDir.y
       );
-      c2Dist = Math.max(12, d * 0.25);
+      c2Dist = Math.max(cpFloor, d * 0.25);
 
       // Gentle outward bend away from the larger parent body
       const parentBody = fromBody;
       const midX = (p0.x + p3.x) * 0.5;
       const midY = (p0.y + p3.y) * 0.5;
       const midToParent = normalizeVec(midX - parentBody.rx, midY - parentBody.ry, dir.x, dir.y);
-      const bendMag = Math.max(6, d * 0.07);
+      const bendMag = Math.max(d * 0.03, d * 0.07);
       bendVec = { x: midToParent.x * bendMag, y: midToParent.y * bendMag };
     }
 
@@ -4322,6 +4604,336 @@
     for (const t of orbitLabelMap.values()) t.alpha = 0;
   });
 
+  // ---------- Burn marker tooltip ----------
+  const burnTooltipEl = document.createElement("div");
+  burnTooltipEl.id = "burnTooltip";
+  burnTooltipEl.className = "burnTooltip";
+  burnTooltipEl.style.display = "none";
+  document.body.appendChild(burnTooltipEl);
+  let hoveredBurnKey = null; // "shipId:burnIdx" or null
+
+  app.view.addEventListener("pointermove", (e) => {
+    if (visibleBurnMarkers.length === 0) {
+      if (hoveredBurnKey) { burnTooltipEl.style.display = "none"; hoveredBurnKey = null; }
+      return;
+    }
+    const rect = app.view.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const wp = world.toLocal(new PIXI.Point(mx, my));
+    const zoom = Math.max(0.0001, world.scale.x);
+
+    let bestDist = Infinity;
+    let bestMarker = null;
+    for (const m of visibleBurnMarkers) {
+      const sx = (m.wx - wp.x) * zoom;
+      const sy = (m.wy - wp.y) * zoom;
+      // screen-space pixel distance
+      const d = Math.sqrt(sx * sx + sy * sy);
+      // Use larger hit radius: max of 12px or marker's screen size
+      const hitR = Math.max(12, (m.screenSizePx || 12) * 1.2);
+      if (d < hitR && d < bestDist) {
+        bestDist = d;
+        bestMarker = m;
+      }
+    }
+
+    if (!bestMarker) {
+      if (hoveredBurnKey) { burnTooltipEl.style.display = "none"; hoveredBurnKey = null; }
+      return;
+    }
+
+    const key = `${bestMarker.shipId}:${bestMarker.burnIdx}`;
+    if (hoveredBurnKey !== key) {
+      hoveredBurnKey = key;
+      const b = bestMarker.burn;
+      const OR = window.OrbitRenderer;
+      const now = serverNow();
+      const burnTime = Number(b.time_s);
+      const countdown = burnTime - now;
+      const isPast = bestMarker.isPast;
+      const label = b.label || `Burn ${bestMarker.burnIdx + 1}`;
+      const dvPro = Number(b.prograde_m_s || 0);
+      const dvRad = Number(b.radial_m_s || 0);
+      const dvMag = Math.sqrt(dvPro * dvPro + dvRad * dvRad);
+      const direction = dvPro >= 0 ? "prograde" : "retrograde";
+
+      // Format burn time as game date
+      const burnDate = new Date(burnTime * 1000);
+      const dateStr = burnDate.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+
+      // Build before/after orbit summaries
+      let beforeHtml = "";
+      let afterHtml = "";
+      if (OR) {
+        const predBefore = bestMarker.predBefore;
+        const predAfter = bestMarker.predAfter;
+        if (predBefore?.elements) {
+          const bid = predBefore.body_id;
+          const mu = bid && bodyPhysics[bid] ? bodyPhysics[bid].mu_km3_s2 : null;
+          const bR = bid && bodyPhysics[bid] ? (bodyPhysics[bid].radius_km || 0) : 0;
+          if (mu) {
+            const s = OR.orbitSummary(predBefore.elements, mu, bR);
+            const kind = s.isHyperbolic ? "Hyperbolic" : (predBefore.elements.e > 0.01 ? "Elliptical" : "Circular");
+            beforeHtml = `<div class="btSection"><div class="btHead">Before</div>
+              <div class="btRow">${kind} orbit</div>
+              <div class="btRow">Pe: ${s.periapsis}  Ap: ${s.apoapsis}</div>
+              <div class="btRow">Period: ${s.period}</div></div>`;
+          }
+        }
+        if (predAfter?.elements) {
+          const bid = predAfter.body_id;
+          const mu = bid && bodyPhysics[bid] ? bodyPhysics[bid].mu_km3_s2 : null;
+          const bR = bid && bodyPhysics[bid] ? (bodyPhysics[bid].radius_km || 0) : 0;
+          if (mu) {
+            const s = OR.orbitSummary(predAfter.elements, mu, bR);
+            const kind = s.isHyperbolic ? "Hyperbolic" : (predAfter.elements.e > 0.01 ? "Elliptical" : "Circular");
+            afterHtml = `<div class="btSection"><div class="btHead">After</div>
+              <div class="btRow">${kind} orbit</div>
+              <div class="btRow">Pe: ${s.periapsis}  Ap: ${s.apoapsis}</div>
+              <div class="btRow">Period: ${s.period}</div></div>`;
+          }
+        }
+      }
+
+      const statusBadge = isPast
+        ? '<span class="btCompleted">COMPLETED</span>'
+        : `<span class="btCountdown">T-${OR ? OR.formatDuration(countdown) : Math.round(countdown) + "s"}</span>`;
+
+      burnTooltipEl.innerHTML = `
+        <div class="btTitle">${label} ${statusBadge}</div>
+        <div class="btDivider"></div>
+        <div class="btRow btDv">\u0394v: ${Math.round(dvMag)} m/s ${direction}</div>
+        ${Math.abs(dvPro) > 0.1 ? `<div class="btRow">Prograde: ${dvPro > 0 ? "+" : ""}${dvPro.toFixed(1)} m/s</div>` : ""}
+        ${Math.abs(dvRad) > 0.1 ? `<div class="btRow">Radial: ${dvRad > 0 ? "+" : ""}${dvRad.toFixed(1)} m/s</div>` : ""}
+        <div class="btRow btTime">Time: ${dateStr}</div>
+        <div class="btRow">${statusBadge}</div>
+        ${beforeHtml}${afterHtml}`;
+    }
+
+    // Position tooltip near cursor
+    burnTooltipEl.style.display = "block";
+    const ttW = burnTooltipEl.offsetWidth;
+    const ttH = burnTooltipEl.offsetHeight;
+    let tx = e.clientX + 16;
+    let ty = e.clientY - ttH / 2;
+    if (tx + ttW > window.innerWidth - 8) tx = e.clientX - ttW - 16;
+    if (ty < 8) ty = 8;
+    if (ty + ttH > window.innerHeight - 8) ty = window.innerHeight - ttH - 8;
+    burnTooltipEl.style.left = tx + "px";
+    burnTooltipEl.style.top = ty + "px";
+  });
+
+  app.view.addEventListener("pointerleave", () => {
+    if (hoveredBurnKey) { burnTooltipEl.style.display = "none"; hoveredBurnKey = null; }
+    ghostProjection = null;
+  });
+
+  // ---------- Ghost Projection (Phase 6) ----------
+  // Body color lookup for ghost circle rendering
+  const GHOST_BODY_COLORS = {
+    sun: 0xf6c65b, mercury: 0xc2b8a3, venus: 0xd9b77a, earth: 0x2b7cff,
+    moon: 0xbdbdbd, mars: 0xcd6b4f, ceres: 0x8b7d6b, vesta: 0x9a8a7a,
+    pallas: 0x7a6e62, hygiea: 0x5c5550, jupiter: 0xc88b3a,
+    io: 0xd4b846, europa: 0xc9c0a0, ganymede: 0x8899aa, callisto: 0x6a6060,
+  };
+  const GHOST_PROXIMITY_PX = 20; // screen-space distance threshold
+
+  // Ghost projection tooltip (DOM overlay)
+  const ghostTooltipEl = document.createElement("div");
+  ghostTooltipEl.className = "ghostTooltip";
+  ghostTooltipEl.style.display = "none";
+  document.body.appendChild(ghostTooltipEl);
+
+  /**
+   * Compute the ghost body's world position at a given game time.
+   * Uses bodyOrbits + bodyPhysics to propagate the body's Keplerian orbit.
+   */
+  function propagateBodyPosition(destBodyId, gameTime) {
+    const orbit = bodyOrbits[destBodyId];
+    if (!orbit) return null;
+    const centerBid = orbit.center_body_id;
+    const centerMu = bodyPhysics[centerBid]?.mu_km3_s2;
+    if (!centerMu) return null;
+
+    // Check cache: reuse if same body and time delta < 60s
+    if (ghostProjectionCache.bodyId === destBodyId &&
+        Math.abs(ghostProjectionCache.gameTime - gameTime) < 60) {
+      return { wx: ghostProjectionCache.wx, wy: ghostProjectionCache.wy };
+    }
+
+    const OR = window.OrbitRenderer;
+    if (!OR) return null;
+
+    // Propagate body in its parent's frame
+    const pos = OR.orbitPosition(orbit, centerMu, gameTime);
+    // Convert km offset to world coordinates using heliocentric scale
+    // (bodies orbit their parents at heliocentric scale)
+    const wOff = { wx: pos.x * HELIO_LINEAR_WORLD_PER_KM, wy: pos.y * HELIO_LINEAR_WORLD_PER_KM };
+
+    // Get the parent body's world position (for moons orbiting planets, need parent pos)
+    const centerWorldPos = getBodyWorldPos(centerBid);
+    if (!centerWorldPos) return null;
+
+    const wx = centerWorldPos.rx + wOff.wx;
+    const wy = centerWorldPos.ry + wOff.wy;
+
+    // Update cache
+    ghostProjectionCache = { bodyId: destBodyId, gameTime, wx, wy };
+    return { wx, wy };
+  }
+
+  // Ghost projection pointermove handler — extends the burn tooltip handler
+  app.view.addEventListener("pointermove", (e) => {
+    if (ghostArcSegments.length === 0 || !selectedShipId) {
+      ghostProjection = null;
+      return;
+    }
+    const OR = window.OrbitRenderer;
+    if (!OR) return;
+
+    const rect = app.view.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const wp = world.toLocal(new PIXI.Point(mx, my));
+    const zoom = Math.max(0.0001, world.scale.x);
+    const thresholdWorld = GHOST_PROXIMITY_PX / zoom;
+
+    // Find closest arc point across all transfer segments for the selected ship
+    let bestResult = null;
+    let bestSeg = null;
+    let bestDist = Infinity;
+
+    for (const seg of ghostArcSegments) {
+      if (seg.shipId !== selectedShipId) continue;
+      const result = OR.closestArcPoint(
+        seg.orbit, seg.mu, seg.bodyWorldPos, seg.scaler,
+        wp.x, wp.y,
+        { startNu: seg.startNu, endNu: seg.endNu, numSamples: 64 }
+      );
+      if (result && result.dist < bestDist) {
+        bestDist = result.dist;
+        bestResult = result;
+        bestSeg = seg;
+      }
+    }
+
+    if (!bestResult || bestDist > thresholdWorld) {
+      ghostProjection = null;
+      return;
+    }
+
+    // Compute destination body's future position at this game time
+    const destBodyId = bestSeg.destBodyId;
+    const destPos = propagateBodyPosition(destBodyId, bestResult.gameTime);
+    if (!destPos) {
+      ghostProjection = null;
+      return;
+    }
+
+    // Compute distance between arc point and destination body in km.
+    // Both positions are in world coordinates, but the arc point may use
+    // adaptive scaling (mixed 3.2×/1×) while the ghost body uses pure 1×.
+    // For a physically correct distance, compute in km space instead:
+    // propagate the ship's orbit position in km, then compare to the
+    // destination body's km offset from the same parent.
+    const dxW = destPos.wx - bestResult.wx;
+    const dyW = destPos.wy - bestResult.wy;
+    const distWorld = Math.sqrt(dxW * dxW + dyW * dyW);
+    // Use the destination body's helio scale for km conversion (most
+    // accurate for the intercept distance that matters to the player).
+    const distKm = distWorld / HELIO_LINEAR_WORLD_PER_KM;
+
+    // Time label: elapsed since departure
+    const departTime = bestSeg.departureS || 0;
+    const elapsed = bestResult.gameTime - departTime;
+
+    ghostProjection = {
+      arcWx: bestResult.wx,
+      arcWy: bestResult.wy,
+      gameTime: bestResult.gameTime,
+      destBodyId: destBodyId,
+      destWx: destPos.wx,
+      destWy: destPos.wy,
+      distKm: distKm,
+      elapsed: elapsed,
+      shipId: bestSeg.shipId,
+      screenX: e.clientX,
+      screenY: e.clientY,
+    };
+  });
+
+  /**
+   * Draw ghost projection overlay: ghost body circle, intercept dashed line,
+   * distance and time labels.
+   */
+  function drawGhostProjection(zoom) {
+    ghostGfx.clear();
+    if (!ghostProjection) {
+      ghostTooltipEl.style.display = "none";
+      return;
+    }
+    const gp = ghostProjection;
+    const OR = window.OrbitRenderer;
+    if (!OR) return;
+
+    const color = GHOST_BODY_COLORS[gp.destBodyId] || 0xaaaaaa;
+
+    // Ghost body circle — size matches planet visual radius at current zoom
+    const bodyRadiusWorld = 4.5 / zoom; // approximate planet icon radius
+    ghostGfx.lineStyle(1.2 / zoom, color, 0.35);
+    ghostGfx.beginFill(color, 0.15);
+    ghostGfx.drawCircle(gp.destWx, gp.destWy, bodyRadiusWorld);
+    ghostGfx.endFill();
+
+    // Intercept dashed line from arc point to ghost body center
+    const dx = gp.destWx - gp.arcWx;
+    const dy = gp.destWy - gp.arcWy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0.001 / zoom) {
+      const dashLen = 6 / zoom;
+      const gapLen = 4 / zoom;
+      const steps = Math.ceil(dist / (dashLen + gapLen));
+      ghostGfx.lineStyle(0.8 / zoom, 0xffffff, 0.3);
+      for (let i = 0; i < steps; i++) {
+        const t0 = (i * (dashLen + gapLen)) / dist;
+        const t1 = Math.min((i * (dashLen + gapLen) + dashLen) / dist, 1);
+        if (t0 >= 1) break;
+        ghostGfx.moveTo(gp.arcWx + dx * t0, gp.arcWy + dy * t0);
+        ghostGfx.lineTo(gp.arcWx + dx * t1, gp.arcWy + dy * t1);
+      }
+    }
+
+    // Arc point marker (small crosshair on the transfer arc)
+    const cSize = 3 / zoom;
+    ghostGfx.lineStyle(1 / zoom, 0xffffff, 0.5);
+    ghostGfx.moveTo(gp.arcWx - cSize, gp.arcWy);
+    ghostGfx.lineTo(gp.arcWx + cSize, gp.arcWy);
+    ghostGfx.moveTo(gp.arcWx, gp.arcWy - cSize);
+    ghostGfx.lineTo(gp.arcWx, gp.arcWy + cSize);
+
+    // DOM tooltip with distance + time labels
+    const bodyName = gp.destBodyId ? (gp.destBodyId.charAt(0).toUpperCase() + gp.destBodyId.slice(1)) : "Target";
+    const distStr = OR.formatDistanceKm(gp.distKm);
+    const timeStr = gp.elapsed > 0 ? ("T+" + OR.formatDuration(gp.elapsed)) : "";
+    ghostTooltipEl.innerHTML =
+      `<div class="gtBody">${bodyName}</div>` +
+      `<div class="gtDist">${distStr}</div>` +
+      (timeStr ? `<div class="gtTime">${timeStr}</div>` : "");
+    ghostTooltipEl.style.display = "block";
+
+    // Position tooltip near the arc point (offset below-right)
+    const ttW = ghostTooltipEl.offsetWidth;
+    const ttH = ghostTooltipEl.offsetHeight;
+    let tx = gp.screenX + 18;
+    let ty = gp.screenY + 14;
+    if (tx + ttW > window.innerWidth - 8) tx = gp.screenX - ttW - 18;
+    if (ty + ttH > window.innerHeight - 8) ty = gp.screenY - ttH - 14;
+    if (ty < 8) ty = 8;
+    ghostTooltipEl.style.left = tx + "px";
+    ghostTooltipEl.style.top = ty + "px";
+  }
+
   // ---------- Locations ----------
   function ensureLocationsGfx() {
     function makeMoonMarker(moonId = "") {
@@ -4516,7 +5128,9 @@
         || (entry.kind === "lagrange" && ALWAYS_VISIBLE_LPOINTS.has(locId));
       if (alwaysLabel) {
         entry.label.alpha = entry.hovered ? detailAlpha : detailAlpha * CELESTIAL_BASE_LABEL_ALPHA;
-        entry.label.visible = detailAlpha > 0.001;
+        // Only force-hide here; collision culling is the sole authority for making
+        // overlapping "always visible" labels visible (prevents stutter).
+        if (detailAlpha <= 0.001) entry.label.visible = false;
       } else {
         entry.label.alpha = entry.hovered ? detailAlpha : 0;
         entry.label.visible = entry.hovered && detailAlpha > 0.001;
@@ -5004,6 +5618,114 @@
     }
   }
 
+  // ── Faint orbit rendering for ships sharing the active body ──
+  function drawFaintOrbits(now, zoom) {
+    const OR = window.OrbitRenderer;
+    if (!OR) { faintOrbitGfx.clear(); return; }
+
+    // Determine active body from selected/hovered ship
+    const refGfxEntry = selectedShipId ? shipGfx.get(selectedShipId)
+      : hoveredShipId ? shipGfx.get(hoveredShipId) : null;
+    const refShip = refGfxEntry?.ship;
+    if (!refShip) { faintOrbitGfx.clear(); faintOrbitGfx.__faintCacheKey = ""; return; }
+
+    let faintBodyId = null;
+    if (refShip.status === "docked" && refShip.orbit) {
+      faintBodyId = refShip.orbit.body_id;
+    } else if (refShip.status === "transit") {
+      const preds = Array.isArray(refShip.orbit_predictions) ? refShip.orbit_predictions : [];
+      for (const seg of preds) {
+        if (!seg.elements) continue;
+        const fromS = Number(seg.from_s || 0);
+        const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+        if (now >= fromS && now < toS) { faintBodyId = seg.body_id || refShip.orbit?.body_id; break; }
+      }
+      if (!faintBodyId && refShip.orbit) faintBodyId = refShip.orbit.body_id;
+    }
+    if (!faintBodyId) { faintOrbitGfx.clear(); faintOrbitGfx.__faintCacheKey = ""; return; }
+
+    const bp = bodyPhysics[faintBodyId];
+    const bodyPos = getBodyWorldPos(faintBodyId);
+    if (!bp || !bodyPos) { faintOrbitGfx.clear(); faintOrbitGfx.__faintCacheKey = ""; return; }
+
+    // Cache key to avoid redundant redraws
+    const qZoom = (zoom * 100) | 0;
+    const bpx = (bodyPos.rx * 100) | 0;
+    const bpy = (bodyPos.ry * 100) | 0;
+    const faintCacheKey = `faint|${selectedShipId}|${hoveredShipId}|${faintBodyId}|${qZoom}|${ships.length}|${bpx},${bpy}`;
+    if (faintOrbitGfx.__faintCacheKey === faintCacheKey) return;
+    faintOrbitGfx.__faintCacheKey = faintCacheKey;
+    faintOrbitGfx.clear();
+
+    const mu = bp.mu_km3_s2;
+    const numPts = zoom > 1 ? 64 : 16;
+    const segColors = [0x44aaff, 0xffaa22, 0x44ff66];
+
+    for (const gfxEntry of shipGfx.values()) {
+      const s = gfxEntry.ship;
+      if (s.id === selectedShipId || s.id === hoveredShipId) continue;
+
+      if (s.status === "docked" && s.orbit && s.orbit.body_id === faintBodyId) {
+        const scaler = orbitScaler(s.orbit);
+        // Distance culling: skip if orbit radius < 3 screen px
+        const apoKm = s.orbit.a_km * (1 + (s.orbit.e || 0));
+        const testW = scaler(apoKm, 0, faintBodyId);
+        if (Math.abs(testW.wx) * zoom < 3) continue;
+
+        OR.drawOrbitPath(faintOrbitGfx, s.orbit, mu, bodyPos, scaler, {
+          color: 0xffffff,
+          alpha: 0.08,
+          lineWidth: 0.5 / zoom,
+          numPoints: numPts,
+        });
+      } else if (s.status === "transit") {
+        const preds = Array.isArray(s.orbit_predictions) ? s.orbit_predictions : [];
+        for (let si = 0; si < preds.length; si++) {
+          const seg = preds[si];
+          if (!seg.elements) continue;
+          const segBid = seg.body_id || s.orbit?.body_id;
+          if (segBid !== faintBodyId) continue;
+
+          const segE = seg.elements;
+          const segMu = bodyPhysics[segBid]?.mu_km3_s2 || mu;
+          const segBodyPos = getBodyWorldPos(segBid) || bodyPos;
+          const scaler = orbitScaler(segE);
+
+          // Distance culling
+          const apoKm = segE.a_km * (1 + (segE.e || 0));
+          const testW = scaler(apoKm, 0, segBid);
+          if (Math.abs(testW.wx) * zoom < 3) continue;
+
+          const isActive = (() => {
+            const fromS = Number(seg.from_s || 0);
+            const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+            return now >= fromS && now < toS;
+          })();
+
+          const drawOpts = {
+            color: segColors[si % segColors.length] || 0xaaaaaa,
+            alpha: isActive ? 0.12 : 0.06,
+            lineWidth: (isActive ? 0.8 : 0.5) / zoom,
+            numPoints: numPts,
+          };
+
+          // Arc clipping for time-bounded segments
+          const fromS = seg.from_s != null ? Number(seg.from_s) : null;
+          const toS = seg.to_s != null ? Number(seg.to_s) : null;
+          if (fromS != null && toS != null && toS > fromS && segE.e > 0.01) {
+            const nuStart = OR.trueAnomalyAtTime(segE, segMu, fromS);
+            let nuEnd = OR.trueAnomalyAtTime(segE, segMu, toS);
+            if (nuEnd <= nuStart) nuEnd += 2 * Math.PI;
+            drawOpts.startNu = nuStart;
+            drawOpts.endNu = nuEnd;
+          }
+
+          OR.drawOrbitPath(faintOrbitGfx, segE, segMu, segBodyPos, scaler, drawOpts);
+        }
+      }
+    }
+  }
+
   function updateShipPositions() {
     const now = serverNow();
     const zoom = Math.max(0.0001, world.scale.x);
@@ -5016,6 +5738,8 @@
     const dockedCountByLocation = new Map();
     const dockedShipsByLocation = new Map();
     const hiddenClusterCountByLocation = new Map();
+    visibleBurnMarkers = []; // reset each frame
+    ghostArcSegments = []; // reset ghost arc segments each frame
 
     for (const gfx of shipGfx.values()) {
       const s = gfx.ship;
@@ -5037,9 +5761,7 @@
       let py = 0;
       if (ship.status === "docked") {
         const loc = locationsById.get(ship.location_id);
-        if (!loc) continue;
-
-        if (pathGfx) pathGfx.clear();
+        if (!loc) { container.visible = false; continue; }
 
         const dockedCount = dockedCountByLocation.get(ship.location_id) || 1;
         const isSelectedOrHovered = (ship.id === selectedShipId || ship.id === hoveredShipId);
@@ -5055,34 +5777,376 @@
 
         container.visible = true;
 
-        // Orbit ships: position along the orbit ring with animated rotation
-        const oi = isOrbitLocation ? orbitInfo.get(ship.location_id) : null;
-        if (oi && oi.period_s > 0) {
+        // ── Orbit-element positioning (Phase 3) ──
+        // If this ship has real orbital elements, use the Kepler solver
+        const shipOrbit = ship.orbit;
+        const orbitBodyId = shipOrbit ? shipOrbit.body_id : null;
+        const orbitMu = orbitBodyId && bodyPhysics[orbitBodyId]
+          ? bodyPhysics[orbitBodyId].mu_km3_s2 : null;
+        const orbitBodyPos = orbitBodyId ? getBodyWorldPos(orbitBodyId) : null;
+
+        if (shipOrbit && orbitMu && orbitBodyPos && window.OrbitRenderer) {
+          const OR = window.OrbitRenderer;
           const slotIndex = Number(slot?.index) || 0;
-          const slotSpacing = (2 * Math.PI) / Math.max(1, dockedCount);
-          const elapsed = (performance.now() / 1000);
-          const orbitAngle = oi.baseAngle + (elapsed / oi.period_s) * 2 * Math.PI + slotIndex * slotSpacing;
-          px = oi.cx + oi.radius * Math.cos(orbitAngle);
-          py = oi.cy + oi.radius * Math.sin(orbitAngle);
-          facingAngle = orbitAngle + Math.PI / 2;
-          headingAngle = facingAngle;
-        } else {
-          const slotIndex = Number(slot?.index) || 0;
-          const rowOffset = dockedRowOffsetWorld(slotIndex, zoom, dockedCount);
-          px = loc.rx + rowOffset.dxWorld;
-          py = loc.ry + rowOffset.dyWorld;
-          facingAngle = 0;
-          headingAngle = 0;
+          const slotPhaseOffset = (dockedCount > 1)
+            ? (slotIndex / dockedCount) * 2 * Math.PI : 0;
+
+          // Build a shifted orbit for slot spacing: rotate M0 by slotPhaseOffset
+          const adjustedOrbit = dockedCount > 1
+            ? { ...shipOrbit, M0_deg: (shipOrbit.M0_deg || 0) + slotPhaseOffset * OR.RAD2DEG }
+            : shipOrbit;
+
+          const wp = OR.shipWorldPosition(adjustedOrbit, orbitMu, now, orbitBodyPos, orbitKmToWorld);
+          px = wp.wx;
+          py = wp.wy;
+          facingAngle = wp.angle + Math.PI / 2; // perpendicular to velocity
+          headingAngle = wp.angle;
+
+          // Draw orbit ellipse on pathGfx for selected/hovered ships
+          if (pathGfx) {
+            const isSelOrHov = (ship.id === selectedShipId || ship.id === hoveredShipId);
+            const orbitCacheKey = isSelOrHov
+              ? `orbit|${ship.orbit_body_id}|${(zoom * 100) | 0}|${shipOrbit.a_km}|${shipOrbit.e}`
+              : "";
+            if (pathGfx.__orbitCacheKey !== orbitCacheKey) {
+              pathGfx.__orbitCacheKey = orbitCacheKey;
+              pathGfx.clear();
+              if (isSelOrHov) {
+                const lineW = 1.5 / zoom;
+                OR.drawOrbitPath(pathGfx, shipOrbit, orbitMu, orbitBodyPos, orbitKmToWorld, {
+                  color: 0x4488ff,
+                  alpha: 0.5,
+                  lineWidth: lineW,
+                  numPoints: 96,
+                });
+                // Draw Ap/Pe markers for non-circular orbits
+                const bodyR = bodyPhysics[orbitBodyId]?.radius_km || 0;
+                OR.drawApsisMarkers(pathGfx, shipOrbit, orbitBodyPos, orbitKmToWorld, bodyR, zoom, { color: 0x4488ff });
+              }
+            }
+          }
+        }
+        // ── Legacy cosmetic orbit ring positioning ──
+        else {
+          if (pathGfx) { pathGfx.clear(); pathGfx.__orbitCacheKey = ""; }
+          const oi = isOrbitLocation ? orbitInfo.get(ship.location_id) : null;
+          if (oi && oi.period_s > 0) {
+            const slotIndex = Number(slot?.index) || 0;
+            const slotSpacing = (2 * Math.PI) / Math.max(1, dockedCount);
+            const elapsed = (performance.now() / 1000);
+            const orbitAngle = oi.baseAngle + (elapsed / oi.period_s) * 2 * Math.PI + slotIndex * slotSpacing;
+            px = oi.cx + oi.radius * Math.cos(orbitAngle);
+            py = oi.cy + oi.radius * Math.sin(orbitAngle);
+            facingAngle = orbitAngle + Math.PI / 2;
+            headingAngle = facingAngle;
+          } else {
+            const slotIndex = Number(slot?.index) || 0;
+            const rowOffset = dockedRowOffsetWorld(slotIndex, zoom, dockedCount);
+            px = loc.rx + rowOffset.dxWorld;
+            py = loc.ry + rowOffset.dyWorld;
+            facingAngle = 0;
+            headingAngle = 0;
+          }
         }
       } else {
-        if (!ship.departed_at || !ship.arrives_at) continue;
+        if (!ship.departed_at || !ship.arrives_at) { container.visible = false; continue; }
+
+        // ── Orbit-element transit positioning (Phase 4) ──
+        // For transit ships with real orbital elements, use the Kepler solver
+        const transitOrbit = ship.orbit;
+        const transitBodyId = transitOrbit ? transitOrbit.body_id : null;
+        const transitMu = transitBodyId && bodyPhysics[transitBodyId]
+          ? bodyPhysics[transitBodyId].mu_km3_s2 : null;
+        const transitBodyPos = transitBodyId ? getBodyWorldPos(transitBodyId) : null;
+        const hasOrbitPositioning = !!(transitOrbit && transitMu && transitBodyPos && window.OrbitRenderer);
+
+        if (hasOrbitPositioning) {
+          const OR = window.OrbitRenderer;
+
+          // Determine current orbit: find which prediction segment we're in
+          const predictions = Array.isArray(ship.orbit_predictions) ? ship.orbit_predictions : [];
+          let activeOrbit = transitOrbit;
+          let activeBodyId = transitBodyId;
+          let activeMu = transitMu;
+          let activeBodyPos = transitBodyPos;
+          let activeSeg = null; // track the prediction segment we're in
+          let activeSegIdx = -1;
+
+          if (predictions.length > 0) {
+            // Walk predictions to find current segment based on game time
+            for (let _si = 0; _si < predictions.length; _si++) {
+              const seg = predictions[_si];
+              if (!seg.elements) continue;
+              const fromS = Number(seg.from_s || 0);
+              const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+              if (now >= fromS && now < toS) {
+                activeOrbit = seg.elements;
+                activeSeg = seg;
+                activeSegIdx = _si;
+                if (seg.body_id && bodyPhysics[seg.body_id]) {
+                  activeBodyId = seg.body_id;
+                  activeMu = bodyPhysics[seg.body_id].mu_km3_s2;
+                  activeBodyPos = getBodyWorldPos(seg.body_id) || transitBodyPos;
+                }
+                break;
+              }
+            }
+            // If we're past all segments, use the last one
+            const lastSeg = predictions[predictions.length - 1];
+            if (lastSeg?.elements && lastSeg.to_s != null && now >= Number(lastSeg.to_s)) {
+              activeOrbit = lastSeg.elements;
+              activeSeg = lastSeg;
+              activeSegIdx = predictions.length - 1;
+              if (lastSeg.body_id && bodyPhysics[lastSeg.body_id]) {
+                activeBodyId = lastSeg.body_id;
+                activeMu = bodyPhysics[lastSeg.body_id].mu_km3_s2;
+                activeBodyPos = getBodyWorldPos(lastSeg.body_id) || transitBodyPos;
+              }
+            }
+          }
+
+          const activeScaler = orbitScaler(activeOrbit);
+          const wp = OR.shipWorldPosition(activeOrbit, activeMu, now, activeBodyPos, activeScaler);
+          px = wp.wx;
+          py = wp.wy;
+          facingAngle = wp.angle + Math.PI / 2;
+          headingAngle = wp.angle;
+
+          // ── Draw predicted orbit segments for selected/hovered transit ships ──
+          if (pathGfx) {
+            const isSelOrHov = (ship.id === selectedShipId || ship.id === hoveredShipId);
+            // Cache key based on orbit shape/zoom — NOT body position.
+            // Body position changes every frame as planets orbit; the path
+            // Graphics is parented to the world layer so it moves with pan
+            // automatically.  We only need to redraw when the orbit shape
+            // or zoom level changes.
+            const orbitCacheKey = isSelOrHov
+              ? `transit-orbit|${transitBodyId}|${(zoom * 100) | 0}|${activeOrbit.a_km}|${activeOrbit.e}|${predictions.length}|${activeSegIdx}`
+              : "";
+            if (pathGfx.__orbitCacheKey !== orbitCacheKey) {
+              pathGfx.__orbitCacheKey = orbitCacheKey;
+              pathGfx.__transitCacheKey = "";
+              pathGfx.clear();
+              if (isSelOrHov) {
+                // ── Unified burn chain visualization ──
+                // Draw ALL prediction segments with proper active/inactive styling
+                // departure (blue), transfer (orange), SOI approach (yellow), arrival (green)
+                const segColors = [0x44aaff, 0xffaa22, 0xffcc44, 0x44ff66, 0x44ff66];
+
+                for (let si = 0; si < predictions.length; si++) {
+                  const seg = predictions[si];
+                  if (!seg.elements) continue;
+                  const isActiveSeg = (si === activeSegIdx);
+                  const segBid = seg.body_id || transitBodyId;
+                  const segMu = bodyPhysics[segBid]?.mu_km3_s2 || activeMu;
+                  const segBodyPos = getBodyWorldPos(segBid) || activeBodyPos;
+                  const segE = seg.elements;
+                  const segScaler = orbitScaler(segE);
+                  const segColor = segColors[si % segColors.length] || 0xaaaaaa;
+
+                  const drawOpts = {
+                    color: segColor,
+                    alpha: isActiveSeg ? 0.7 : 0.35,
+                    lineWidth: (isActiveSeg ? 2.0 : 1.0) / zoom,
+                    dashed: !isActiveSeg,
+                    numPoints: 96,
+                  };
+
+                  // Arc clipping for time-bounded segments
+                  const fromS = seg.from_s != null ? Number(seg.from_s) : null;
+                  const toS = seg.to_s != null ? Number(seg.to_s) : null;
+                  if (fromS != null && toS != null && toS > fromS && segE.e > 0.01) {
+                    const nuStart = OR.trueAnomalyAtTime(segE, segMu, fromS);
+                    let nuEnd = OR.trueAnomalyAtTime(segE, segMu, toS);
+                    if (nuEnd <= nuStart) nuEnd += 2 * Math.PI;
+                    drawOpts.startNu = nuStart;
+                    drawOpts.endNu = nuEnd;
+                  }
+
+                  OR.drawOrbitPath(pathGfx, segE, segMu, segBodyPos, segScaler, drawOpts);
+
+                  // Capture segment metadata for ghost projection hit-testing
+                  // We capture all transfer/arrival segments (si >= 1) since they show intercept geometry
+                  // Skip same-body transfers (e.g. LEO→GEO) — ghost only makes sense for body-to-body
+                  if (si >= 1 || predictions.length === 1) {
+                    // Determine the destination body: last segment's body_id
+                    const lastSeg = predictions[predictions.length - 1];
+                    const destBid = lastSeg?.body_id || transitBodyId;
+                    // Only capture if destination body differs from the transfer's reference body
+                    if (destBid !== segBid) ghostArcSegments.push({
+                      orbit: segE,
+                      mu: segMu,
+                      bodyWorldPos: segBodyPos,
+                      scaler: segScaler,
+                      startNu: drawOpts.startNu,
+                      endNu: drawOpts.endNu,
+                      bodyId: segBid,
+                      shipId: ship.id,
+                      destBodyId: destBid,
+                      fromS: fromS,
+                      toS: toS,
+                      departureS: Number(ship.departed_at),
+                    });
+                  }
+
+                  // Ap/Pe markers on active segment
+                  if (isActiveSeg) {
+                    const bodyR = bodyPhysics[segBid]?.radius_km || 0;
+                    OR.drawApsisMarkers(pathGfx, segE, segBodyPos, segScaler, bodyR, zoom, { color: segColor });
+                  }
+
+                  // Direction arrows on transfer arcs (eccentric or arc-clipped segments)
+                  if (drawOpts.startNu !== undefined && segE.e > 0.02) {
+                    OR.drawDirectionArrows(pathGfx, segE, segMu, segBodyPos, segScaler, {
+                      color: segColor,
+                      alpha: drawOpts.alpha * 0.7,
+                      lineWidth: drawOpts.lineWidth * 0.7,
+                      arrowSize: 6 / zoom,
+                      numArrows: 3,
+                      startNu: drawOpts.startNu,
+                      endNu: drawOpts.endNu,
+                    });
+                  }
+                }
+
+                // ── Connecting lines between body-frame boundaries ──
+                for (let si = 0; si < predictions.length - 1; si++) {
+                  const segA = predictions[si];
+                  const segB = predictions[si + 1];
+                  if (!segA.elements || !segB.elements) continue;
+                  const bidA = segA.body_id || transitBodyId;
+                  const bidB = segB.body_id || transitBodyId;
+                  if (bidA === bidB) continue; // no frame change
+                  const toSA = segA.to_s != null ? Number(segA.to_s) : null;
+                  const fromSB = segB.from_s != null ? Number(segB.from_s) : null;
+                  if (toSA == null || fromSB == null) continue;
+                  const muA = bodyPhysics[bidA]?.mu_km3_s2;
+                  const muB = bodyPhysics[bidB]?.mu_km3_s2;
+                  if (!muA || !muB) continue;
+                  const posA = OR.orbitPosition(segA.elements, muA, toSA);
+                  const scalerA = orbitScaler(segA.elements);
+                  const bpA = getBodyWorldPos(bidA) || activeBodyPos;
+                  const wA = scalerA(posA.x, posA.y, bidA);
+                  const posB = OR.orbitPosition(segB.elements, muB, fromSB);
+                  const scalerB = orbitScaler(segB.elements);
+                  const bpB = getBodyWorldPos(bidB) || activeBodyPos;
+                  const wB = scalerB(posB.x, posB.y, bidB);
+                  OR.drawConnectingDash(pathGfx,
+                    bpA.rx + wA.wx, bpA.ry + wA.wy,
+                    bpB.rx + wB.wx, bpB.ry + wB.wy, {
+                    color: 0x888888,
+                    alpha: 0.4,
+                    lineWidth: 0.8 / zoom,
+                  });
+                }
+
+                // ── Draw burn markers (directional, Δv-sized) ──
+                const maneuvers = Array.isArray(ship.maneuvers) ? ship.maneuvers : [];
+                for (let bi = 0; bi < maneuvers.length; bi++) {
+                  const burn = maneuvers[bi];
+                  // Skip SOI transition markers — they have no Δv to visualize
+                  if (burn.type === 'soi_exit' || burn.type === 'soi_enter') continue;
+                  const burnTime = Number(burn.time_s);
+                  let burnOrbit = transitOrbit;
+                  let burnMu = transitMu;
+                  let burnBodyPos = transitBodyPos;
+                  let predBeforeIdx = -1;
+                  for (let pi = 0; pi < predictions.length; pi++) {
+                    const seg = predictions[pi];
+                    if (!seg.elements) continue;
+                    const toS = seg.to_s != null ? Number(seg.to_s) : Infinity;
+                    if (burnTime <= toS) {
+                      burnOrbit = seg.elements;
+                      predBeforeIdx = pi;
+                      const bid = seg.body_id || transitBodyId;
+                      burnMu = bodyPhysics[bid]?.mu_km3_s2 || transitMu;
+                      burnBodyPos = getBodyWorldPos(bid) || transitBodyPos;
+                      break;
+                    }
+                  }
+                  const burnPos = OR.orbitPosition(burnOrbit, burnMu, burnTime);
+                  const bw = orbitScaler(burnOrbit)(burnPos.x, burnPos.y, burnOrbit.body_id || transitBodyId);
+                  const bx = burnBodyPos.rx + bw.wx;
+                  const by = burnBodyPos.ry + bw.wy;
+                  const isPast = burnTime <= now;
+
+                  // Δv magnitude → marker size (6–16 screen px)
+                  const dvPro = Number(burn.prograde_m_s || 0);
+                  const dvRad = Number(burn.radial_m_s || 0);
+                  const dvMag = Math.sqrt(dvPro * dvPro + dvRad * dvRad);
+                  const sizePx = Math.max(6, Math.min(16, 6 + Math.log10(Math.max(1, dvMag)) * 3));
+                  const markerSize = sizePx / zoom;
+
+                  // Orbit tangent for directional chevron
+                  const pos2 = OR.orbitPosition(burnOrbit, burnMu, burnTime + 0.5);
+                  const bw2 = orbitScaler(burnOrbit)(pos2.x, pos2.y, burnOrbit.body_id || transitBodyId);
+                  const tdx = (burnBodyPos.rx + bw2.wx) - bx;
+                  const tdy = (burnBodyPos.ry + bw2.wy) - by;
+                  const tlen = Math.sqrt(tdx * tdx + tdy * tdy);
+                  let nx = 1, ny = 0;
+                  if (tlen > 1e-10) { nx = tdx / tlen; ny = tdy / tlen; }
+
+                  // Reverse direction for retrograde
+                  const isRetrograde = dvPro < 0;
+                  const dir = isRetrograde ? -1 : 1;
+                  const dnx = nx * dir;
+                  const dny = ny * dir;
+
+                  // Chevron shape (pointing along orbit direction)
+                  const tipX = bx + dnx * markerSize * 0.6;
+                  const tipY = by + dny * markerSize * 0.6;
+                  const leftX = bx - dnx * markerSize * 0.35 - dny * markerSize * 0.45;
+                  const leftY = by - dny * markerSize * 0.35 + dnx * markerSize * 0.45;
+                  const rightX = bx - dnx * markerSize * 0.35 + dny * markerSize * 0.45;
+                  const rightY = by - dny * markerSize * 0.35 - dnx * markerSize * 0.45;
+
+                  const outlineColor = isPast ? 0x666666 : (isRetrograde ? 0xdd4422 : 0xff6622);
+                  const fillColor = isPast ? 0x333333 : (isRetrograde ? 0xcc2200 : 0xff4400);
+                  pathGfx.lineStyle(1.2 / zoom, outlineColor, isPast ? 0.4 : 0.85);
+                  pathGfx.beginFill(fillColor, isPast ? 0.3 : 0.6);
+                  pathGfx.moveTo(tipX, tipY);
+                  pathGfx.lineTo(leftX, leftY);
+                  pathGfx.lineTo(bx - dnx * markerSize * 0.15, by - dny * markerSize * 0.15);
+                  pathGfx.lineTo(rightX, rightY);
+                  pathGfx.closePath();
+                  pathGfx.endFill();
+
+                  // Radial tick mark if radial component exists
+                  if (Math.abs(dvRad) > 0.5) {
+                    const tickLen = markerSize * 0.35;
+                    const tickDir = dvRad > 0 ? 1 : -1;
+                    pathGfx.lineStyle(0.8 / zoom, outlineColor, isPast ? 0.3 : 0.7);
+                    pathGfx.moveTo(bx, by);
+                    pathGfx.lineTo(bx - dny * tickLen * tickDir, by + dnx * tickLen * tickDir);
+                  }
+
+                  // Store for hit detection
+                  visibleBurnMarkers.push({
+                    shipId: ship.id,
+                    burnIdx: bi,
+                    wx: bx,
+                    wy: by,
+                    burn,
+                    predBefore: predBeforeIdx >= 0 ? predictions[predBeforeIdx] : null,
+                    predAfter: (predBeforeIdx >= 0 && predBeforeIdx + 1 < predictions.length) ? predictions[predBeforeIdx + 1] : null,
+                    isPast,
+                    screenSizePx: sizePx,
+                  });
+                }
+              }
+            }
+          }
+
+          container.visible = true;
+        }
+        // ── Legacy Bézier/arc transit positioning ──
+        else {
 
         // Build transit curve: trajectory arc (interplanetary) or Bézier (local)
         const overallDepart = Number(ship.departed_at);
         const overallArrive = Number(ship.arrives_at);
         const fromId = String(ship.from_location_id || "");
         const toId = String(ship.to_location_id || "");
-        const isIP = !!ship.is_interplanetary;
         const hasHelioTrajectory = Array.isArray(ship.trajectory) && ship.trajectory.length >= 2;
         const hasBodyCentricTrajectory = ship.trajectory && !Array.isArray(ship.trajectory) && ship.trajectory.frame === "body_centric";
         const hasTrajectory = hasHelioTrajectory || hasBodyCentricTrajectory;
@@ -5111,12 +6175,27 @@
             if (A && B) {
               const fs = getHeliocentricGroup(fromId);
               const ts = getHeliocentricGroup(toId);
-              gfx.curve = computeTransitCurve(fromId, toId, A, B, !!(fs && ts && fs !== ts), overallDepart, overallArrive);
+              const isIPLocal = !!(fs && ts && fs !== ts);
+              gfx.curve = computeTransitCurve(fromId, toId, A, B, isIPLocal, overallDepart, overallArrive);
+              // When transit anchors supply A/B, p0/p3 include the body's
+              // position at departure/arrival time, but trackStartOrig
+              // defaults to the body's CURRENT position.  This mismatch
+              // offsets the curve by the body's displacement since departure.
+              // Fix by snapping tracking origins to anchor-time body
+              // positions so the warp bridges departure → render time.
+              if (gfx.curve && fa && gfx.curve.trackStartId) {
+                const ab = getTransitAnchorWorld(gfx.curve.trackStartId, overallDepart);
+                if (ab) gfx.curve.trackStartOrig = { x: ab.rx, y: ab.ry };
+              }
+              if (gfx.curve && ta && gfx.curve.trackEndId) {
+                const ab = getTransitAnchorWorld(gfx.curve.trackEndId, overallArrive);
+                if (ab) gfx.curve.trackEndOrig = { x: ab.rx, y: ab.ry };
+              }
             }
           }
           gfx.transitKey = transitSig;
         }
-        if (!gfx.curve) continue;
+        if (!gfx.curve) { container.visible = false; continue; }
 
         const denom = Math.max(1e-6, overallArrive - overallDepart);
         const t = (now - overallDepart) / denom;
@@ -5148,6 +6227,7 @@
         }
 
         container.visible = true;
+        } // end legacy Bézier/arc transit
       }
 
       const displayPose = { x: px, y: py, facingAngle, headingAngle };
@@ -5203,6 +6283,12 @@
         idTag.visible = idTag.alpha > 0.01;
       }
     }
+
+    // Draw faint orbits for non-selected ships sharing the active body
+    drawFaintOrbits(now, zoom);
+
+    // Draw ghost projection overlay (Phase 6)
+    drawGhostProjection(zoom);
 
     updateDockedShipChips(dockedShipsByLocation);
     updateShipClusterLabels(hiddenClusterCountByLocation, false);
@@ -5840,8 +6926,28 @@
     let lastQuote = null;
     let lastPorkchopData = null;       // stored porkchop grid data
     let lastPorkchopDepTime = null;    // departure time used for the porkchop
-    let porkchopRedrawCrosshair = null; // function to redraw crosshair at a TOF
+    let porkchopRedrawCrosshair = null; // function(depIdx, tofIdx) to redraw crosshairs
+    let porkchopSelectedDepIdx = null; // currently selected departure column index
+    let porkchopSelectedTofIdx = null; // currently selected TOF row index
     const transferTreeOpenState = new Map();
+
+    // ── Porkchop cache (last 3 results) ──
+    const porkchopCache = [];
+    const PORKCHOP_CACHE_MAX = 3;
+    function porkchopCacheKey(fromId, toId, depStart, gridSize) {
+      return `${fromId}|${toId}|${Math.round(depStart)}|${gridSize}`;
+    }
+    function porkchopCacheGet(key) {
+      const entry = porkchopCache.find(e => e.key === key);
+      return entry ? entry.data : null;
+    }
+    function porkchopCachePut(key, data) {
+      // Remove existing entry with same key
+      const idx = porkchopCache.findIndex(e => e.key === key);
+      if (idx >= 0) porkchopCache.splice(idx, 1);
+      porkchopCache.push({ key, data });
+      while (porkchopCache.length > PORKCHOP_CACHE_MAX) porkchopCache.shift();
+    }
 
     function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
@@ -6078,7 +7184,7 @@
       return btn;
     }
 
-    // ── Fetch & render quote ───────────────────────────────
+    // ── Fetch & render mission preview ────────────────────
     async function fetchAndRenderQuote() {
       if (!selectedDest) return;
 
@@ -6086,221 +7192,288 @@
       const params = new URLSearchParams({
         from_id: ship.location_id,
         to_id: selectedDest,
+        ship_id: ship.id,
         departure_time: String(depTime),
-        extra_dv_fraction: String(currentExtraDvFraction),
       });
 
-      detailPanel.innerHTML = `<div class="tpSection"><div class="muted" style="text-align:center; padding:12px;">Loading transfer data…</div></div>`;
+      detailPanel.innerHTML = `<div class="tpSection"><div class="muted" style="text-align:center; padding:12px;">Loading mission plan…</div></div>`;
 
       try {
-        const resp = await fetch(`/api/transfer_quote_advanced?${params}`, { cache: "no-store" });
+        const resp = await fetch(`/api/transfer/mission_preview?${params}`, { cache: "no-store" });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
           detailPanel.innerHTML = `<div class="tpSection"><div class="muted">${_esc(err.detail || "No transfer data available.")}</div></div>`;
           return;
         }
-        const q = await resp.json();
-        lastQuote = q;
-        renderQuoteDetails(q, depTime);
+        const mission = await resp.json();
+        lastQuote = mission;
+        renderMissionPlan(mission, depTime);
       } catch (err) {
         console.error(err);
-        detailPanel.innerHTML = `<div class="tpSection"><div class="muted">Failed to load transfer data.</div></div>`;
+        detailPanel.innerHTML = `<div class="tpSection"><div class="muted">Failed to load mission plan.</div></div>`;
       }
     }
 
-    function renderQuoteDetails(q, depTime) {
-      const destName = locationsById.get(q.to_id)?.name || q.to_id;
-      const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, q.dv_m_s);
-      const fuelAfterKg = Math.max(0, shipFuel - fuelNeedKg);
-      const fuelAfterPct = shipFuelCap > 0 ? Math.round((fuelAfterKg / shipFuelCap) * 100) : 0;
-      const hasFuel = fuelNeedKg <= shipFuel + 0.1;
-      const hasDv = q.dv_m_s <= shipDv + 0.1;
+    function renderMissionPlan(mission, depTime) {
+      const destName = locationsById.get(mission.to_id)?.name || mission.to_id;
+      const fromName = locationsById.get(mission.from_id)?.name || mission.from_id;
+      const totalDv = Number(mission.total_dv_m_s || 0);
+      const totalTof = Number(mission.total_tof_s || 0);
+      const legs = mission.legs || [];
+      const burns = mission.burns || [];
+      const shipInfo = mission.ship || {};
+      const dvRemaining = Number(shipInfo.dv_remaining_m_s || shipDv);
+      const fuelOnBoard = Number(shipInfo.fuel_on_board_kg || shipFuel);
+      const fuelNeeded = Number(shipInfo.fuel_needed_kg || 0);
+      const fuelAfter = Math.max(0, fuelOnBoard - fuelNeeded);
+      const fuelCapacity = Number(shipInfo.fuel_capacity_kg || shipFuelCap);
+      const fuelAfterPct = fuelCapacity > 0 ? Math.round((fuelAfter / fuelCapacity) * 100) : 0;
+      const hasDv = totalDv <= dvRemaining + 0.1;
+      const hasFuel = fuelNeeded <= fuelOnBoard + 0.1;
+      const isOverheating = !!(shipInfo.is_overheating);
+      const wasteSurplus = Number(shipInfo.waste_heat_surplus_mw || 0);
 
+      // Surface TWR check
       const evaluateSurfaceTwr = () => {
-        const surfaceSites = Array.isArray(q.surface_sites) ? q.surface_sites : [];
+        const surfaceSites = Array.isArray(mission.surface_sites) ? mission.surface_sites : [];
         if (!surfaceSites.length) return { ok: true };
-        const thrustKn = Number(ship.thrust_kn || 0);
-        const wetMassKg = Number(ship.dry_mass_kg || 0) + Number(ship.fuel_kg || 0);
+        const thrustKn = Number(shipInfo.thrust_kn || ship.thrust_kn || 0);
+        const wetMassKg = Number(shipInfo.dry_mass_kg || ship.dry_mass_kg || 0) + fuelOnBoard;
         const thrustN = thrustKn * 1000;
 
         if (!(wetMassKg > 0) || !(thrustN > 0)) {
-          const site = surfaceSites.find((s) => Number(s?.gravity_m_s2 || 0) > 0) || surfaceSites[0] || null;
-          return {
-            ok: false,
-            siteId: String(site?.location_id || "surface site"),
-            gravity: Number(site?.gravity_m_s2 || 0),
-            twr: 0,
-          };
+          const site = surfaceSites.find(s => Number(s?.gravity_m_s2 || 0) > 0) || surfaceSites[0] || null;
+          return { ok: false, siteId: String(site?.location_id || "surface site"), gravity: Number(site?.gravity_m_s2 || 0), twr: 0 };
         }
-
         for (const site of surfaceSites) {
           const gravity = Number(site?.gravity_m_s2 || 0);
           if (!(gravity > 0)) continue;
           const twr = thrustN / (wetMassKg * gravity);
-          if (twr < 1.0) {
-            return {
-              ok: false,
-              siteId: String(site.location_id || "surface site"),
-              gravity,
-              twr,
-            };
-          }
+          if (twr < 1.0) return { ok: false, siteId: String(site.location_id || "surface site"), gravity, twr };
         }
         return { ok: true };
       };
       const twrCheck = evaluateSurfaceTwr();
       const hasSurfaceTwr = twrCheck.ok;
 
-      // Overheating check
-      const pb = ship.power_balance;
-      const wasteSurplus = pb ? Number(pb.waste_heat_surplus_mw || 0) : 0;
-      const isOverheating = wasteSurplus > 0;
+      // Transfer type label
+      function transferTypeLabel(t) {
+        const map = { "local_hohmann": "Hohmann", "soi_hohmann": "SOI Transfer", "interplanetary_lambert": "Interplanetary", "chain_mission": "Multi-Leg" };
+        return map[t] || t || "Transfer";
+      }
 
-      // Orbital alignment section
-      let orbitalHtml = "";
-      if (q.is_interplanetary && q.orbital) {
-        const orb = q.orbital;
-        const alignCls = alignmentClass(orb.alignment_pct);
-        const alignLbl = alignmentLabel(orb.alignment_pct);
-        const synodicDays = orb.synodic_period_s ? (orb.synodic_period_s / 86400).toFixed(0) : "—";
-        const nextWindowDays = orb.next_window_s ? (orb.next_window_s / 86400).toFixed(0) : "—";
+      // Format burn direction
+      function burnDirectionLabel(b) {
+        const pg = Number(b.prograde_m_s || 0);
+        const rd = Number(b.radial_m_s || 0);
+        const dvMag = Math.round(Math.sqrt(pg * pg + rd * rd));
+        if (Math.abs(rd) < 1) {
+          return pg >= 0 ? `+${dvMag} m/s prograde` : `−${Math.abs(dvMag)} m/s retrograde`;
+        }
+        return `${dvMag} m/s`;
+      }
 
-        orbitalHtml = `
-          <div class="tpSection">
-            <div class="tpSectionTitle">Orbital Alignment</div>
-            <div class="tpRow">
-              <span class="tpLabel">Window quality</span>
-              <span class="tpVal"><span class="tpAlignBadge ${alignCls}">${alignLbl}</span></span>
-            </div>
-            <div class="tpRow">
-              <span class="tpLabel">Phase angle</span>
-              <span class="tpVal">${orb.phase_angle_deg}° <span class="muted">(optimal ${orb.optimal_phase_deg}°)</span></span>
-            </div>
-            <div class="tpRow">
-              <span class="tpLabel">Synodic period</span>
-              <span class="tpVal">${synodicDays} days</span>
-            </div>
-            <div class="tpRow">
-              <span class="tpLabel">Next optimal window</span>
-              <span class="tpVal">${nextWindowDays !== "—" ? nextWindowDays + " days" : "—"}</span>
-            </div>
+      // Orbit description
+      function orbitDesc(orb) {
+        if (!orb) return "";
+        const bodyName = locationsById.get(orb.body)?.name || orb.body || "";
+        if (orb.type === "circular") return `${bodyName} circular (${Math.round(orb.altitude_km || 0)} km)`;
+        if (orb.type === "elliptical") return `${bodyName} orbit (Pe ${Math.round(orb.pe_km || 0)} km, Ap ${Math.round(orb.ap_km || 0)} km)`;
+        if (orb.type === "hyperbolic") return `${bodyName} hyperbolic escape`;
+        return bodyName;
+      }
+
+      // ── Mission Window section ──
+      const departureDate = fmtGameDate(depTime);
+      const arrivalDate = fmtGameDate(depTime + totalTof);
+
+      let windowHtml = `
+        <div class="tpSection">
+          <div class="tpSectionTitle">Mission Window</div>
+          <div class="tpRow">
+            <span class="tpLabel">Departure</span>
+            <span class="tpVal tpAccent">${departureDate}</span>
           </div>
-          <div id="tpPorkchopContainer" class="tpSection">
-            <div class="tpSectionTitle">Porkchop Plot — Departure Window Map</div>
-            <div id="tpPorkchopContent" style="position:relative;min-height:60px;">
-              <div class="muted" style="text-align:center;padding:12px;">Loading porkchop plot…</div>
+          <div class="tpRow">
+            <span class="tpLabel">Arrival</span>
+            <span class="tpVal">${arrivalDate}</span>
+          </div>
+          <div class="tpRow">
+            <span class="tpLabel">Mission duration</span>
+            <span class="tpVal">${fmtDuration(totalTof)}</span>
+          </div>
+        </div>
+      `;
+
+      // ── Mission Plan section — per-leg burn cards ──
+      let burnIdx = 0;
+      let legCardsHtml = "";
+      for (const leg of legs) {
+        const legFromName = locationsById.get(leg.from_id)?.name || leg.from_id;
+        const legToName = locationsById.get(leg.to_id)?.name || leg.to_id;
+        const legType = transferTypeLabel(leg.transfer_type);
+        const legBurns = burns.filter(b => b.leg_index === leg.index);
+
+        let burnRows = "";
+        for (let bi = 0; bi < legBurns.length; bi++) {
+          const b = legBurns[bi];
+          const burnNum = burns.indexOf(b) + 1;
+          const dt = Number(b.time_s) - depTime;
+          const tLabel = dt < 60 ? "T+0" : `T+${fmtDuration(dt)}`;
+          burnRows += `
+            <div class="tpBurnRow">
+              <span class="tpBurnNum">${burnNum}.</span>
+              <span class="tpBurnLabel">${_esc(b.label || "Burn")}</span>
+              <span class="tpBurnDv">${burnDirectionLabel(b)}</span>
+              <span class="tpBurnTime muted">${tLabel}</span>
             </div>
+          `;
+        }
+
+        // Arrival orbit description
+        const arrOrbit = leg.to_orbit ? orbitDesc(leg.to_orbit) : "";
+        const arrOrbitLine = arrOrbit ? `<div class="tpLegArrival muted">→ ${_esc(arrOrbit)}</div>` : "";
+
+        legCardsHtml += `
+          <div class="tpLegCard">
+            <div class="tpLegHeader">
+              <span class="tpLegTitle">Leg ${leg.index + 1}: ${_esc(legFromName)} → ${_esc(legToName)}</span>
+              <span class="tpLegDv">${Math.round(leg.dv_m_s)} m/s</span>
+            </div>
+            <div class="tpLegType muted">${legType} · ${fmtDuration(leg.tof_s)}</div>
+            <div class="tpBurnList">${burnRows}</div>
+            ${arrOrbitLine}
           </div>
         `;
       }
 
-      // TOF slider section — replaces the old burn profile.
-      // For interplanetary transfers, the actual Δv shown comes from the
-      // porkchop grid at the selected TOF.  For local transfers we just
-      // show the Lambert/Hohmann result.
-      const tofDays = Math.round(q.base_tof_s / 86400);
-
-      const html = `
-        <!-- Departure Date -->
-        <div class="tpSection" style="display:none">
-          <div class="tpSectionTitle">Departure</div>
-          <div class="tpDateRow">
-            <button class="tpDateBtn ${departureTimeOverride == null ? 'active' : ''}" id="tpDateNowBtn">Now</button>
-            <input type="datetime-local" class="tpDateInput" id="tpDateInput"
-                   value="${gameTimeToISOInput(depTime)}"
-                   title="Set departure date (game time)">
-            <span class="muted" style="font-size:11px;">${fmtGameDate(depTime)}</span>
-          </div>
-        </div>
-
-        ${orbitalHtml}
-
-        <!-- Transfer — TOF slider + live Δv readout -->
+      const planHtml = `
         <div class="tpSection">
-          <div class="tpSectionTitle">Transfer</div>
-          ${q.is_interplanetary ? `
-          <div class="tpSliderWrap">
-            <div class="tpRow">
-              <span class="tpLabel">Time of flight</span>
-              <span class="tpVal tpAccent" id="tpTofReadout">${tofDays} days</span>
-            </div>
-            <div class="tpSliderRow">
-              <span class="muted" style="font-size:10px;" id="tpTofMinLabel">—</span>
-              <input type="range" class="tpSlider" id="tpTofSlider"
-                     min="0" max="100" step="1" value="50" disabled
-                     title="Adjust after porkchop loads">
-              <span class="muted" style="font-size:10px;" id="tpTofMaxLabel">—</span>
-            </div>
-          </div>` : ""}
-          <div style="margin-top:10px;">
-            <div class="tpRow tpHighlight">
-              <span class="tpLabel"><b>Total Δv</b></span>
-              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpTotalDvReadout"><b>${Math.round(q.dv_m_s)} m/s</b></span>
-            </div>
-            ${q.interplanetary_dv_m_s != null ? `
-            <div class="tpRow" style="font-size:12px;opacity:0.7;">
-              <span class="tpLabel">${q.gateway_departure ? _esc(locationsById.get(q.gateway_departure)?.name || q.gateway_departure) + ' →' : 'Interplanetary'}</span>
-              <span class="tpVal">${Math.round(q.interplanetary_dv_m_s)} m/s</span>
-            </div>
-            ${q.local_departure_dv_m_s ? `<div class="tpRow" style="font-size:12px;opacity:0.7;">
-              <span class="tpLabel">Local departure</span>
-              <span class="tpVal">${Math.round(q.local_departure_dv_m_s)} m/s</span>
-            </div>` : ''}
-            ${q.local_arrival_dv_m_s ? `<div class="tpRow" style="font-size:12px;opacity:0.7;">
-              <span class="tpLabel">Local arrival</span>
-              <span class="tpVal">${Math.round(q.local_arrival_dv_m_s)} m/s</span>
-            </div>` : ''}` : ''}
-            <div class="tpRow">
-              <span class="tpLabel">Transit time</span>
-              <span class="tpVal" id="tpTransitTimeReadout">${fmtDuration(q.tof_s)}</span>
-            </div>
+          <div class="tpSectionTitle">Mission Plan <span class="muted" style="font-weight:normal;font-size:11px;">${legs.length} leg${legs.length !== 1 ? "s" : ""} · ${burns.length} burn${burns.length !== 1 ? "s" : ""}</span></div>
+          <div class="tpLegCards">${legCardsHtml}</div>
+          <div class="tpRow tpHighlight" style="margin-top:8px;">
+            <span class="tpLabel"><b>Total Δv</b></span>
+            <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}"><b>${Math.round(totalDv)} m/s</b></span>
           </div>
         </div>
+      `;
 
-        <!-- Ship Cost -->
+      // ── Alternative windows ──
+      let altWindowsHtml = "";
+      const altWindows = Array.isArray(mission.alternative_windows) ? mission.alternative_windows : [];
+      if (altWindows.length > 0) {
+        const windowRows = altWindows.map((w, i) => {
+          const waitDays = Math.round(Number(w.wait_s) / 86400);
+          const dvStr = w.dv_m_s ? `${Math.round(w.dv_m_s)} m/s` : "—";
+          const alignPct = Number(w.alignment_pct || 100);
+          const alignCls = alignmentClass(alignPct);
+          const alignLbl = alignmentLabel(alignPct);
+          return `<tr class="tpAltWindowRow" data-dep-time="${w.departure_time}">
+            <td>${fmtGameDate(w.departure_time).slice(0, 10)}</td>
+            <td>+${waitDays}d</td>
+            <td>${dvStr}</td>
+            <td><span class="tpAlignBadge ${alignCls}" style="font-size:10px;padding:1px 5px;">${alignLbl}</span></td>
+          </tr>`;
+        }).join("");
+
+        altWindowsHtml = `
+          <div class="tpSection">
+            <details class="tpAltWindowDetails">
+              <summary class="tpSectionTitle" style="cursor:pointer;">▸ Alternative Windows</summary>
+              <table class="tpPorkchopTable" style="margin-top:6px;">
+                <thead><tr><th>Depart</th><th>Wait</th><th>Δv</th><th>Window</th></tr></thead>
+                <tbody>${windowRows}</tbody>
+              </table>
+            </details>
+          </div>
+        `;
+      }
+
+      // ── Porkchop placeholder for interplanetary ──
+      let porkchopHtml = "";
+      if (mission.is_interplanetary) {
+        porkchopHtml = `
+          <div id="tpPorkchopContainer" class="tpSection">
+            <details id="tpPorkchopDetails">
+              <summary class="tpSectionTitle" style="cursor:pointer;">▸ Advanced: Departure Window Map</summary>
+              <div id="tpPorkchopContent" style="position:relative;min-height:60px;margin-top:8px;">
+                <div class="muted" style="text-align:center;padding:12px;">Click to load porkchop plot…</div>
+              </div>
+            </details>
+          </div>
+        `;
+      }
+
+      // ── Ship Cost section ──
+      const shipCostHtml = `
         <div class="tpSection">
           <div class="tpSectionTitle">Ship Cost</div>
           <div class="tpRow">
             <span class="tpLabel">Fuel required</span>
-            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}" id="tpFuelRequired">${fmtKg(fuelNeedKg)}</span>
+            <span class="tpVal ${hasFuel ? '' : 'tpNegative'}" id="tpFuelRequired">${fmtKg(fuelNeeded)}</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Fuel remaining after</span>
-            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}" id="tpFuelRemaining">${fmtKg(fuelAfterKg)} (${fuelAfterPct}%)</span>
+            <span class="tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}" id="tpFuelRemaining">${fmtKg(fuelAfter)} (${fuelAfterPct}%)</span>
           </div>
           <div class="tpRow">
             <span class="tpLabel">Ship Δv remaining</span>
-            <span class="tpVal" id="tpShipDvRemaining">${Math.round(shipDv)} m/s</span>
+            <span class="tpVal" id="tpShipDvRemaining">${Math.round(dvRemaining)} m/s</span>
           </div>
           <div id="tpCostStatus">
-          ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(q.dv_m_s)}, have ${Math.round(shipDv)})</span></div>` : ""}
+          ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(totalDv)}, have ${Math.round(dvRemaining)})</span></div>` : ""}
           ${!hasFuel && hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>` : ""}
           ${!hasSurfaceTwr ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient surface TWR for ${_esc(twrCheck.siteId || "surface site")} (TWR ${Number(twrCheck.twr || 0).toFixed(2)} &lt; 1.00 at ${Number(twrCheck.gravity || 0).toFixed(2)} m/s²)</span></div>` : ""}
           </div>
         </div>
+      `;
 
-        ${isOverheating ? `
+      // ── Intercept geometry check ──
+      const interceptCheck = mission.intercept_check || {};
+      const interceptOk = interceptCheck.ok !== false;
+      let interceptHtml = "";
+      if (!interceptOk) {
+        const missKm = Number(interceptCheck.miss_km || 0);
+        const soiKm = Number(interceptCheck.soi_radius_km || 0);
+        const destBody = interceptCheck.dest_body || "target";
+        const missRatio = Number(interceptCheck.miss_ratio || 0);
+        interceptHtml = `
+        <div class="tpSection">
+          <div class="pbOverheatBanner" style="margin-top:0; border-color:rgba(255,80,40,0.5); background:rgba(255,50,30,0.12);">
+            <span class="pbOverheatIcon">⚠</span>
+            <span class="pbOverheatText" style="color:#ff6644;">INTERCEPT MISS — Transfer trajectory misses ${_esc(destBody)} by ${missKm.toLocaleString()} km (SOI radius: ${soiKm.toLocaleString()} km, miss ratio: ${missRatio.toFixed(1)}×). Ship will not reach destination. Try a different departure time.</span>
+          </div>
+        </div>`;
+      }
+
+      // ── Overheating ──
+      const overheatHtml = isOverheating ? `
         <div class="tpSection">
           <div class="pbOverheatBanner" style="margin-top:0;">
             <span class="pbOverheatIcon">⚠</span>
-            <span class="pbOverheatText">OVERHEATING — ${wasteSurplus.toFixed(1)} MWth of unradiated waste heat. Ship cannot transfer until thermal balance is resolved. Add radiators or remove generators.</span>
+            <span class="pbOverheatText">OVERHEATING — ${wasteSurplus.toFixed(1)} MWth of unradiated waste heat. Ship cannot transfer until thermal balance is resolved.</span>
           </div>
-        </div>` : ""}
+        </div>` : "";
 
-        <!-- Actions -->
+      // ── Feasibility ──
+      const canTransfer = hasDv && hasFuel && hasSurfaceTwr && !isOverheating && interceptOk;
+      const btnLabel = isOverheating ? "Overheating" : !interceptOk ? "Bad Trajectory" : "Execute Mission";
+
+      // ── Actions ──
+      const actionsHtml = `
         <div class="tpActions">
           <button id="tpCancelBtn" class="btnSecondary">Cancel</button>
           ${window.gameAuth && window.gameAuth.user && window.gameAuth.user.is_admin ? `<button id="tpTeleportBtn" class="btnSecondary" style="background:rgba(255,140,0,0.15);border-color:rgba(255,140,0,0.5);color:#ffa500;">⚡ Teleport</button>` : ""}
-          <button id="tpConfirmBtn" class="btnPrimary" ${hasDv && hasFuel && hasSurfaceTwr && !isOverheating ? "" : "disabled"}>${isOverheating ? "Overheating" : "Confirm Transfer"}</button>
+          <button id="tpConfirmBtn" class="btnPrimary" ${canTransfer ? "" : "disabled"}>${btnLabel}</button>
         </div>
       `;
 
-      detailPanel.innerHTML = html;
+      detailPanel.innerHTML = windowHtml + planHtml + altWindowsHtml + porkchopHtml + shipCostHtml + interceptHtml + overheatHtml + actionsHtml;
 
-      // Wire up controls
+      // ── Wire controls ──
       document.getElementById("tpCancelBtn").onclick = closeModal;
 
-      // Teleport button (admin only)
+      // Teleport button
       const tpTeleportBtn = document.getElementById("tpTeleportBtn");
       if (tpTeleportBtn) {
         tpTeleportBtn.onclick = async () => {
@@ -6329,36 +7502,44 @@
         };
       }
 
-      // Date controls
-      document.getElementById("tpDateNowBtn").onclick = () => {
-        departureTimeOverride = null;
-        fetchAndRenderQuote();
-      };
-
-      document.getElementById("tpDateInput").onchange = (e) => {
-        const gt = isoInputToGameTime(e.target.value);
-        if (gt != null) {
-          departureTimeOverride = gt;
-          fetchAndRenderQuote();
-        }
-      };
-
-      // Auto-fetch porkchop for interplanetary transfers
-      if (q.is_interplanetary && q.orbital) {
-        fetchAndRenderPorkchop(q, depTime);
+      // Wire alternative window clicks to re-fetch with that departure time
+      for (const row of detailPanel.querySelectorAll(".tpAltWindowRow")) {
+        row.style.cursor = "pointer";
+        row.onclick = () => {
+          const newDep = Number(row.dataset.depTime);
+          if (newDep > 0) {
+            departureTimeOverride = newDep;
+            fetchAndRenderQuote();
+          }
+        };
       }
 
-      // Confirm button
+      // Wire porkchop details open to lazy-load
+      const porkchopDetails = document.getElementById("tpPorkchopDetails");
+      if (porkchopDetails) {
+        let porkchopLoaded = false;
+        porkchopDetails.addEventListener("toggle", () => {
+          if (porkchopDetails.open && !porkchopLoaded) {
+            porkchopLoaded = true;
+            fetchAndRenderPorkchop(mission, depTime);
+          }
+        });
+      }
+
+      // Confirm button — sends departure_time to the backend
       document.getElementById("tpConfirmBtn").onclick = async () => {
         if (!selectedDest) return;
         const btn = document.getElementById("tpConfirmBtn");
         btn.disabled = true;
         btn.textContent = "Executing…";
         try {
+          const body = { to_location_id: selectedDest };
+          // Send the departure time used in the preview
+          body.departure_time = depTime;
           const resp = await fetch(`/api/ships/${encodeURIComponent(ship.id)}/transfer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to_location_id: selectedDest }),
+            body: JSON.stringify(body),
           });
           if (!resp.ok) {
             const data = await resp.json().catch(() => ({}));
@@ -6377,10 +7558,24 @@
     }
 
     // ── Porkchop plot ──────────────────────────────────────
-    async function fetchAndRenderPorkchop(q, depTime) {
+    async function fetchAndRenderPorkchop(q, depTime, gridSize = 50, depStart = null, depEnd = null, tofMinDays = null, tofMaxDays = null) {
       const container = document.getElementById("tpPorkchopContainer");
       const content = document.getElementById("tpPorkchopContent");
       if (!container || !content) return;
+
+      const effectiveDepStart = depStart != null ? depStart : depTime;
+      const effectiveGridSize = gridSize;
+
+      // Check cache first
+      const cacheKey = porkchopCacheKey(ship.location_id, selectedDest, effectiveDepStart, effectiveGridSize);
+      const cached = porkchopCacheGet(cacheKey);
+      if (cached) {
+        lastPorkchopData = cached;
+        lastPorkchopDepTime = depTime;
+        renderPorkchopPlot(content, cached, depTime);
+        wireSliders(cached, depTime);
+        return;
+      }
 
       container.style.display = "";
       content.innerHTML = `<div class="muted" style="text-align:center;padding:16px;">Computing porkchop plot…</div>`;
@@ -6389,9 +7584,12 @@
         const params = new URLSearchParams({
           from_id: ship.location_id,
           to_id: selectedDest,
-          departure_start: String(depTime),
-          grid_size: "50",
+          departure_start: String(effectiveDepStart),
+          grid_size: String(effectiveGridSize),
         });
+        if (depEnd != null) params.set("departure_end", String(depEnd));
+        if (tofMinDays != null) params.set("tof_min_days", String(tofMinDays));
+        if (tofMaxDays != null) params.set("tof_max_days", String(tofMaxDays));
         const resp = await fetch(`/api/transfer/porkchop?${params}`, { cache: "no-store" });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
@@ -6399,10 +7597,11 @@
           return;
         }
         const data = await resp.json();
+        porkchopCachePut(cacheKey, data);
         lastPorkchopData = data;
         lastPorkchopDepTime = depTime;
         renderPorkchopPlot(content, data, depTime);
-        wireTofSlider(data, depTime);
+        wireSliders(data, depTime);
       } catch (err) {
         console.error("Porkchop error:", err);
         content.innerHTML = `<div class="muted" style="text-align:center;padding:12px;">Failed to load porkchop data.</div>`;
@@ -6432,8 +7631,6 @@
         }
       }
       if (dvMin >= dvMax) dvMax = dvMin + 1000;
-
-      // Cap the color range at 3× minimum to avoid washing out
       const dvColorMax = Math.min(dvMax, dvMin * 3.0);
 
       // Canvas dimensions
@@ -6446,15 +7643,67 @@
       container.innerHTML = `
         <canvas id="tpPorkchopCanvas" width="${canvasW}" height="${canvasH}" style="width:100%;max-width:${canvasW}px;image-rendering:pixelated;cursor:crosshair;"></canvas>
         <div id="tpPorkchopTooltip" class="tpPorkchopTip" style="display:none;"></div>
+        <div class="tpSliderWrap" style="margin-top:10px;">
+          <div class="tpRow">
+            <span class="tpLabel">Departure date</span>
+            <span class="tpVal tpAccent" id="tpDepReadout">—</span>
+          </div>
+          <div class="tpSliderRow">
+            <span class="muted" style="font-size:10px;" id="tpDepMinLabel">—</span>
+            <input type="range" class="tpSlider" id="tpDepSlider" min="0" max="100" step="1" value="0" disabled>
+            <span class="muted" style="font-size:10px;" id="tpDepMaxLabel">—</span>
+          </div>
+          <div class="tpRow" style="margin-top:6px;">
+            <span class="tpLabel">Time of flight</span>
+            <span class="tpVal tpAccent" id="tpTofReadout">—</span>
+          </div>
+          <div class="tpSliderRow">
+            <span class="muted" style="font-size:10px;" id="tpTofMinLabel">—</span>
+            <input type="range" class="tpSlider" id="tpTofSlider" min="0" max="100" step="1" value="50" disabled>
+            <span class="muted" style="font-size:10px;" id="tpTofMaxLabel">—</span>
+          </div>
+          <div class="tpRow" style="margin-top:4px;">
+            <span class="tpLabel">Δv at selection</span>
+            <span class="tpVal" id="tpPorkchopDvReadout">—</span>
+          </div>
+          <div style="text-align:right;margin-top:6px;">
+            <button class="btnSecondary" id="tpPorkchopApplyBtn" disabled style="font-size:11px;padding:4px 12px;">Apply Window to Mission</button>
+          </div>
+        </div>
         <div id="tpPorkchopBest" style="margin-top:8px;"></div>
       `;
 
       const canvas = document.getElementById("tpPorkchopCanvas");
       const ctx = canvas.getContext("2d");
 
+      // Track the current crosshair position (dep index, tof index)
+      let crossDepIdx = null;
+      let crossTofIdx = null;
+
+      // Find nearest departure column to current dep time
+      let initDepIdx = 0;
+      let initDepDist = Infinity;
+      for (let i = 0; i < depTimes.length; i++) {
+        const dist = Math.abs(depTimes[i] - currentDep);
+        if (dist < initDepDist) { initDepDist = dist; initDepIdx = i; }
+      }
+
+      // Find best-Δv TOF index at initDepIdx
+      let initTofIdx = Math.floor(tofs.length / 2);
+      let initBestDv = Infinity;
+      const initCol = grid[initDepIdx] || [];
+      for (let ti = 0; ti < initCol.length; ti++) {
+        const v = initCol[ti];
+        if (v != null && isFinite(v) && v < initBestDv) { initBestDv = v; initTofIdx = ti; }
+      }
+
+      crossDepIdx = initDepIdx;
+      crossTofIdx = initTofIdx;
+      porkchopSelectedDepIdx = initDepIdx;
+      porkchopSelectedTofIdx = initTofIdx;
+
       // ── Draw the static base image ──
       function drawBase() {
-        // Background
         ctx.fillStyle = "rgba(4, 8, 14, 0.95)";
         ctx.fillRect(0, 0, canvasW, canvasH);
 
@@ -6474,7 +7723,7 @@
           }
         }
 
-        // Best solution markers
+        // Best solution markers (stars)
         for (const sol of best) {
           const di = depTimes.findIndex((t, i) => i === depTimes.length - 1 || depTimes[i + 1] > sol.departure_time);
           const ti = tofs.findIndex((t, i) => i === tofs.length - 1 || tofs[i + 1] > sol.tof_s);
@@ -6493,22 +7742,6 @@
           }
         }
 
-        // Current departure time vertical line (clamped so it always appears)
-        if (depTimes.length >= 2) {
-          const frac = Math.max(0, Math.min(1,
-            (currentDep - depTimes[0]) / (depTimes[depTimes.length - 1] - depTimes[0])
-          ));
-          const cx = MARGIN_L + frac * plotW;
-          ctx.strokeStyle = "rgba(89,185,230,0.6)";
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.moveTo(cx, MARGIN_T);
-          ctx.lineTo(cx, MARGIN_T + plotH);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-
         // Axes
         ctx.strokeStyle = "rgba(109,182,255,0.3)";
         ctx.lineWidth = 1;
@@ -6518,7 +7751,7 @@
         ctx.lineTo(MARGIN_L + plotW, MARGIN_T + plotH);
         ctx.stroke();
 
-        // X axis labels
+        // X axis
         ctx.fillStyle = "rgba(163,184,203,0.7)";
         ctx.font = "9px sans-serif";
         ctx.textAlign = "center";
@@ -6527,21 +7760,16 @@
           const idx = Math.round((i / xLabels) * (gs - 1));
           const t = depTimes[idx];
           const x = MARGIN_L + idx * cellW + cellW / 2;
-          const dateStr = fmtGameDate(t).slice(0, 10);
-          ctx.fillText(dateStr, x, MARGIN_T + plotH + 14);
+          ctx.fillText(fmtGameDate(t).slice(0, 10), x, MARGIN_T + plotH + 14);
         }
         ctx.save();
         ctx.translate(MARGIN_L + plotW / 2, MARGIN_T + plotH + 40);
-        ctx.textAlign = "center";
-        ctx.font = "10px sans-serif";
-        ctx.fillStyle = "rgba(163,184,203,0.6)";
+        ctx.textAlign = "center"; ctx.font = "10px sans-serif"; ctx.fillStyle = "rgba(163,184,203,0.6)";
         ctx.fillText("Departure Date", 0, 0);
         ctx.restore();
 
-        // Y axis labels
-        ctx.textAlign = "right";
-        ctx.font = "9px sans-serif";
-        ctx.fillStyle = "rgba(163,184,203,0.7)";
+        // Y axis
+        ctx.textAlign = "right"; ctx.font = "9px sans-serif"; ctx.fillStyle = "rgba(163,184,203,0.7)";
         const yLabels = 5;
         for (let i = 0; i <= yLabels; i++) {
           const idx = Math.round((i / yLabels) * (tofs.length - 1));
@@ -6552,9 +7780,7 @@
         ctx.save();
         ctx.translate(12, MARGIN_T + plotH / 2);
         ctx.rotate(-Math.PI / 2);
-        ctx.textAlign = "center";
-        ctx.font = "10px sans-serif";
-        ctx.fillStyle = "rgba(163,184,203,0.6)";
+        ctx.textAlign = "center"; ctx.font = "10px sans-serif"; ctx.fillStyle = "rgba(163,184,203,0.6)";
         ctx.fillText("Time of Flight", 0, 0);
         ctx.restore();
 
@@ -6568,92 +7794,160 @@
         ctx.strokeStyle = "rgba(109,182,255,0.3)";
         ctx.strokeRect(barX, MARGIN_T, barW, barH);
         ctx.fillStyle = "rgba(163,184,203,0.7)";
-        ctx.font = "9px sans-serif";
-        ctx.textAlign = "left";
+        ctx.font = "9px sans-serif"; ctx.textAlign = "left";
         ctx.fillText(`${(dvMin / 1000).toFixed(1)}`, barX + barW + 4, MARGIN_T + barH + 3);
         ctx.fillText(`${(dvColorMax / 1000).toFixed(1)}`, barX + barW + 4, MARGIN_T + 9);
         ctx.fillText("km/s", barX + barW + 4, MARGIN_T + barH / 2 + 3);
       }
 
       drawBase();
-
-      // Save the base image so we can redraw crosshairs without re-rendering
       const baseImageData = ctx.getImageData(0, 0, canvasW, canvasH);
 
-      // ── Crosshair drawing (for TOF slider) ──
-      porkchopRedrawCrosshair = function(tofS) {
+      // ── Crosshair drawing (both dep + TOF lines) ──
+      function drawCrosshairs(di, ti) {
         ctx.putImageData(baseImageData, 0, 0);
-        if (tofS == null) return;
-        const tofMin = tofs[0], tofMax = tofs[tofs.length - 1];
-        if (tofS < tofMin || tofS > tofMax) return;
-        const frac = (tofS - tofMin) / (tofMax - tofMin);
-        const cy = MARGIN_T + (1 - frac) * plotH; // TOF increases upward
-        ctx.strokeStyle = "rgba(68, 224, 255, 0.7)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(MARGIN_L, cy);
-        ctx.lineTo(MARGIN_L + plotW, cy);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        if (di == null && ti == null) return;
 
-        // Draw a diamond at the intersection with the departure line
-        // Clamp to range so it always appears even if currentDep is slightly outside
-        if (depTimes.length >= 2) {
-          const depFrac = Math.max(0, Math.min(1,
-            (currentDep - depTimes[0]) / (depTimes[depTimes.length - 1] - depTimes[0])
-          ));
-          const cx = MARGIN_L + depFrac * plotW;
+        // Vertical crosshair (departure)
+        if (di != null && di >= 0 && di < gs) {
+          const cx = MARGIN_L + di * cellW + cellW / 2;
+          ctx.strokeStyle = "rgba(89,185,230,0.7)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(cx, MARGIN_T);
+          ctx.lineTo(cx, MARGIN_T + plotH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Horizontal crosshair (TOF)
+        if (ti != null && ti >= 0 && ti < tofs.length) {
+          const cy = MARGIN_T + (tofs.length - 1 - ti) * cellH + cellH / 2;
+          ctx.strokeStyle = "rgba(68, 224, 255, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(MARGIN_L, cy);
+          ctx.lineTo(MARGIN_L + plotW, cy);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Diamond at intersection
+        if (di != null && ti != null && di >= 0 && di < gs && ti >= 0 && ti < tofs.length) {
+          const cx = MARGIN_L + di * cellW + cellW / 2;
+          const cy = MARGIN_T + (tofs.length - 1 - ti) * cellH + cellH / 2;
           const sz = 6;
-          // Dark outline for contrast against any heatmap color
           ctx.lineWidth = 2.5;
           ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
           ctx.beginPath();
-          ctx.moveTo(cx, cy - sz);
-          ctx.lineTo(cx + sz, cy);
-          ctx.lineTo(cx, cy + sz);
-          ctx.lineTo(cx - sz, cy);
-          ctx.closePath();
+          ctx.moveTo(cx, cy - sz); ctx.lineTo(cx + sz, cy); ctx.lineTo(cx, cy + sz); ctx.lineTo(cx - sz, cy); ctx.closePath();
           ctx.stroke();
-          // Bright fill
           ctx.fillStyle = "#44e0ff";
           ctx.fill();
-          // Thin bright border on top
           ctx.lineWidth = 1;
           ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
           ctx.stroke();
         }
+      }
+
+      // Expose crosshair redraw for external use
+      porkchopRedrawCrosshair = function(di, ti) {
+        crossDepIdx = di;
+        crossTofIdx = ti;
+        drawCrosshairs(di, ti);
       };
+
+      // Initial crosshair draw
+      drawCrosshairs(crossDepIdx, crossTofIdx);
+
+      // ── Canvas pixel → grid index helpers ──
+      function canvasToCell(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleY;
+        const di = Math.floor((mx - MARGIN_L) / cellW);
+        const ti = tofs.length - 1 - Math.floor((my - MARGIN_T) / cellH);
+        return { di, ti, inPlot: di >= 0 && di < gs && ti >= 0 && ti < tofs.length };
+      }
 
       // ── Canvas hover tooltip ──
       const tooltip = document.getElementById("tpPorkchopTooltip");
       canvas.onmousemove = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const mx = (e.clientX - rect.left) * scaleX;
-        const my = (e.clientY - rect.top) * scaleX;
-        const di = Math.floor((mx - MARGIN_L) / cellW);
-        const ti = tofs.length - 1 - Math.floor((my - MARGIN_T) / cellH);
-        if (di < 0 || di >= gs || ti < 0 || ti >= tofs.length) {
-          tooltip.style.display = "none";
-          return;
-        }
+        const { di, ti, inPlot } = canvasToCell(e);
+        if (!inPlot) { tooltip.style.display = "none"; return; }
         const v = (grid[di] || [])[ti];
         const depDate = fmtGameDate(depTimes[di]).slice(0, 10);
         const tofDays = (tofs[ti] / 86400).toFixed(0);
         const dvStr = v != null ? `${(v / 1000).toFixed(2)} km/s` : "N/A";
         tooltip.style.display = "";
-        tooltip.style.left = (e.clientX - canvas.closest(".tpSection").getBoundingClientRect().left + 14) + "px";
-        tooltip.style.top = (e.clientY - canvas.closest(".tpSection").getBoundingClientRect().top - 10) + "px";
+        const sectionRect = canvas.closest(".tpSection") || canvas.parentElement;
+        tooltip.style.left = (e.clientX - sectionRect.getBoundingClientRect().left + 14) + "px";
+        tooltip.style.top = (e.clientY - sectionRect.getBoundingClientRect().top - 10) + "px";
         tooltip.innerHTML = `<b>Δv ${dvStr}</b><br>Depart: ${depDate}<br>TOF: ${tofDays} days`;
       };
       canvas.onmouseleave = () => { tooltip.style.display = "none"; };
 
-      // Best solutions table
+      // ── Canvas click → select (departure, TOF) pair ──
+      canvas.onclick = (e) => {
+        const { di, ti, inPlot } = canvasToCell(e);
+        if (!inPlot) return;
+        const v = (grid[di] || [])[ti];
+        if (v == null) return; // skip null cells
+
+        crossDepIdx = di;
+        crossTofIdx = ti;
+        porkchopSelectedDepIdx = di;
+        porkchopSelectedTofIdx = ti;
+        drawCrosshairs(di, ti);
+        syncSlidersToIndices(di, ti);
+        updateReadouts(di, ti);
+      };
+
+      // ── Canvas double-click → zoom into sub-region ──
+      canvas.ondblclick = (e) => {
+        const { di, ti, inPlot } = canvasToCell(e);
+        if (!inPlot) return;
+
+        // Define a zoom window: ±25% of current range centered on click
+        const depRange = depTimes[depTimes.length - 1] - depTimes[0];
+        const tofRange = tofs[tofs.length - 1] - tofs[0];
+        const zoomDepHalf = depRange * 0.25;
+        const zoomTofHalf = tofRange * 0.25;
+
+        const clickDep = depTimes[di];
+        const clickTof = tofs[ti];
+
+        const newDepStart = Math.max(depTimes[0], clickDep - zoomDepHalf);
+        const newDepEnd = Math.min(depTimes[depTimes.length - 1], clickDep + zoomDepHalf);
+        const newTofMinDays = Math.max(tofs[0], clickTof - zoomTofHalf) / 86400;
+        const newTofMaxDays = Math.min(tofs[tofs.length - 1], clickTof + zoomTofHalf) / 86400;
+
+        // Re-fetch at higher resolution in the zoomed region
+        fetchAndRenderPorkchop(lastQuote, currentDep, 50, newDepStart, newDepEnd, newTofMinDays, newTofMaxDays);
+      };
+
+      // ── Apply Window button → re-fetch mission with selected dep+tof ──
+      const applyBtn = document.getElementById("tpPorkchopApplyBtn");
+      if (applyBtn) {
+        applyBtn.onclick = () => {
+          if (porkchopSelectedDepIdx == null || porkchopSelectedTofIdx == null) return;
+          const newDep = depTimes[porkchopSelectedDepIdx];
+          if (newDep > 0) {
+            departureTimeOverride = newDep;
+            fetchAndRenderQuote();
+          }
+        };
+      }
+
+      // ── Best solutions table (clickable) ──
       const bestEl = document.getElementById("tpPorkchopBest");
       if (best.length > 0) {
         let rows = best.map((s, i) => `
-          <tr>
+          <tr class="tpBestRow" data-dep-time="${s.departure_time}" data-tof-s="${s.tof_s}">
             <td>${i + 1}</td>
             <td>${fmtGameDate(s.departure_time).slice(0, 10)}</td>
             <td>${(s.tof_s / 86400).toFixed(0)}d</td>
@@ -6664,7 +7958,7 @@
           </tr>
         `).join("");
         bestEl.innerHTML = `
-          <div class="tpSectionTitle" style="margin-top:4px;">Best Transfer Windows</div>
+          <div class="tpSectionTitle" style="margin-top:4px;">Best Transfer Windows <span class="muted" style="font-weight:normal;font-size:10px;">(click to select)</span></div>
           <table class="tpPorkchopTable">
             <thead><tr>
               <th>#</th><th>Depart</th><th>TOF</th><th>Δv (km/s)</th><th>Dep Δv</th><th>Arr Δv</th><th>V∞ Dep</th>
@@ -6672,124 +7966,146 @@
             <tbody>${rows}</tbody>
           </table>
         `;
+
+        // Wire clicks on best window rows → jump crosshairs to that solution
+        for (const row of bestEl.querySelectorAll(".tpBestRow")) {
+          row.style.cursor = "pointer";
+          row.onclick = () => {
+            const solDep = Number(row.dataset.depTime);
+            const solTof = Number(row.dataset.tofS);
+            // Find nearest grid indices
+            let bdi = 0, bdd = Infinity;
+            for (let i = 0; i < depTimes.length; i++) { const d = Math.abs(depTimes[i] - solDep); if (d < bdd) { bdd = d; bdi = i; } }
+            let bti = 0, btd = Infinity;
+            for (let i = 0; i < tofs.length; i++) { const d = Math.abs(tofs[i] - solTof); if (d < btd) { btd = d; bti = i; } }
+            crossDepIdx = bdi;
+            crossTofIdx = bti;
+            porkchopSelectedDepIdx = bdi;
+            porkchopSelectedTofIdx = bti;
+            drawCrosshairs(bdi, bti);
+            syncSlidersToIndices(bdi, bti);
+            updateReadouts(bdi, bti);
+          };
+        }
+      }
+
+      // ── Slider sync and readout helpers ──
+      function syncSlidersToIndices(di, ti) {
+        const depSlider = document.getElementById("tpDepSlider");
+        const tofSlider = document.getElementById("tpTofSlider");
+        if (depSlider) depSlider.value = String(di);
+        if (tofSlider) tofSlider.value = String(ti);
+      }
+
+      function updateReadouts(di, ti) {
+        const depReadout = document.getElementById("tpDepReadout");
+        const tofReadout = document.getElementById("tpTofReadout");
+        const dvReadout = document.getElementById("tpPorkchopDvReadout");
+        const applyBtnEl = document.getElementById("tpPorkchopApplyBtn");
+
+        if (depReadout && di != null && di >= 0 && di < depTimes.length) {
+          depReadout.textContent = fmtGameDate(depTimes[di]).slice(0, 10);
+        }
+        if (tofReadout && ti != null && ti >= 0 && ti < tofs.length) {
+          tofReadout.textContent = `${Math.round(tofs[ti] / 86400)} days`;
+        }
+        if (dvReadout && di != null && ti != null) {
+          const dv = (grid[di] || [])[ti];
+          if (dv != null && isFinite(dv)) {
+            const dvM = Math.round(dv);
+            dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
+            dvReadout.className = dvM <= shipDv + 0.1 ? "tpVal tpPositive" : "tpVal tpNegative";
+          } else {
+            dvReadout.innerHTML = `<b>N/A</b>`;
+            dvReadout.className = "tpVal muted";
+          }
+        }
+        if (applyBtnEl) {
+          applyBtnEl.disabled = !(di != null && ti != null && di >= 0 && ti >= 0);
+        }
       }
     }
 
-    // ── Wire TOF slider to porkchop data ───────────────────
-    function wireTofSlider(data, depTime) {
-      const slider = document.getElementById("tpTofSlider");
-      const readout = document.getElementById("tpTofReadout");
-      const dvReadout = document.getElementById("tpTotalDvReadout");
-      const transitReadout = document.getElementById("tpTransitTimeReadout");
+    // ── Wire both sliders to porkchop data ─────────────────
+    function wireSliders(data, depTime) {
+      const depSlider = document.getElementById("tpDepSlider");
+      const tofSlider = document.getElementById("tpTofSlider");
+      const depReadout = document.getElementById("tpDepReadout");
+      const tofReadout = document.getElementById("tpTofReadout");
+      const depMinLabel = document.getElementById("tpDepMinLabel");
+      const depMaxLabel = document.getElementById("tpDepMaxLabel");
       const tofMinLabel = document.getElementById("tpTofMinLabel");
       const tofMaxLabel = document.getElementById("tpTofMaxLabel");
-      if (!slider || !readout) return;
+      const dvReadout = document.getElementById("tpPorkchopDvReadout");
+      const applyBtn = document.getElementById("tpPorkchopApplyBtn");
+      if (!depSlider || !tofSlider) return;
 
       const tofs = data.tof_values || [];
       const depTimes = data.departure_times || [];
       const grid = data.dv_grid || [];
       if (tofs.length === 0 || depTimes.length === 0) return;
 
-      const tofMinS = tofs[0];
-      const tofMaxS = tofs[tofs.length - 1];
+      // Configure departure slider
+      depSlider.min = "0";
+      depSlider.max = String(depTimes.length - 1);
+      depSlider.step = "1";
+      depSlider.disabled = false;
+      if (depMinLabel) depMinLabel.textContent = fmtGameDate(depTimes[0]).slice(0, 10);
+      if (depMaxLabel) depMaxLabel.textContent = fmtGameDate(depTimes[depTimes.length - 1]).slice(0, 10);
 
-      // Set slider range (use index = 0..tofs.length-1)
-      slider.min = "0";
-      slider.max = String(tofs.length - 1);
-      slider.step = "1";
-      slider.disabled = false;
+      // Configure TOF slider
+      tofSlider.min = "0";
+      tofSlider.max = String(tofs.length - 1);
+      tofSlider.step = "1";
+      tofSlider.disabled = false;
+      if (tofMinLabel) tofMinLabel.textContent = `${Math.round(tofs[0] / 86400)}d`;
+      if (tofMaxLabel) tofMaxLabel.textContent = `${Math.round(tofs[tofs.length - 1] / 86400)}d`;
 
-      if (tofMinLabel) tofMinLabel.textContent = `${Math.round(tofMinS / 86400)}d`;
-      if (tofMaxLabel) tofMaxLabel.textContent = `${Math.round(tofMaxS / 86400)}d`;
+      // Set initial slider values from porkchopSelectedDepIdx/TofIdx
+      if (porkchopSelectedDepIdx != null) depSlider.value = String(porkchopSelectedDepIdx);
+      if (porkchopSelectedTofIdx != null) tofSlider.value = String(porkchopSelectedTofIdx);
 
-      // Find nearest departure column to current dep time
-      let bestDepIdx = 0;
-      let bestDepDist = Infinity;
-      for (let i = 0; i < depTimes.length; i++) {
-        const dist = Math.abs(depTimes[i] - depTime);
-        if (dist < bestDepDist) { bestDepDist = dist; bestDepIdx = i; }
-      }
+      function updateFromSliders() {
+        const di = Number(depSlider.value);
+        const ti = Number(tofSlider.value);
+        porkchopSelectedDepIdx = di;
+        porkchopSelectedTofIdx = ti;
 
-      // Find the best-Δv TOF index at this departure column
-      let bestTofIdx = Math.floor(tofs.length / 2);
-      let bestDv = Infinity;
-      const depCol = grid[bestDepIdx] || [];
-      for (let ti = 0; ti < depCol.length; ti++) {
-        const v = depCol[ti];
-        if (v != null && isFinite(v) && v < bestDv) {
-          bestDv = v;
-          bestTofIdx = ti;
-        }
-      }
+        if (depReadout) depReadout.textContent = fmtGameDate(depTimes[di]).slice(0, 10);
+        if (tofReadout) tofReadout.textContent = `${Math.round(tofs[ti] / 86400)} days`;
 
-      slider.value = String(bestTofIdx);
-
-      function updateFromSlider() {
-        const ti = Number(slider.value);
-        const tofS = tofs[ti];
-        const tofDays = Math.round(tofS / 86400);
-        readout.textContent = `${tofDays} days`;
-
-        // Look up Δv at (bestDepIdx, ti) from the grid
-        const dv = (grid[bestDepIdx] || [])[ti];
-        if (dv != null && isFinite(dv)) {
-          const dvM = Math.round(dv);
-          if (dvReadout) dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
-          // Update fuel/feasibility class
-          if (dvReadout) {
+        const dv = (grid[di] || [])[ti];
+        if (dvReadout) {
+          if (dv != null && isFinite(dv)) {
+            const dvM = Math.round(dv);
+            dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
             dvReadout.className = dvM <= shipDv + 0.1 ? "tpVal tpPositive" : "tpVal tpNegative";
+          } else {
+            dvReadout.innerHTML = `<b>N/A</b>`;
+            dvReadout.className = "tpVal muted";
           }
-        } else {
-          if (dvReadout) { dvReadout.innerHTML = `<b>N/A</b>`; dvReadout.className = "tpVal muted"; }
         }
-
-        if (transitReadout) transitReadout.textContent = fmtDuration(tofS);
-
-        // Update ship cost section with new Δv
-        if (dv != null && isFinite(dv)) updateShipCostFromDv(dv);
-
-        // Redraw crosshair on porkchop
-        if (porkchopRedrawCrosshair) porkchopRedrawCrosshair(tofS);
+        if (applyBtn) applyBtn.disabled = false;
+        if (porkchopRedrawCrosshair) porkchopRedrawCrosshair(di, ti);
       }
 
-      slider.oninput = updateFromSlider;
-      // Trigger initial update
-      updateFromSlider();
-    }
+      depSlider.oninput = () => {
+        // When departure changes, auto-select best TOF in that column
+        const di = Number(depSlider.value);
+        const col = grid[di] || [];
+        let bestTi = Number(tofSlider.value);
+        let bestDv = Infinity;
+        for (let ti = 0; ti < col.length; ti++) {
+          const v = col[ti];
+          if (v != null && isFinite(v) && v < bestDv) { bestDv = v; bestTi = ti; }
+        }
+        tofSlider.value = String(bestTi);
+        updateFromSliders();
+      };
+      tofSlider.oninput = updateFromSliders;
 
-    // ── Update ship cost section from a given Δv ──────────
-    function updateShipCostFromDv(dvMs) {
-      const fuelReqEl = document.getElementById("tpFuelRequired");
-      const fuelRemEl = document.getElementById("tpFuelRemaining");
-      const statusEl = document.getElementById("tpCostStatus");
-      const confirmBtn = document.getElementById("tpConfirmBtn");
-      if (!fuelReqEl || !fuelRemEl) return;
-
-      const fuelNeed = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, dvMs);
-      const fuelAfter = Math.max(0, shipFuel - fuelNeed);
-      const fuelAfterP = shipFuelCap > 0 ? Math.round((fuelAfter / shipFuelCap) * 100) : 0;
-      const okFuel = fuelNeed <= shipFuel + 0.1;
-      const okDv = dvMs <= shipDv + 0.1;
-
-      fuelReqEl.textContent = fmtKg(fuelNeed);
-      fuelReqEl.className = "tpVal" + (okFuel ? "" : " tpNegative");
-
-      fuelRemEl.textContent = `${fmtKg(fuelAfter)} (${fuelAfterP}%)`;
-      fuelRemEl.className = "tpVal" + (fuelAfterP > 20 ? "" : fuelAfterP > 0 ? " tpWarn" : " tpNegative");
-
-      // Rebuild status messages
-      if (statusEl) {
-        let msgs = "";
-        if (!okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(dvMs)}, have ${Math.round(shipDv)})</span></div>`;
-        if (!okFuel && okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>`;
-        statusEl.innerHTML = msgs;
-      }
-
-      // Enable/disable confirm button
-      if (confirmBtn) {
-        const canTransfer = okDv && okFuel && !confirmBtn.textContent.includes("Overheating");
-        confirmBtn.disabled = !canTransfer;
-      }
+      // Initial update
+      updateFromSliders();
     }
 
     function porkchopColor(t) {
@@ -6895,6 +8211,7 @@
         ]
       );
       if (infoList) {
+        infoList.innerHTML += buildDockedOrbitHtml(ship);
         infoList.innerHTML += buildPartsStackHtml(ship);
         infoList.innerHTML += buildDeltaVPanelHtml(ship);
         infoList.innerHTML += buildPowerBalanceHtml(ship);
@@ -6947,6 +8264,8 @@
       ].filter(Boolean)
     );
     if (infoList) {
+      // ── Orbital readout panel ──
+      infoList.innerHTML += buildTransitOrbitHtml(ship);
       infoList.innerHTML += buildPartsStackHtml(ship);
       infoList.innerHTML += buildDeltaVPanelHtml(ship);
       infoList.innerHTML += buildPowerBalanceHtml(ship);
@@ -6960,6 +8279,11 @@
     const shouldRefit = options.refit !== false;
     const data = await (await fetch("/api/locations?dynamic=1", { cache: "no-store" })).json();
     const projected = projectLocationsForMap(data.locations || []);
+
+    // Store orbit physics data from the API
+    bodyPhysics = data.body_physics || {};
+    bodyOrbits = data.body_orbits || {};
+    orbitNodeMeta = data.orbit_nodes || {};
 
     // --- Capture previous positions for smooth interpolation ---
     const prevById = locationsById;          // old map (empty on first call)

@@ -879,8 +879,13 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
         if p.get("required_tech_id") is None or p.get("required_tech_id") in unlocked_ids
     ]
 
-    # Prefer unlock-gated set only when it is non-empty; otherwise use TL-only base set.
-    chosen_parts = unlocked_part_candidates if unlocked_part_candidates else part_candidates
+    # Prefer unlock-gated set only when it yields at least one tech-gated part
+    # (items with required_tech_id=None, like storage, always pass the filter,
+    # so check whether any real tech-gated parts survived).
+    has_tech_gated_parts = any(
+        p.get("required_tech_id") is not None for p in unlocked_part_candidates
+    )
+    chosen_parts = unlocked_part_candidates if has_tech_gated_parts else part_candidates
     for p in chosen_parts:
         out = dict(p)
         out.pop("required_tech_id", None)
@@ -956,10 +961,7 @@ def boost_manifest_to_leo(
     if balance < total_cost:
         raise ValueError(f"Insufficient funds. Need ${total_cost:,.0f}, have ${balance:,.0f}")
 
-    leo_loc = conn.execute(
-        "SELECT id FROM locations WHERE id LIKE '%LEO%' OR id LIKE '%leo%' LIMIT 1"
-    ).fetchone()
-    dest_location_id = str(leo_loc["id"]) if leo_loc else LEO_LOCATION_ID
+    dest_location_id = _resolve_leo_location_id(conn)
 
     conn.execute(
         "UPDATE organizations SET balance_usd = balance_usd - ? WHERE id = ?",

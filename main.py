@@ -24,6 +24,7 @@ from location_router import router as location_router
 from org_router import router as org_router
 from shipyard_router import router as shipyard_router
 import celestial_config
+import orbit_bridge
 from db import APP_DIR, connect_db
 from db_migrations import apply_migrations
 from fleet_router import router as fleet_router
@@ -2933,77 +2934,18 @@ def hash_edges(conn: sqlite3.Connection) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-def dijkstra_all_pairs(conn: sqlite3.Connection) -> None:
-    """
-    Generate transfer_matrix from transfer_edges using DV as the weight.
-    TOF is summed along the chosen DV-min path.
-    """
-    edges = conn.execute("SELECT from_id,to_id,dv_m_s,tof_s FROM transfer_edges").fetchall()
-    locs = conn.execute("SELECT id,is_group FROM locations WHERE is_group=0").fetchall()
-    node_ids = [r["id"] for r in locs]
-
-    adj: Dict[str, List[Tuple[str, float, float]]] = {nid: [] for nid in node_ids}
-    for e in edges:
-        if e["from_id"] in adj and e["to_id"] in adj:
-            adj[e["from_id"]].append((e["to_id"], float(e["dv_m_s"]), float(e["tof_s"])))
-
-    import heapq
-
-    matrix_rows = []
-    for src in node_ids:
-        dist: Dict[str, float] = {src: 0.0}
-        tof: Dict[str, float] = {src: 0.0}
-        prev: Dict[str, Optional[str]] = {src: None}
-
-        pq = [(0.0, src)]
-        while pq:
-            d, u = heapq.heappop(pq)
-            if d != dist.get(u, float("inf")):
-                continue
-            for v, w_dv, w_tof in adj.get(u, []):
-                nd = d + w_dv
-                if nd < dist.get(v, float("inf")) - 1e-9:
-                    dist[v] = nd
-                    tof[v] = tof[u] + w_tof
-                    prev[v] = u
-                    heapq.heappush(pq, (nd, v))
-
-        # Build rows for all reachable dst
-        for dst in node_ids:
-            if dst == src:
-                matrix_rows.append((src, dst, 0.0, 0.0, json.dumps([src])))
-                continue
-            if dst not in dist:
-                continue
-            # reconstruct path
-            path = []
-            cur: Optional[str] = dst
-            while cur is not None:
-                path.append(cur)
-                cur = prev.get(cur)
-            path.reverse()
-            matrix_rows.append((src, dst, dist[dst], tof[dst], json.dumps(path)))
-
-    conn.execute("DELETE FROM transfer_matrix")
-    conn.executemany(
-        "INSERT OR REPLACE INTO transfer_matrix (from_id,to_id,dv_m_s,tof_s,path_json) VALUES (?,?,?,?,?)",
-        matrix_rows,
+def refresh_edge_hash(conn: sqlite3.Connection) -> None:
+    """Store edge hash in transfer_meta for route-quote cache invalidation."""
+    current_hash = hash_edges(conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO transfer_meta (key,value) VALUES ('edges_hash',?)",
+        (current_hash,),
     )
 
 
-def regenerate_matrix_if_needed(conn: sqlite3.Connection) -> None:
-    current_hash = hash_edges(conn)
-    stored = conn.execute("SELECT value FROM transfer_meta WHERE key='edges_hash'").fetchone()
-    matrix_cnt = conn.execute("SELECT COUNT(*) AS c FROM transfer_matrix").fetchone()["c"]
-    if (not stored) or stored["value"] != current_hash or int(matrix_cnt) == 0:
-        dijkstra_all_pairs(conn)
-        conn.execute(
-            "INSERT OR REPLACE INTO transfer_meta (key,value) VALUES ('edges_hash',?)",
-            (current_hash,),
-        )
-
-
 def settle_arrivals(conn: sqlite3.Connection, now_s: float) -> None:
+    # Legacy timer-based arrival — only for ships WITHOUT orbit model data.
+    # Orbit-model ships are handled exclusively by settle_ship_events() below.
     conn.execute(
         """
         UPDATE ships
@@ -3019,9 +2961,12 @@ def settle_arrivals(conn: sqlite3.Connection, now_s: float) -> None:
           transit_to_y = NULL,
           trajectory_json = NULL
         WHERE arrives_at IS NOT NULL AND arrives_at <= ?
+          AND orbit_json IS NULL
         """,
         (now_s,),
     )
+    # Orbit-model ships: execute pending burns + auto-dock
+    orbit_bridge.settle_ship_events(conn, now_s)
 
 
 SIM_CLOCK_META_REAL_ANCHOR = "sim_real_time_anchor_s"
@@ -3080,7 +3025,9 @@ def _startup():
         if _env_flag("EARTHMOON_PURGE_TEST_SHIPS_ON_STARTUP", default=False):
             purge_test_ships(conn)
         ensure_inventory_baseline_ship(conn)
-        regenerate_matrix_if_needed(conn)
+        refresh_edge_hash(conn)
+        # Backfill orbit_json for docked ships that lack one (Phase 2)
+        orbit_bridge.backfill_docked_orbits(conn, game_now_s())
         conn.commit()
     finally:
         conn.close()

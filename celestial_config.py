@@ -537,6 +537,33 @@ def build_locations_and_edges(config: Dict[str, Any], game_time_s: Optional[floa
             )
         edge_rows.append((src, dst, float(dv_m_s), float(tof_s), str(edge_type)))
 
+    # ── Auto-generate local orbit-to-orbit edges if enabled ──
+    auto_local = config.get("auto_local_edges", False)
+    if auto_local:
+        # Build set of orbit_node IDs to identify which edges are auto-replaceable
+        orbit_node_id_set = set()
+        for node in (config.get("orbit_nodes") or []):
+            if isinstance(node, dict) and node.get("id"):
+                orbit_node_id_set.add(str(node["id"]))
+
+        # Remove hand-authored local edges where BOTH endpoints are orbit_nodes
+        # (these will be replaced by physics-computed edges).
+        # Keep local edges involving markers (SUN, PHOBOS, etc.) and surface sites.
+        edge_rows = [
+            e for e in edge_rows
+            if not (e[4] == "local" and e[0] in orbit_node_id_set and e[1] in orbit_node_id_set)
+        ]
+        edge_ids = {(e[0], e[1]) for e in edge_rows}
+
+        # Generate from physics (Hohmann + patched-conic)
+        auto_local_edges = generate_local_edges(config)
+        for ae in auto_local_edges:
+            key = (ae[0], ae[1])
+            if key not in edge_ids:
+                if ae[0] in leaf_ids and ae[1] in leaf_ids:
+                    edge_rows.append(ae)
+                    edge_ids.add(key)
+
     # ── Auto-generate interplanetary edges if enabled ───────
     auto_ip = config.get("auto_interplanetary_edges", False)
     if auto_ip:
@@ -875,13 +902,22 @@ def build_location_parent_body_map(config: Dict[str, Any]) -> Dict[str, str]:
             if sid and bid:
                 result[str(sid)] = str(bid)
 
-    # Lagrange points → map to primary body
+    # Lagrange points → map to the body that governs local routing.
+    # For planet-moon systems (e.g. earth-moon), map to the primary body
+    # so that LEO→L1 is a local transfer.
+    # For sun-planet systems (e.g. sun-jupiter), map to the secondary
+    # (planet) body so that JUP_LO→SJ_L4 is a local transfer and
+    # LEO→SJ_L4 is correctly classified as interplanetary (earth↔jupiter).
     for lsys in (config.get("lagrange_systems") or []):
         if isinstance(lsys, dict):
             primary = lsys.get("primary_body_id")
+            secondary = lsys.get("secondary_body_id")
+            # Use secondary body when primary is "sun" — keeps Lagrange
+            # points in the same routing domain as the planet's orbits.
+            body_id = secondary if (primary == "sun" and secondary) else primary
             for pt in (lsys.get("points") or []):
-                if isinstance(pt, dict) and pt.get("id") and primary:
-                    result[str(pt["id"])] = str(primary)
+                if isinstance(pt, dict) and pt.get("id") and body_id:
+                    result[str(pt["id"])] = str(body_id)
 
     return result
 
@@ -902,6 +938,48 @@ def get_orbit_node_body_id(config: Dict[str, Any], location_id: str) -> Optional
         if isinstance(node, dict) and str(node.get("id", "")) == location_id:
             bid = str(node.get("body_id", "")).strip()
             return bid if bid else None
+    return None
+
+
+def get_surface_site_info(config: Dict[str, Any], location_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a surface site by id.
+
+    Returns dict with body_id, orbit_node_id, landing_dv_m_s, landing_tof_s,
+    or None if not a surface site.
+    """
+    for site in (config.get("surface_sites") or []):
+        if isinstance(site, dict) and str(site.get("id", "")) == location_id:
+            body_id = str(site.get("body_id", "")).strip()
+            if not body_id:
+                return None
+            return {
+                "body_id": body_id,
+                "orbit_node_id": str(site.get("orbit_node_id", "")),
+                "landing_dv_m_s": float(site.get("landing_dv_m_s", 1870)),
+                "landing_tof_s": float(site.get("landing_tof_s", 3600)),
+            }
+    return None
+
+
+def get_lagrange_point_info(config: Dict[str, Any], location_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a Lagrange point by id.
+
+    Returns dict with primary_body_id, secondary_body_id, model, distance_km,
+    or None if not a Lagrange point.
+    """
+    for lsys in (config.get("lagrange_systems") or []):
+        if not isinstance(lsys, dict):
+            continue
+        primary = str(lsys.get("primary_body_id", "")).strip()
+        secondary = str(lsys.get("secondary_body_id", "")).strip()
+        for pt in (lsys.get("points") or []):
+            if isinstance(pt, dict) and str(pt.get("id", "")) == location_id:
+                return {
+                    "primary_body_id": primary,
+                    "secondary_body_id": secondary,
+                    "model": str(pt.get("model", "")),
+                    "distance_km": float(pt.get("distance_km", 0.0)) if pt.get("distance_km") else None,
+                }
     return None
 
 
@@ -963,6 +1041,285 @@ def _find_gateway_location(
             best_id = str(node["id"])
 
     return best_id
+
+
+# ── Public hierarchy / gateway helpers ──────────────────────
+
+
+def get_body_parent(body_id: str) -> Optional[str]:
+    """Return the parent body ID for *body_id*, or ``None`` if it is the sun
+    or has no parent.  Uses the loaded celestial config.
+    """
+    cfg = load_celestial_config()
+    bodies_by_id = _build_bodies_by_id(cfg)
+    body = bodies_by_id.get(body_id)
+    if not body:
+        return None
+    parent = _get_body_parent_id(body)
+    return parent if parent else None
+
+
+def get_body_ancestry(body_id: str) -> List[str]:
+    """Return the ancestor chain from *body_id* (exclusive) up to (and
+    including) the sun.  E.g. ``get_body_ancestry("moon")`` → ``["earth", "sun"]``.
+    Returns an empty list if *body_id* is the sun or unknown.
+    """
+    cfg = load_celestial_config()
+    bodies_by_id = _build_bodies_by_id(cfg)
+    ancestors: List[str] = []
+    current = body_id
+    visited: set = set()
+    while current and current not in visited:
+        visited.add(current)
+        body = bodies_by_id.get(current)
+        if not body:
+            break
+        parent = _get_body_parent_id(body)
+        if not parent:
+            break
+        ancestors.append(parent)
+        current = parent
+    return ancestors
+
+
+def find_lowest_common_ancestor(body_a: str, body_b: str) -> Optional[str]:
+    """Return the lowest common ancestor of two bodies.
+
+    If one body is an ancestor of the other, that ancestor is returned.
+    Uses the loaded celestial config's body hierarchy.
+
+    Returns ``None`` only if one or both bodies are unknown.
+    """
+    if body_a == body_b:
+        return body_a
+    chain_a = [body_a] + get_body_ancestry(body_a)
+    chain_b_set = set([body_b] + get_body_ancestry(body_b))
+    for node in chain_a:
+        if node in chain_b_set:
+            return node
+    return None
+
+
+def get_gateway_location(config: Dict[str, Any], body_id: str) -> Optional[str]:
+    """Public wrapper — return the gateway location for a heliocentric body."""
+    bodies_by_id = _build_bodies_by_id(config)
+    return _find_gateway_location(config, body_id, bodies_by_id)
+
+
+# ── Hohmann / patched-conic math for auto-edge generation ───────
+
+def _hohmann_dv_tof(mu_km3_s2: float, r1_km: float, r2_km: float) -> Tuple[float, float]:
+    """Compute 2-burn Hohmann Δv (m/s) and TOF (s) between circular orbits.
+
+    Parameters
+    ----------
+    mu_km3_s2 : gravitational parameter of central body (km³/s²)
+    r1_km : departure circular orbit radius (km)
+    r2_km : arrival circular orbit radius (km)
+
+    Returns (total_dv_m_s, tof_s).
+    """
+    if r1_km <= 0.0 or r2_km <= 0.0 or mu_km3_s2 <= 0.0:
+        return 0.0, 0.0
+    a_t = 0.5 * (r1_km + r2_km)
+    dv1 = math.sqrt(mu_km3_s2 / r1_km) * (math.sqrt((2.0 * r2_km) / (r1_km + r2_km)) - 1.0)
+    dv2 = math.sqrt(mu_km3_s2 / r2_km) * (1.0 - math.sqrt((2.0 * r1_km) / (r1_km + r2_km)))
+    tof = math.pi * math.sqrt(a_t ** 3 / mu_km3_s2)
+    return (abs(dv1) + abs(dv2)) * 1000.0, tof
+
+
+def _patched_conic_dv_tof(
+    mu_parent: float,
+    r1_parent: float,
+    r2_parent: float,
+    mu_body1: float,
+    r_park1: float,
+    mu_body2: float,
+    r_park2: float,
+) -> Tuple[float, float]:
+    """Patched-conic Δv for transfer between two sub-bodies orbiting the same parent.
+
+    Each sub-body orbits at r1_parent / r2_parent around the parent.
+    The ship departs from a parking orbit of radius r_park1 around body1,
+    performs a hyperbolic escape, coasts along a Hohmann arc in the parent
+    field, and captures into a parking orbit of r_park2 around body2.
+
+    For very small μ (e.g., asteroid moons), the SOI contribution is negligible
+    and the result degrades to a simple Hohmann in the parent field.
+
+    Returns (total_dv_m_s, tof_s).
+    """
+    if mu_parent <= 0 or r1_parent <= 0 or r2_parent <= 0:
+        return 0.0, 0.0
+
+    a_t = 0.5 * (r1_parent + r2_parent)
+    v1_circ = math.sqrt(mu_parent / r1_parent)
+    v2_circ = math.sqrt(mu_parent / r2_parent)
+    v1_trans = math.sqrt(mu_parent * (2.0 / r1_parent - 1.0 / a_t))
+    v2_trans = math.sqrt(mu_parent * (2.0 / r2_parent - 1.0 / a_t))
+    v_inf_dep = abs(v1_trans - v1_circ)
+    v_inf_arr = abs(v2_circ - v2_trans)
+
+    # SOI escape burn at departure body
+    if mu_body1 > 1e-6 and r_park1 > 0:
+        v_park = math.sqrt(mu_body1 / r_park1)
+        v_hyp = math.sqrt(v_inf_dep ** 2 + 2.0 * mu_body1 / r_park1)
+        dv_dep = abs(v_hyp - v_park)
+    else:
+        dv_dep = v_inf_dep
+
+    # SOI capture burn at arrival body
+    if mu_body2 > 1e-6 and r_park2 > 0:
+        v_park = math.sqrt(mu_body2 / r_park2)
+        v_hyp = math.sqrt(v_inf_arr ** 2 + 2.0 * mu_body2 / r_park2)
+        dv_arr = abs(v_hyp - v_park)
+    else:
+        dv_arr = v_inf_arr
+
+    tof = math.pi * math.sqrt(a_t ** 3 / mu_parent)
+    return (dv_dep + dv_arr) * 1000.0, tof
+
+
+def generate_local_edges(config: Dict[str, Any]) -> List[EdgeRow]:
+    """Auto-generate local orbit transfer edges from physics.
+
+    Produces two categories of edges, all bidirectional:
+
+    **Same-body Hohmann** — orbit_nodes sharing the same ``body_id``:
+      LEO↔GEO, LLO↔HLO, JUP_LO↔JUP_HO, etc.
+      Uses the body's μ and each node's ``radius_km``.
+
+    **Cross-body patched-conic** — orbit_nodes whose bodies share the same
+    ``center_body_id`` (i.e. moons of the same planet, or planet-orbiting
+    locations vs moon-orbiting locations):
+      LMO↔PHOBOS_LO, IO_LO↔EUROPA_LO, JUP_LO↔IO_LO, etc.
+      Uses the parent body's μ, each moon's ``a_km``, and local parking orbit
+      radius + μ for SOI escape/capture (Oberth effect).
+
+    Returns list of EdgeRow tuples: (from_id, to_id, dv_m_s, tof_s, "local").
+    """
+    bodies_by_id = _build_bodies_by_id(config)
+    orbit_nodes = config.get("orbit_nodes", [])
+    if not isinstance(orbit_nodes, list):
+        return []
+
+    # Build orbit_node index
+    orbit_node_ids = set()
+    nodes_by_body: Dict[str, List[Dict[str, Any]]] = {}
+    for node in orbit_nodes:
+        if not isinstance(node, dict):
+            continue
+        nid = str(node.get("id", "")).strip()
+        bid = str(node.get("body_id", "")).strip()
+        if not nid or not bid:
+            continue
+        orbit_node_ids.add(nid)
+        nodes_by_body.setdefault(bid, []).append(node)
+
+    edges: List[EdgeRow] = []
+    generated: set = set()
+
+    def _add_edge(a_id: str, b_id: str, dv: float, tof: float) -> None:
+        """Add bidirectional edge if not already generated."""
+        if (a_id, b_id) not in generated:
+            edges.append((a_id, b_id, round(dv, 2), round(tof, 1), "local"))
+            generated.add((a_id, b_id))
+        if (b_id, a_id) not in generated:
+            edges.append((b_id, a_id, round(dv, 2), round(tof, 1), "local"))
+            generated.add((b_id, a_id))
+
+    # ── 1. Same-body orbit changes (Hohmann) ────────────────
+    for body_id, nodes in nodes_by_body.items():
+        body = bodies_by_id.get(body_id)
+        if not body or len(nodes) < 2:
+            continue
+        mu = float(body.get("mu_km3_s2", 0.0))
+        if mu <= 0:
+            continue
+        for i, n1 in enumerate(nodes):
+            r1 = float(n1.get("radius_km", 0))
+            if r1 <= 0:
+                continue
+            for n2 in nodes[i + 1:]:
+                r2 = float(n2.get("radius_km", 0))
+                if r2 <= 0:
+                    continue
+                dv, tof = _hohmann_dv_tof(mu, r1, r2)
+                if dv > 0:
+                    _add_edge(str(n1["id"]), str(n2["id"]), dv, tof)
+
+    # ── 2. Cross-body transfers in same parent system ────────
+    # Only generate for planetary sub-systems (moons of the same planet).
+    # Skip the heliocentric level (center_id == "sun") because planet-to-planet
+    # transfers are handled by the interplanetary edge system + Lambert solver.
+    bodies_by_center: Dict[str, List[Dict[str, Any]]] = {}
+    for bid, body in bodies_by_id.items():
+        center = _get_body_parent_id(body)
+        if center and center != "sun":
+            bodies_by_center.setdefault(center, []).append(body)
+
+    for center_id, child_bodies in bodies_by_center.items():
+        center_body = bodies_by_id.get(center_id)
+        if not center_body:
+            continue
+        mu_center = float(center_body.get("mu_km3_s2", 0.0))
+        if mu_center <= 0:
+            continue
+
+        # Collect all orbit nodes in this gravitational system:
+        # - Orbit nodes directly around the center body (e.g., JUP_LO around jupiter)
+        # - Orbit nodes around child bodies (e.g., IO_LO around io which orbits jupiter)
+        system_nodes: List[Dict[str, Any]] = []
+
+        for node in nodes_by_body.get(center_id, []):
+            system_nodes.append({
+                "id": str(node["id"]),
+                "r_parent": float(node.get("radius_km", 0)),  # orbit radius IS the radius in parent field
+                "r_park": float(node.get("radius_km", 0)),
+                "mu_local": float(center_body.get("mu_km3_s2", 0)),  # no sub-SOI
+                "body_id": center_id,
+                "is_direct_orbit": True,
+            })
+
+        for child in child_bodies:
+            child_id = str(child.get("id", "")).strip()
+            child_pos = child.get("position", {})
+            child_a_km = float(child_pos.get("a_km", 0))
+            child_mu = float(child.get("mu_km3_s2", 0))
+            if child_a_km <= 0:
+                continue
+            for node in nodes_by_body.get(child_id, []):
+                system_nodes.append({
+                    "id": str(node["id"]),
+                    "r_parent": child_a_km,  # moon's orbital radius around parent
+                    "r_park": float(node.get("radius_km", 0)),
+                    "mu_local": child_mu,
+                    "body_id": child_id,
+                    "is_direct_orbit": False,
+                })
+
+        # Generate edges between nodes in *different* bodies within this system
+        for i, sn1 in enumerate(system_nodes):
+            for sn2 in system_nodes[i + 1:]:
+                if sn1["body_id"] == sn2["body_id"]:
+                    continue  # same body — already handled in step 1
+                r1 = sn1["r_parent"]
+                r2 = sn2["r_parent"]
+                if r1 <= 0 or r2 <= 0:
+                    continue
+
+                # For nodes directly orbiting the center body, there's no
+                # sub-SOI escape — just the Hohmann Δv in the parent field.
+                mu1 = 0.0 if sn1["is_direct_orbit"] else sn1["mu_local"]
+                rp1 = sn1["r_park"] if not sn1["is_direct_orbit"] else 0.0
+                mu2 = 0.0 if sn2["is_direct_orbit"] else sn2["mu_local"]
+                rp2 = sn2["r_park"] if not sn2["is_direct_orbit"] else 0.0
+
+                dv, tof = _patched_conic_dv_tof(mu_center, r1, r2, mu1, rp1, mu2, rp2)
+                if dv > 0:
+                    _add_edge(sn1["id"], sn2["id"], dv, tof)
+
+    return edges
 
 
 def generate_interplanetary_edges(

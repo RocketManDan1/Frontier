@@ -698,6 +698,28 @@ def _migration_0017_deprecate_transfer_path(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migration_0019_orbit_predictions(conn: sqlite3.Connection) -> None:
+    """Add orbit predictions column for storing predicted orbit segments during transfers.
+
+    orbit_predictions_json: list of {from_s, to_s, body_id, elements: {...}} orbit segments.
+    """
+    _safe_add_column(conn, "ships", "orbit_predictions_json", "TEXT")
+    conn.commit()
+
+
+def _migration_0018_orbit_state(conn: sqlite3.Connection) -> None:
+    """Add orbital state columns for physics-based ship movement.
+
+    orbit_json: Keplerian orbital elements {body_id, a_km, e, omega_deg, M0_deg, epoch_s, direction}
+    maneuver_json: Scheduled burn sequence [{time_s, prograde_m_s, radial_m_s, label}, ...]
+    orbit_body_id: Denormalized central body for fast queries
+    """
+    _safe_add_column(conn, "ships", "orbit_json", "TEXT")
+    _safe_add_column(conn, "ships", "maneuver_json", "TEXT")
+    _safe_add_column(conn, "ships", "orbit_body_id", "TEXT")
+    conn.commit()
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -717,6 +739,8 @@ def _migrations() -> List[Migration]:
     Migration("0015_industry_v2", "Industry v2: constructor modes, refinery slots, construction queue", _migration_0015_industry_v2),
     Migration("0016_refinery_cumulative", "Add cumulative output tracking to refinery slots", _migration_0016_refinery_cumulative),
     Migration("0017_deprecate_transfer_path", "Clear legacy transfer_path_json on all ships", _migration_0017_deprecate_transfer_path),
+    Migration("0018_orbit_state", "Add orbital state columns for physics-based ship movement", _migration_0018_orbit_state),
+    Migration("0019_orbit_predictions", "Add orbit_predictions_json column for transfer orbit segments", _migration_0019_orbit_predictions),
     ]
 
 

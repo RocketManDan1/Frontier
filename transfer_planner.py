@@ -441,6 +441,23 @@ def compute_interplanetary_leg(
     # for this departure time.  The porkchop sweeps departure × TOF; here
     # we fix the departure and sweep TOF only.
     tof_factors = [1.0, 0.9, 1.1, 0.8, 1.2, 0.7, 1.3, 0.5, 1.5, 0.4, 1.8, 2.0, 2.5, 0.3]
+
+    # For bodies at similar orbital radii (trojans, co-orbital), the
+    # Hohmann TOF approaches a half-orbit and Δv approaches 0 but only
+    # at infinite TOF.  Add wider sweep + absolute TOFs so the solver
+    # can find phasing-orbit solutions.
+    radius_ratio = min(r1_km, r2_km) / max(r1_km, r2_km) if max(r1_km, r2_km) > 0 else 0
+    if radius_ratio > 0.85:
+        # Near-co-orbital: extend sweep to cover longer phasing arcs
+        tof_factors.extend([3.0, 4.0, 5.0, 0.2, 0.15])
+        # Also try some absolute TOFs: 30d, 90d, 180d, 365d, 730d
+        for abs_days in [30, 90, 180, 365, 730]:
+            abs_tof = abs_days * 86400.0
+            if hohmann_tof_s > 0:
+                f = abs_tof / hohmann_tof_s
+                if f not in tof_factors and 0.05 < f < 10.0:
+                    tof_factors.append(f)
+
     best_dv_total = float("inf")
     best_v1: Optional[Vec3] = None
     best_v2: Optional[Vec3] = None

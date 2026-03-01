@@ -173,6 +173,16 @@ body.embedMode .pagePanel {
   line-height: 1.1;
 }
 
+.mapPage .mapBrandUpdate {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(208, 226, 244, 0.20);
+  font-style: italic;
+  line-height: 1.1;
+}
+
 @media (max-width: 900px) {
   .mapPage .mapOrgSummary {
     gap: 12px;
@@ -199,6 +209,11 @@ body.embedMode .pagePanel {
   .mapPage .mapBrandStage {
     font-size: 10px;
     letter-spacing: 0.06em;
+  }
+
+  .mapPage .mapBrandUpdate {
+    font-size: 9px;
+    letter-spacing: 0.04em;
   }
 }
 
@@ -2524,6 +2539,12 @@ button:disabled {
 .badgeMove {
   border-color: rgba(109, 182, 255, 0.56);
   background: rgba(68, 224, 255, 0.12);
+}
+
+.badgeWarn {
+  border-color: rgba(255, 136, 68, 0.56);
+  background: rgba(255, 136, 68, 0.15);
+  color: #ff8844;
 }
 
 .bar {
@@ -6047,6 +6068,107 @@ tr.bodyGroupHeader td {
   border: 1px solid rgba(255,107,122,0.3);
 }
 
+/* ── Mission plan leg cards ──────────────────────────────── */
+
+.tpLegCards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tpLegCard {
+  border: 1px solid rgba(109, 182, 255, 0.12);
+  border-radius: 2px;
+  background: rgba(4, 8, 14, 0.55);
+  padding: 8px 10px;
+}
+
+.tpLegHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tpLegTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tpLegDv {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tpLegType {
+  font-size: 10px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+.tpBurnList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tpBurnRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 1px;
+  background: rgba(109, 182, 255, 0.04);
+}
+
+.tpBurnNum {
+  color: var(--muted);
+  font-weight: 600;
+  min-width: 16px;
+}
+
+.tpBurnLabel {
+  color: rgba(163, 184, 203, 0.95);
+  flex: 1;
+  min-width: 0;
+}
+
+.tpBurnDv {
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tpBurnTime {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.tpLegArrival {
+  font-size: 10px;
+  margin-top: 4px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(109, 182, 255, 0.08);
+}
+
+.tpAltWindowRow:hover {
+  background: rgba(89, 185, 230, 0.12);
+}
+
+.tpBestRow:hover {
+  background: rgba(89, 185, 230, 0.12);
+}
+
+.tpAltWindowDetails summary::-webkit-details-marker {
+  display: none;
+}
+
 /* ── Confirm bar ────────────────────────────────────────── */
 
 .tpActions {
@@ -7165,4 +7287,108 @@ body.embedMode #orgTabOverview {
   background: var(--accent);
   border-radius: 3px;
   transition: width 0.3s ease;
+}
+
+/* ── Burn marker tooltip ─────────────────────────────────── */
+
+.burnTooltip {
+  position: fixed;
+  z-index: 9999;
+  background: rgba(12, 18, 30, 0.95);
+  border: 1px solid rgba(89, 185, 230, 0.35);
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #d0dae8;
+  font-family: "Rajdhani", "Roboto Condensed", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: none;
+  max-width: 320px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+}
+.burnTooltip .btTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e8e8e8;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.burnTooltip .btDivider {
+  border-top: 1px solid rgba(89, 185, 230, 0.2);
+  margin: 4px 0 6px;
+}
+.burnTooltip .btRow {
+  padding: 1px 0;
+  color: #b0bcc8;
+}
+.burnTooltip .btDv {
+  color: #ff8844;
+  font-weight: 600;
+}
+.burnTooltip .btTime {
+  color: #8899aa;
+  font-size: 12px;
+}
+.burnTooltip .btSection {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(89, 185, 230, 0.12);
+}
+.burnTooltip .btHead {
+  font-weight: 600;
+  color: #7bbce6;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.burnTooltip .btCompleted {
+  background: rgba(100, 100, 100, 0.3);
+  color: #888;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.burnTooltip .btCountdown {
+  color: #44cc88;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ── Ghost Projection tooltip (Phase 6) ── */
+.ghostTooltip {
+  position: fixed;
+  z-index: 9998;
+  background: rgba(12, 18, 30, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  padding: 6px 10px;
+  color: #c0ccd8;
+  font-family: "Rajdhani", "Roboto Condensed", sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  max-width: 200px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+.ghostTooltip .gtBody {
+  font-weight: 600;
+  color: #d8dce4;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.ghostTooltip .gtDist {
+  color: #8899aa;
+  font-size: 12px;
+}
+.ghostTooltip .gtTime {
+  color: #44cc88;
+  font-size: 11px;
+  margin-top: 1px;
 }

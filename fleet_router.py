@@ -13,7 +13,6 @@ Extracted from main.py — handles:
 """
 
 import json
-import heapq
 import logging
 import math
 import sqlite3
@@ -26,6 +25,7 @@ from pydantic import BaseModel
 from auth_service import require_login
 import catalog_service
 import celestial_config
+import orbit_bridge
 import transfer_planner
 from db import get_db
 from sim_service import (
@@ -35,6 +35,24 @@ from sim_service import (
 )
 
 router = APIRouter(tags=["fleet"])
+
+
+def _ship_status(r) -> str:
+    """Derive ship status from DB row fields.
+
+    Returns one of: "transit", "stranded", "docked".
+    """
+    # Legacy transit (arrives_at timer)
+    if r["arrives_at"]:
+        return "transit"
+    # Orbit-model transit (has pending maneuvers)
+    mj = r["maneuver_json"]
+    if r["orbit_json"] and mj and mj not in ("", "[]"):
+        return "transit"
+    # Stranded: in orbit but not docked, no pending maneuvers
+    if r["orbit_json"] and not r["location_id"]:
+        return "stranded"
+    return "docked"
 
 
 def _main():
@@ -66,6 +84,7 @@ def _require_ship_ownership(conn, request, ship_id: str):
 
 class TransferReq(BaseModel):
     to_location_id: str
+    departure_time: Optional[float] = None   # game epoch seconds; None = depart now
 
 
 class InventoryContainerReq(BaseModel):
@@ -194,21 +213,79 @@ def _compute_interplanetary_leg_quote(
 
 
 # ── Direct A→B transfer quote system ──────────────────────
-# Replaces the old Dijkstra multi-hop path system. Transfers are
-# always computed as a single A→B segment. For interplanetary
-# transfers from non-gateway nodes, gateway costs are auto-resolved.
+# All transfers are direct A→B single-segment. For interplanetary
+# transfers from non-gateway nodes, gateway costs are auto-resolved
+# from a single direct edge lookup (no multi-hop pathfinding).
+
+
+# Nodes that must never be used as *intermediate* BFS waypoints.
+# The Sun-dive edges (LEO→SUN 28 km/s, etc.) are physically valid for
+# travelling *to* the Sun, but using SUN as a transit hub produces
+# absurd routes like LEO→SUN→VEN_ORB (47 km/s) instead of a proper
+# Hohmann/Lambert transfer (~5 km/s).  Endpoints are still allowed.
+_BFS_EXCLUDED_TRANSIT_NODES = frozenset({"SUN"})
+
+def _local_shortest_path_cost(
+    conn: sqlite3.Connection, from_id: str, to_id: str, max_hops: int = 3,
+) -> Optional[Tuple[float, float]]:
+    """BFS over local/lagrange/landing edges to find cheapest path up to *max_hops*.
+
+    Returns (total_dv, total_tof) or None if unreachable.
+    """
+    if from_id == to_id:
+        return (0.0, 0.0)
+
+    # Direct edge check first (fast path)
+    direct = conn.execute(
+        "SELECT dv_m_s, tof_s FROM transfer_edges WHERE from_id=? AND to_id=? AND COALESCE(edge_type,'local') != 'interplanetary'",
+        (from_id, to_id),
+    ).fetchone()
+    if direct:
+        return (float(direct["dv_m_s"]), float(direct["tof_s"]))
+
+    if max_hops < 2:
+        return None
+
+    # BFS up to max_hops
+    # frontier: list of (current_node, total_dv, total_tof, hops)
+    frontier = [(from_id, 0.0, 0.0, 0)]
+    visited = {from_id}
+    best: Optional[Tuple[float, float]] = None
+
+    while frontier:
+        next_frontier = []
+        for node, dv_so_far, tof_so_far, hops in frontier:
+            if hops >= max_hops:
+                continue
+            edges = conn.execute(
+                "SELECT to_id, dv_m_s, tof_s FROM transfer_edges WHERE from_id=? AND COALESCE(edge_type,'local') != 'interplanetary'",
+                (node,),
+            ).fetchall()
+            for edge in edges:
+                nxt = edge["to_id"]
+                new_dv = dv_so_far + float(edge["dv_m_s"])
+                new_tof = tof_so_far + float(edge["tof_s"])
+                if nxt == to_id:
+                    if best is None or new_dv < best[0]:
+                        best = (new_dv, new_tof)
+                elif nxt not in visited and nxt not in _BFS_EXCLUDED_TRANSIT_NODES:
+                    visited.add(nxt)
+                    next_frontier.append((nxt, new_dv, new_tof, hops + 1))
+        frontier = next_frontier
+
+    return best
+
 
 def _find_gateway_pair(
     conn: sqlite3.Connection,
     from_id: str,
     to_id: str,
 ) -> Optional[Tuple[str, str, float, float, float, float]]:
-    """Find the best interplanetary gateway pair for a cross-body transfer.
+    """Find the interplanetary gateway pair for a cross-body transfer.
 
-    Searches for interplanetary edges connecting departure-body locations
-    to arrival-body locations.  For each candidate gateway pair, adds the
-    local edge cost from *from_id* to the departure gateway and from the
-    arrival gateway to *to_id*.
+    Resolves the gateway orbit for each heliocentric body from config,
+    then looks up direct edge costs from *from_id* to the departure
+    gateway and from the arrival gateway to *to_id*.
 
     Returns ``(dep_gateway, arr_gateway,
                local_dep_dv, local_dep_tof,
@@ -225,120 +302,32 @@ def _find_gateway_pair(
     if from_helio == to_helio:
         return None  # same heliocentric body — not interplanetary
 
-    # Build a set of all location IDs that belong to each heliocentric body
-    loc_map = transfer_planner._get_location_body_map()
-    from_body_locs = set()
-    to_body_locs = set()
-    for loc_id, body_id in loc_map.items():
-        helio = transfer_planner._resolve_heliocentric_body(body_id)
-        if helio == from_helio:
-            from_body_locs.add(loc_id)
-        elif helio == to_helio:
-            to_body_locs.add(loc_id)
-
-    # Find all interplanetary edges between these two body groups
-    ip_edges = conn.execute(
-        "SELECT from_id, to_id, dv_m_s, tof_s FROM transfer_edges WHERE edge_type = 'interplanetary'"
-    ).fetchall()
-
-    candidates: List[Tuple[str, str]] = []
-    for edge in ip_edges:
-        ef = str(edge["from_id"])
-        et = str(edge["to_id"])
-        if ef in from_body_locs and et in to_body_locs:
-            candidates.append((ef, et))
-
-    if not candidates:
+    # Resolve gateways from config
+    cfg = celestial_config.load_celestial_config()
+    dep_gw = celestial_config.get_gateway_location(cfg, from_helio)
+    arr_gw = celestial_config.get_gateway_location(cfg, to_helio)
+    if not dep_gw or not arr_gw:
         return None
 
-    # For each candidate, compute total local hop cost
-    best: Optional[Tuple[str, str, float, float, float, float]] = None
-    best_total_dv = float("inf")
+    # Local departure cost (from_id → dep_gw)
+    if dep_gw == from_id:
+        local_dep_dv, local_dep_tof = 0.0, 0.0
+    else:
+        dep_cost = _local_shortest_path_cost(conn, from_id, dep_gw, max_hops=4)
+        if not dep_cost:
+            return None  # no local path to departure gateway
+        local_dep_dv, local_dep_tof = dep_cost
 
-    for dep_gw, arr_gw in candidates:
-        # Local departure cost (from_id → dep_gw)
-        if dep_gw == from_id:
-            local_dep_dv, local_dep_tof = 0.0, 0.0
-        else:
-            dep_edge = conn.execute(
-                "SELECT dv_m_s, tof_s FROM transfer_edges WHERE from_id=? AND to_id=?",
-                (from_id, dep_gw),
-            ).fetchone()
-            if not dep_edge:
-                # Try 2-hop via shared orbit node (surface site → orbit → gateway)
-                dep_edge = _find_local_path_cost(conn, from_id, dep_gw)
-            if not dep_edge:
-                continue  # no local route to this gateway
-            local_dep_dv = float(dep_edge["dv_m_s"])
-            local_dep_tof = float(dep_edge["tof_s"])
+    # Local arrival cost (arr_gw → to_id)
+    if arr_gw == to_id:
+        local_arr_dv, local_arr_tof = 0.0, 0.0
+    else:
+        arr_cost = _local_shortest_path_cost(conn, arr_gw, to_id, max_hops=4)
+        if not arr_cost:
+            return None  # no local path from arrival gateway
+        local_arr_dv, local_arr_tof = arr_cost
 
-        # Local arrival cost (arr_gw → to_id)
-        if arr_gw == to_id:
-            local_arr_dv, local_arr_tof = 0.0, 0.0
-        else:
-            arr_edge = conn.execute(
-                "SELECT dv_m_s, tof_s FROM transfer_edges WHERE from_id=? AND to_id=?",
-                (arr_gw, to_id),
-            ).fetchone()
-            if not arr_edge:
-                arr_edge = _find_local_path_cost(conn, arr_gw, to_id)
-            if not arr_edge:
-                continue
-            local_arr_dv = float(arr_edge["dv_m_s"])
-            local_arr_tof = float(arr_edge["tof_s"])
-
-        total_local_dv = local_dep_dv + local_arr_dv
-        if total_local_dv < best_total_dv:
-            best_total_dv = total_local_dv
-            best = (dep_gw, arr_gw, local_dep_dv, local_dep_tof, local_arr_dv, local_arr_tof)
-
-    return best
-
-
-def _find_local_path_cost(
-    conn: sqlite3.Connection,
-    from_id: str,
-    to_id: str,
-) -> Optional[Dict[str, float]]:
-    """Find the cheapest local (non-interplanetary) route between two locations.
-
-    Uses Dijkstra over all non-interplanetary edges to handle multi-hop
-    local transfers (e.g. LEO → GEO → L1 → LLO). Returns a dict with
-    combined ``dv_m_s`` and ``tof_s``, or None if no local path exists.
-    """
-    # Load all non-interplanetary edges into an adjacency list
-    all_edges = conn.execute(
-        "SELECT from_id, to_id, dv_m_s, tof_s FROM transfer_edges WHERE edge_type IS NULL OR edge_type != 'interplanetary'"
-    ).fetchall()
-    adj: Dict[str, List[Tuple[str, float, float]]] = {}
-    for e in all_edges:
-        ef = str(e["from_id"])
-        et = str(e["to_id"])
-        if ef not in adj:
-            adj[ef] = []
-        adj[ef].append((et, float(e["dv_m_s"]), float(e["tof_s"])))
-
-    # Dijkstra by dv
-    dist: Dict[str, float] = {from_id: 0.0}
-    tof_acc: Dict[str, float] = {from_id: 0.0}
-    heap: List[Tuple[float, str]] = [(0.0, from_id)]
-    visited: set = set()
-
-    while heap:
-        cost, node = heapq.heappop(heap)
-        if node in visited:
-            continue
-        visited.add(node)
-        if node == to_id:
-            return {"dv_m_s": dist[to_id], "tof_s": tof_acc[to_id]}
-        for neighbor, dv, tof in adj.get(node, []):
-            new_cost = cost + dv
-            if new_cost < dist.get(neighbor, float("inf")):
-                dist[neighbor] = new_cost
-                tof_acc[neighbor] = tof_acc[node] + tof
-                heapq.heappush(heap, (new_cost, neighbor))
-
-    return None
+    return (dep_gw, arr_gw, local_dep_dv, local_dep_tof, local_arr_dv, local_arr_tof)
 
 
 def _compute_direct_quote(
@@ -380,8 +369,10 @@ def _compute_direct_quote(
 
     is_ip = _is_interplanetary(from_id, to_id)
 
-    if direct and not is_ip and direct_edge_type != "interplanetary":
-        # Local direct edge — simple case
+    if direct and direct_edge_type in ("local", "lagrange", "landing", "soi_hohmann", ""):
+        # Local/lagrange direct edge — use it regardless of is_ip.
+        # Lagrange edges (e.g. SJ_L4→HEKTOR_LO) are authoritative even
+        # when the body-map says the endpoints are "interplanetary".
         base_dv = float(direct["dv_m_s"])
         base_tof = float(direct["tof_s"])
         final_dv = base_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
@@ -402,7 +393,32 @@ def _compute_direct_quote(
             "route_mode": "direct-local",
         }
 
-    # ── 2. Interplanetary transfer ────────────────────────
+    # ── 2. Multi-hop local search (up to 3 hops) ────────────
+    # BFS over local/lagrange/landing edges.  Tried BEFORE Lambert so
+    # that camp hops (SJ_L4→HEKTOR_LO→HEKTOR→site, JUP_LO→JUP_HO→SJ_L1→SJ_L4,
+    # L4→L1→L5, etc.) take priority over interplanetary solvers.
+    local_path = _local_shortest_path_cost(conn, from_id, to_id, max_hops=4)
+    if local_path:
+        base_dv, base_tof = local_path
+        final_dv = base_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
+        final_tof = _excess_dv_time_reduction(base_tof, base_dv, max(0.0, float(extra_dv_fraction)))
+        return {
+            "from_id": from_id,
+            "to_id": to_id,
+            "base_dv_m_s": base_dv,
+            "base_tof_s": base_tof,
+            "phase_adjusted_dv_m_s": base_dv,
+            "phase_multiplier": 1.0,
+            "dv_m_s": final_dv,
+            "tof_s": final_tof,
+            "extra_dv_fraction": float(extra_dv_fraction),
+            "departure_time": float(departure_time_s),
+            "is_interplanetary": False,
+            "orbital": None,
+            "route_mode": "local-multi-hop",
+        }
+
+    # ── 3. Interplanetary transfer ────────────────────────
     if is_ip:
         # Try direct interplanetary edge first (gateway-to-gateway)
         if direct and str(direct["edge_type"] or "") == "interplanetary":
@@ -474,30 +490,7 @@ def _compute_direct_quote(
             "route_mode": "direct-gateway",
         }
 
-    # ── 3. Same-body but no direct edge — try local path ──
-    hop2 = _find_local_path_cost(conn, from_id, to_id)
-    if hop2:
-        base_dv = float(hop2["dv_m_s"])
-        base_tof = float(hop2["tof_s"])
-        final_dv = base_dv * (1.0 + max(0.0, float(extra_dv_fraction)))
-        final_tof = _excess_dv_time_reduction(base_tof, base_dv, max(0.0, float(extra_dv_fraction)))
-        return {
-            "from_id": from_id,
-            "to_id": to_id,
-            "base_dv_m_s": base_dv,
-            "base_tof_s": base_tof,
-            "phase_adjusted_dv_m_s": base_dv,
-            "phase_multiplier": 1.0,
-            "dv_m_s": final_dv,
-            "tof_s": final_tof,
-            "extra_dv_fraction": float(extra_dv_fraction),
-            "departure_time": float(departure_time_s),
-            "is_interplanetary": False,
-            "orbital": None,
-            "route_mode": "local-multihop",
-        }
-
-    return None  # unreachable pair
+    return None  # unreachable pair as direct transfer
 
 
 def _compute_route_quote(
@@ -782,6 +775,212 @@ def api_transfer_quote_advanced(
     return result
 
 
+# ── Chain mission preview ──────────────────────────────────
+
+
+@router.get("/api/transfer/mission_preview")
+def api_mission_preview(
+    from_id: str,
+    to_id: str,
+    request: Request,
+    ship_id: Optional[str] = Query(None, description="Ship ID for fuel/Δv validation"),
+    departure_time: Optional[float] = Query(None, description="Game-time departure (epoch s). Defaults to now."),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Preview a full chain mission from *from_id* to *to_id*.
+
+    Returns the decomposed legs, per-leg burn plans, total Δv/TOF,
+    orbit summaries, and (if *ship_id* given) fuel feasibility.
+    """
+    require_login(conn, request)
+
+    dep_time = departure_time if departure_time is not None else game_now_s()
+
+    mission = orbit_bridge.plan_chain_mission(
+        conn, from_id, to_id, dep_time,
+    )
+    if not mission:
+        raise HTTPException(status_code=404, detail="No route found for that pair")
+
+    legs = mission.get("legs", [])
+    burns = mission.get("burns", [])
+    total_dv = float(mission["total_dv_m_s"])
+    total_tof = float(mission["total_tof_s"])
+
+    result: Dict[str, Any] = {
+        "from_id": from_id,
+        "to_id": to_id,
+        "departure_time": dep_time,
+        "arrival_time": dep_time + total_tof,
+        "total_dv_m_s": round(total_dv, 1),
+        "total_tof_s": round(total_tof, 1),
+        "leg_count": len(legs),
+        "burn_count": len(burns),
+        "transfer_type": mission.get("transfer_type", ""),
+        "legs": [
+            {
+                "index": leg["index"],
+                "from_id": leg["from_id"],
+                "to_id": leg["to_id"],
+                "dv_m_s": round(leg["dv_m_s"], 1),
+                "tof_s": round(leg["tof_s"], 1),
+                "transfer_type": leg["transfer_type"],
+                "burn_count": leg["burn_count"],
+                "from_orbit": leg.get("from_orbit"),
+                "to_orbit": leg.get("to_orbit"),
+            }
+            for leg in legs
+        ],
+        "burns": [
+            {
+                "time_s": round(b["time_s"], 2),
+                "type": b.get("type", "burn"),
+                "prograde_m_s": round(b.get("prograde_m_s", 0), 1),
+                "radial_m_s": round(b.get("radial_m_s", 0), 1),
+                "label": b.get("label", ""),
+                "leg_index": b.get("leg_index", 0),
+                **({"to_body_id": b["to_body_id"]} if "to_body_id" in b else {}),
+            }
+            for b in burns
+        ],
+    }
+
+    # ── Intercept geometry validation ──
+    intercept_check = mission.get("intercept_check", {"ok": True})
+    if intercept_check and not intercept_check.get("ok", True):
+        result["intercept_check"] = {
+            "ok": False,
+            "miss_km": intercept_check.get("miss_km", 0),
+            "soi_radius_km": intercept_check.get("soi_radius_km", 0),
+            "miss_ratio": intercept_check.get("miss_ratio", 0),
+            "dest_body": intercept_check.get("dest_body", ""),
+            "warning": (
+                f"Transfer misses {intercept_check.get('dest_body', 'target')} by "
+                f"{intercept_check.get('miss_km', 0):,.0f} km "
+                f"(SOI radius: {intercept_check.get('soi_radius_km', 0):,.0f} km). "
+                f"Ship will not reach destination."
+            ),
+        }
+    else:
+        result["intercept_check"] = {"ok": True}
+
+    # ── Alternative windows for interplanetary legs ──
+    # Find the first interplanetary leg and scan future departure times
+    interplanetary_leg = None
+    for leg in legs:
+        if leg.get("transfer_type") == "interplanetary_lambert":
+            interplanetary_leg = leg
+            break
+
+    if interplanetary_leg:
+        result["is_interplanetary"] = True
+        try:
+            ip_from = interplanetary_leg["from_id"]
+            ip_to = interplanetary_leg["to_id"]
+            ip_result = transfer_planner.compute_interplanetary_leg(
+                ip_from, ip_to, dep_time, extra_dv_fraction=0.0,
+            )
+            if ip_result:
+                synodic_s = float(ip_result.get("synodic_period_s") or 0)
+                phase_mult = float(ip_result.get("phase_multiplier") or 1.0)
+                if synodic_s > 0:
+                    windows = transfer_planner.scan_departure_windows(
+                        from_location=ip_from,
+                        to_location=ip_to,
+                        departure_time_s=dep_time,
+                        current_phase_multiplier=phase_mult,
+                        synodic_period_s=synodic_s,
+                    )
+                    result["alternative_windows"] = [
+                        {
+                            "departure_time": round(float(w["departure_time"]), 0),
+                            "wait_s": round(float(w["wait_s"]), 0),
+                            "dv_m_s": round(float(w.get("lambert_dv_m_s", 0)), 1),
+                            "alignment_pct": round(float(w.get("alignment_pct", 100)), 1),
+                        }
+                        for w in windows
+                    ]
+        except Exception:
+            logging.exception("Failed to scan departure windows for mission preview")
+    else:
+        result["is_interplanetary"] = False
+
+    # ── Surface site data for TWR checks ──
+    check_ids = list(dict.fromkeys([from_id, to_id]))
+    placeholders = ",".join("?" for _ in check_ids)
+    site_rows = conn.execute(
+        f"SELECT location_id, body_id, gravity_m_s2 FROM surface_sites WHERE location_id IN ({placeholders})",
+        check_ids,
+    ).fetchall()
+    if site_rows:
+        result["surface_sites"] = [
+            {
+                "location_id": sr["location_id"],
+                "body_id": sr["body_id"],
+                "gravity_m_s2": float(sr["gravity_m_s2"]),
+                "min_twr": 1.0,
+            }
+            for sr in site_rows
+        ]
+
+    # ── Ship fuel/Δv validation if ship_id is provided ──
+    if ship_id:
+        m = _main()
+        ship = conn.execute(
+            "SELECT parts_json, fuel_kg, fuel_capacity_kg, dry_mass_kg, isp_s FROM ships WHERE id=?",
+            (ship_id,),
+        ).fetchone()
+        if ship:
+            parts = m.normalize_parts(json.loads(ship["parts_json"] or "[]"))
+            stats = m.derive_ship_stats_from_parts(
+                parts, current_fuel_kg=float(ship["fuel_kg"] or 0),
+            )
+            dv_remaining = m.compute_delta_v_remaining_m_s(
+                stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"],
+            )
+            fuel_needed = m.compute_fuel_needed_for_delta_v_kg(
+                stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"], total_dv,
+            )
+            fuel_after = max(0.0, stats["fuel_kg"] - fuel_needed)
+            fuel_cap = float(ship["fuel_capacity_kg"] or 0)
+
+            # Power balance / overheating check
+            power_balance = catalog_service.compute_power_balance(parts)
+            waste_surplus = float(power_balance.get("waste_heat_surplus_mw") or 0.0)
+
+            # TWR check (for surface sites)
+            thrust_kn = float(stats.get("thrust_kn") or 0.0)
+
+            result["ship"] = {
+                "ship_id": ship_id,
+                "dv_remaining_m_s": round(dv_remaining, 1),
+                "fuel_on_board_kg": round(stats["fuel_kg"], 1),
+                "fuel_capacity_kg": round(fuel_cap, 1),
+                "fuel_needed_kg": round(fuel_needed, 1),
+                "fuel_after_kg": round(fuel_after, 1),
+                "feasible": total_dv <= dv_remaining + 1e-6,
+                "thrust_kn": round(thrust_kn, 2),
+                "dry_mass_kg": round(stats["dry_mass_kg"], 1),
+                "isp_s": round(stats["isp_s"], 1),
+                "waste_heat_surplus_mw": round(waste_surplus, 2),
+                "is_overheating": waste_surplus > 0,
+            }
+            # Find the furthest reachable leg
+            if total_dv > dv_remaining + 1e-6:
+                cumulative_dv = 0.0
+                last_reachable = -1
+                for leg in legs:
+                    cumulative_dv += leg["dv_m_s"]
+                    if cumulative_dv > dv_remaining + 1e-6:
+                        break
+                    last_reachable = leg["index"]
+                result["ship"]["last_reachable_leg"] = last_reachable
+                if last_reachable >= 0:
+                    result["ship"]["reachable_to"] = legs[last_reachable]["to_id"]
+
+    return result
+
+
 @router.get("/api/state")
 def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     m = _main()
@@ -801,7 +1000,9 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                  parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
                  corp_id,
                  transit_from_x,transit_from_y,transit_to_x,transit_to_y,
-                 trajectory_json
+                 trajectory_json,
+                 orbit_json,maneuver_json,orbit_body_id,
+                 orbit_predictions_json
         FROM ships
         ORDER BY id
         """
@@ -837,7 +1038,7 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "to_location_id": r["to_location_id"],
             "departed_at": r["departed_at"],
             "arrives_at": r["arrives_at"],
-            "status": "transit" if r["arrives_at"] else "docked",
+            "status": _ship_status(r),
             "corp_id": ship_corp_id,
             "is_own": is_own,
         }
@@ -871,6 +1072,29 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             ship_data["is_interplanetary"] = _is_interplanetary(
                 str(r["from_location_id"]), str(r["to_location_id"])
             )
+
+        # Orbit model data (Phase 2)
+        if r["orbit_json"]:
+            try:
+                ship_data["orbit"] = json.loads(r["orbit_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if r["maneuver_json"]:
+            try:
+                maneuvers = json.loads(r["maneuver_json"])
+                if maneuvers:
+                    ship_data["maneuvers"] = maneuvers
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if r["orbit_body_id"]:
+            ship_data["orbit_body_id"] = r["orbit_body_id"]
+        if r["orbit_predictions_json"]:
+            try:
+                preds = json.loads(r["orbit_predictions_json"])
+                if preds:
+                    ship_data["orbit_predictions"] = preds
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         # Only include detailed data for own ships
         if is_own:
@@ -937,7 +1161,8 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         """
                     SELECT
                         id,location_id,from_location_id,to_location_id,arrives_at,
-                        parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s
+                        parts_json,fuel_kg,fuel_capacity_kg,dry_mass_kg,isp_s,
+                        orbit_json
         FROM ships WHERE id=?
         """,
         (ship_id,),
@@ -952,18 +1177,43 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     if not from_id:
         raise HTTPException(status_code=400, detail="Ship has no current location_id")
 
+    # Parse the ship's current orbital elements so the burn planner can
+    # preserve the ship's angular position (avoids visual teleport).
+    ship_current_orbit = None
+    if ship["orbit_json"]:
+        try:
+            ship_current_orbit = json.loads(ship["orbit_json"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Use requested departure time if provided (for scheduled departures)
+    dep_time = req.departure_time if req.departure_time is not None else now_s
+
+    # Try direct route quote first (single-leg transfers)
     route_quote = _compute_route_quote(
         conn,
         from_id=from_id,
         to_id=to_id,
-        departure_time_s=now_s,
+        departure_time_s=dep_time,
         extra_dv_fraction=0.0,
     )
-    if not route_quote:
-        raise HTTPException(status_code=404, detail="No transfer data for that destination")
 
-    dv = float(route_quote["dv_m_s"])
-    tof = float(route_quote["tof_s"])
+    # If direct quote fails, try chain mission for multi-leg routes
+    chain_mission = None
+    if not route_quote:
+        chain_mission = orbit_bridge.plan_chain_mission(
+            conn, from_id, to_id, dep_time,
+            current_orbit=ship_current_orbit,
+        )
+        if not chain_mission:
+            raise HTTPException(status_code=404, detail="No transfer data for that destination")
+
+    if route_quote:
+        dv = float(route_quote["dv_m_s"])
+        tof = float(route_quote["tof_s"])
+    else:
+        dv = float(chain_mission["total_dv_m_s"])
+        tof = float(chain_mission["total_tof_s"])
 
     parts = m.normalize_parts(json.loads(ship["parts_json"] or "[]"))
     stats = m.derive_ship_stats_from_parts(
@@ -1054,8 +1304,8 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     )
     fuel_remaining_kg = max(0.0, stats["fuel_kg"] - fuel_used_kg)
 
-    dep = now_s
-    arr = now_s + max(1.0, tof)
+    dep = dep_time
+    arr = dep_time + max(1.0, tof)
 
     # Snapshot departure/arrival coordinates so in-transit interpolation
     # is stable even as celestial bodies move during the transfer.
@@ -1075,18 +1325,19 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     trajectory_points: Optional[List[List[float]]] = None
     trajectory_data: Any = None  # May be list or dict (for SOI body-centric)
     try:
-        orbital = route_quote.get("orbital")
-        if orbital and route_quote.get("is_interplanetary"):
-            pts = transfer_planner.compute_leg_trajectory(orbital, n_points=64)
-            if pts:
-                trajectory_points = [[round(x, 1), round(y, 1)] for x, y in pts]
-                trajectory_data = trajectory_points
+        if route_quote:
+            orbital = route_quote.get("orbital")
+            if orbital and route_quote.get("is_interplanetary"):
+                pts = transfer_planner.compute_leg_trajectory(orbital, n_points=64)
+                if pts:
+                    trajectory_points = [[round(x, 1), round(y, 1)] for x, y in pts]
+                    trajectory_data = trajectory_points
     except Exception:
         logging.exception("Failed to compute trajectory points for ship %s transfer %s → %s", ship_id, from_id, to_id)
 
     # For SOI transfers (e.g. Earth orbit → Moon orbit), compute a body-centric
     # Lambert trajectory in the parent body's frame (KSP-style elliptical arc)
-    if trajectory_data is None:
+    if trajectory_data is None and route_quote:
         try:
             soi_traj = transfer_planner.compute_soi_transfer_trajectory(
                 from_id, to_id, dep, tof, n_points=64,
@@ -1097,6 +1348,66 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
             logging.exception("Failed to compute SOI trajectory for ship %s transfer %s → %s", ship_id, from_id, to_id)
 
     trajectory_json_str = json.dumps(trajectory_data) if trajectory_data else None
+
+    # ── Orbit model: compute burn plan ──
+    orbit_json_str: Optional[str] = None
+    maneuver_json_str: Optional[str] = None
+    orbit_body_id_str: Optional[str] = None
+    orbit_predictions_json_str: Optional[str] = None
+    burn_plan = chain_mission  # Use chain mission plan if already computed
+
+    if not burn_plan:
+        try:
+            burn_plan = orbit_bridge.compute_transfer_burn_plan(
+                conn, from_id, to_id, dep,
+                current_orbit=ship_current_orbit,
+            )
+        except Exception:
+            logging.exception("Failed to compute orbit burn plan for ship %s (%s → %s)", ship_id, from_id, to_id)
+
+    # Last resort: try chain mission if direct burn plan also failed
+    if not burn_plan and not chain_mission:
+        try:
+            burn_plan = orbit_bridge.plan_chain_mission(
+                conn, from_id, to_id, dep,
+                current_orbit=ship_current_orbit,
+            )
+        except Exception:
+            logging.exception("Failed to compute chain mission for ship %s (%s → %s)", ship_id, from_id, to_id)
+
+    if burn_plan:
+        # ── Intercept geometry gate ──
+        # Only enforce for interplanetary transfers.  Local/lagrange routes
+        # use authoritative edge Δv and don't need Lambert-based SOI checks.
+        route_is_ip = (route_quote or {}).get("is_interplanetary", False)
+        intercept_check = burn_plan.get("intercept_check", {})
+        if route_is_ip and not intercept_check.get("ok", True):
+            dest_body = intercept_check.get("dest_body", "target")
+            miss_km = intercept_check.get("miss_km", 0)
+            soi_km = intercept_check.get("soi_radius_km", 0)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Transfer trajectory misses {dest_body} by {miss_km:,.0f} km "
+                    f"(SOI radius: {soi_km:,.0f} km). "
+                    f"The ship would not reach its destination. "
+                    f"Try a different departure time or destination."
+                ),
+            )
+
+        orbit_json_str = json.dumps(burn_plan["initial_orbit"])
+        maneuver_json_str = json.dumps(burn_plan["burns"])
+        orbit_body_id_str = burn_plan.get("orbit_body_id", "")
+        predictions = burn_plan.get("orbit_predictions", [])
+        if predictions:
+            orbit_predictions_json_str = json.dumps(predictions)
+        # Skip legacy trajectory — orbit predictions supersede it
+        trajectory_json_str = None
+        # Override arrives_at with orbit model's physical TOF so the ETA
+        # displayed on the frontend matches the actual burn schedule.
+        model_tof = burn_plan.get("total_tof_s")
+        if model_tof and model_tof > 0:
+            arr = dep + model_tof
 
     conn.execute(
         """
@@ -1113,28 +1424,39 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
           transit_from_y=?,
           transit_to_x=?,
           transit_to_y=?,
-          trajectory_json=?
+          trajectory_json=?,
+          orbit_json=?,
+          maneuver_json=?,
+          orbit_body_id=?,
+          orbit_predictions_json=?
         WHERE id=?
         """,
         (from_id, to_id, dep, arr, dv, fuel_remaining_kg,
-         from_xy[0], from_xy[1], to_xy[0], to_xy[1], trajectory_json_str, ship_id),
+         from_xy[0], from_xy[1], to_xy[0], to_xy[1], trajectory_json_str,
+         orbit_json_str, maneuver_json_str, orbit_body_id_str, orbit_predictions_json_str, ship_id),
     )
     conn.commit()
 
-    return {
+    resp: Dict[str, Any] = {
         "ok": True,
         "ship_id": ship_id,
         "from": from_id,
         "to": to_id,
         "dv_m_s": dv,
         "tof_s": tof,
-        "is_interplanetary": bool(route_quote.get("is_interplanetary")),
-        "route_mode": str(route_quote.get("route_mode") or "direct"),
+        "is_interplanetary": bool((route_quote or {}).get("is_interplanetary")),
+        "route_mode": str((route_quote or {}).get("route_mode") or "chain" if chain_mission else "direct"),
         "fuel_used_kg": fuel_used_kg,
         "fuel_remaining_kg": fuel_remaining_kg,
         "departed_at": dep,
         "arrives_at": arr,
     }
+    if burn_plan:
+        resp["orbit"] = burn_plan["initial_orbit"]
+        resp["maneuvers"] = burn_plan["burns"]
+        resp["orbit_predictions"] = burn_plan.get("orbit_predictions", [])
+        resp["transfer_type"] = burn_plan.get("transfer_type", "")
+    return resp
 
 
 @router.post("/api/ships/{ship_id}/inventory/jettison")

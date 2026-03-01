@@ -375,6 +375,13 @@ def api_admin_teleport_ship(
     if not loc:
         raise HTTPException(status_code=404, detail=f"Location '{dest}' not found")
 
+    # Compute orbit for the destination location
+    import orbit_bridge
+    now_s = game_now_s()
+    new_orbit = orbit_bridge.orbit_for_location(dest, now_s)
+    orbit_json_str = json.dumps(new_orbit) if new_orbit else None
+    orbit_body_id_str = new_orbit.get("body_id", "") if new_orbit else None
+
     conn.execute(
         """
         UPDATE ships
@@ -386,10 +393,15 @@ def api_admin_teleport_ship(
             transit_from_x = NULL,
             transit_from_y = NULL,
             transit_to_x = NULL,
-            transit_to_y = NULL
+            transit_to_y = NULL,
+            trajectory_json = NULL,
+            orbit_json = ?,
+            maneuver_json = NULL,
+            orbit_body_id = ?,
+            orbit_predictions_json = NULL
         WHERE id = ?
         """,
-        (dest, sid),
+        (dest, orbit_json_str, orbit_body_id_str, sid),
     )
     conn.commit()
 
@@ -401,5 +413,124 @@ def api_admin_teleport_ship(
             "from_location": ship["location_id"],
             "location_id": dest,
             "location_name": loc["name"],
+        },
+    }
+
+
+class RescueShipReq(BaseModel):
+    to_location_id: Optional[str] = None  # If omitted, picks nearest
+
+
+@router.post("/api/admin/ships/{ship_id}/rescue")
+def api_admin_rescue_ship(
+    ship_id: str,
+    req: RescueShipReq,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Admin-only: rescue a stranded ship by teleporting to a location and refuelling.
+
+    If ``to_location_id`` is omitted, the nearest orbit-node location matching the
+    ship's ``orbit_body_id`` is chosen automatically.
+    """
+    require_admin(conn, request)
+    m = _main()
+
+    sid = (ship_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="ship_id is required")
+
+    ship = conn.execute(
+        """SELECT id, name, location_id, orbit_json, orbit_body_id,
+                  maneuver_json, parts_json, fuel_kg, fuel_capacity_kg,
+                  dry_mass_kg, isp_s
+           FROM ships WHERE id = ?""",
+        (sid,),
+    ).fetchone()
+    if not ship:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    # Determine destination
+    dest = (req.to_location_id or "").strip() if req.to_location_id else ""
+    if not dest:
+        # Auto-pick: find a location at the same body (prefer orbit nodes)
+        import celestial_config as cc
+        cfg = cc.load_config()
+        body_id = ship["orbit_body_id"] or ""
+        candidates = []
+        for node in (cfg.get("orbit_nodes") or []):
+            if str(node.get("body_id", "")) == body_id:
+                candidates.append(str(node.get("id", "")))
+        if not candidates:
+            # Fall back to any location with matching body in the locations table
+            rows = conn.execute(
+                "SELECT id FROM locations WHERE parent_group_id LIKE ?",
+                (f"%{body_id}%",),
+            ).fetchall()
+            candidates = [r["id"] for r in rows]
+        if not candidates:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No suitable location found near body '{body_id}'. Specify to_location_id manually.",
+            )
+        dest = candidates[0]
+
+    loc = conn.execute("SELECT id, name FROM locations WHERE id = ?", (dest,)).fetchone()
+    if not loc:
+        raise HTTPException(status_code=404, detail=f"Location '{dest}' not found")
+
+    # Teleport: clear all transit / orbit fields, set new location + orbit
+    import orbit_bridge
+    now_s = game_now_s()
+    new_orbit = orbit_bridge.orbit_for_location(dest, now_s)
+    orbit_json_str = json.dumps(new_orbit) if new_orbit else None
+    orbit_body_id_str = new_orbit.get("body_id", "") if new_orbit else None
+
+    conn.execute(
+        """UPDATE ships
+           SET location_id = ?,
+               from_location_id = NULL,
+               to_location_id = NULL,
+               departed_at = NULL,
+               arrives_at = NULL,
+               transit_from_x = NULL,
+               transit_from_y = NULL,
+               transit_to_x = NULL,
+               transit_to_y = NULL,
+               trajectory_json = NULL,
+               orbit_json = ?,
+               maneuver_json = NULL,
+               orbit_body_id = ?,
+               orbit_predictions_json = NULL
+           WHERE id = ?""",
+        (dest, orbit_json_str, orbit_body_id_str, sid),
+    )
+
+    # Refuel
+    parts = m.normalize_parts(json.loads(ship["parts_json"] or "[]"))
+    stats = m.derive_ship_stats_from_parts(
+        parts, current_fuel_kg=float(ship["fuel_kg"] or 0.0),
+    )
+    conn.execute(
+        "UPDATE ships SET fuel_kg = ?, fuel_capacity_kg = ?, dry_mass_kg = ?, isp_s = ? WHERE id = ?",
+        (stats["fuel_capacity_kg"], stats["fuel_capacity_kg"],
+         stats["dry_mass_kg"], stats["isp_s"], sid),
+    )
+    conn.commit()
+
+    return {
+        "ok": True,
+        "ship": {
+            "id": ship["id"],
+            "name": ship["name"],
+            "location_id": dest,
+            "location_name": loc["name"],
+            "fuel_kg": stats["fuel_capacity_kg"],
+            "fuel_capacity_kg": stats["fuel_capacity_kg"],
+            "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(
+                stats["dry_mass_kg"],
+                stats["fuel_capacity_kg"],
+                stats["isp_s"],
+            ),
         },
     }

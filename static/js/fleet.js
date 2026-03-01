@@ -174,9 +174,12 @@
       row.className = "fleetShipRow" + (ship.id === selectedShipId ? " isActive" : "");
       row.dataset.shipId = ship.id;
 
-      const status = ship.status === "transit" ? "In Transit" : "Docked";
+      const status = ship.status === "transit" ? "In Transit"
+        : ship.status === "stranded" ? "Stranded" : "Docked";
       const loc = ship.status === "docked"
         ? (ship.location_id || "—")
+        : ship.status === "stranded"
+        ? (ship.orbit_body_id ? `Orbiting ${ship.orbit_body_id}` : "Free-flying")
         : `${ship.from_location_id || "?"} → ${ship.to_location_id || "?"}`;
       const dv = Number(ship.delta_v_remaining_m_s || 0);
       const partCount = Array.isArray(ship.parts) ? ship.parts.length : 0;
@@ -184,7 +187,7 @@
       row.innerHTML = `
         <div class="fleetShipRowName">${escapeHtml(ship.name)}</div>
         <div class="fleetShipRowMeta">
-          <span class="badge ${ship.status === "transit" ? "badgeMove" : ""}">${status}</span>
+          <span class="badge ${ship.status === "transit" ? "badgeMove" : ship.status === "stranded" ? "badgeWarn" : ""}">${status}</span>
           <span class="fleetShipRowLoc">${escapeHtml(loc)}</span>
         </div>
         <div class="fleetShipRowStats">
@@ -656,13 +659,19 @@
       return;
     }
 
-    const isDocked = ship.status !== "transit";
-    const loc = ship.status === "docked"
+    const isDocked = ship.status === "docked";
+    const isStranded = ship.status === "stranded";
+    const loc = isDocked
       ? (ship.location_id || "—")
+      : isStranded
+      ? (ship.orbit_body_id ? `Orbiting ${ship.orbit_body_id}` : "Free-flying")
       : `${ship.from_location_id || "?"} → ${ship.to_location_id || "?"}`;
 
     const dv = Number(ship.delta_v_remaining_m_s || 0);
     const partCount = Array.isArray(ship.parts) ? ship.parts.length : 0;
+
+    const statusLabel = isDocked ? "Docked" : isStranded ? "Stranded" : "In Transit";
+    const badgeClass = ship.status === "transit" ? "badgeMove" : isStranded ? "badgeWarn" : "";
 
     // Build the detail HTML
     let html = `
@@ -670,14 +679,14 @@
         <div class="fleetDetailHeadInfo">
           <div class="fleetDetailName">${escapeHtml(ship.name)}</div>
           <div class="fleetDetailSub">
-            <span class="badge ${ship.status === "transit" ? "badgeMove" : ""}">${isDocked ? "Docked" : "In Transit"}</span>
+            <span class="badge ${badgeClass}">${statusLabel}</span>
             <span>${escapeHtml(loc)}</span>
             <span>${partCount} parts · Δv ${Math.max(0, dv).toFixed(0)} m/s</span>
           </div>
         </div>
         <div class="fleetDetailActions">
           <button class="btn btnSmall" data-action="hangar" title="Open Hangar">Open Hangar</button>
-          <button class="btn btnSmall" data-action="transfer" ${!isDocked ? "disabled" : ""} title="Plan Transfer">Plan Transfer</button>
+          <button class="btn btnSmall" data-action="transfer" ${!(isDocked || isStranded) ? "disabled" : ""} title="Plan Transfer">Plan Transfer</button>
           <button class="btn btnSmall" data-action="deconstruct" ${!isDocked ? "disabled" : ""} title="Deconstruct">Deconstruct</button>
         </div>
       </div>
@@ -697,6 +706,21 @@
             </div>
             <div class="muted" style="margin-top:4px;">${pct.toFixed(0)}% complete · ETA ${fmtEta(ship)}</div>
           </div>
+        </div>
+      `;
+    }
+
+    // Stranded ship info
+    if (isStranded) {
+      const bodyLabel = ship.orbit_body_id || "unknown body";
+      html += `
+        <div class="fleetSection">
+          <div class="fleetSectionTitle" style="color:#ff8844;">⚠ Ship Stranded</div>
+          <div class="muted" style="margin-bottom:8px;">
+            This ship is free-flying in orbit around <strong>${escapeHtml(bodyLabel)}</strong>
+            and is not docked at any location. It may have run out of fuel or missed its docking window.
+          </div>
+          <div class="muted">Use <em>Plan Transfer</em> to plot a course to a nearby station, or contact an administrator for rescue assistance.</div>
         </div>
       `;
     }

@@ -28,9 +28,9 @@ TEST_DIR="/home/user/docker/frontier-sol-2000-test"
 TEST_DB="/home/user/docker/frontier-sol-2000-data/game.db"
 TEST_DB_BACKUP_DIR="/home/user/docker/frontier-sol-2000-data/backups"
 
-AUTO_YES=false
-ALLOW_JOB_CANCEL=false
-ALLOW_TELEPORT=false
+AUTO_YES=true
+ALLOW_JOB_CANCEL=true
+ALLOW_TELEPORT=true
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -138,17 +138,20 @@ echo "▸ Backed up test DB → $BACKUP_PATH"
 # ── 4. Optional: teleport all in-transit ships to destinations ──────
 if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" = true ]; then
   echo "▸ Teleporting $IN_TRANSIT in-transit ship(s) to their destinations..."
+  # Build UPDATE dynamically — transit coordinate columns may not exist yet
+  HAS_TRANSIT_COLS=$(sqlite3 "$TEST_DB" "SELECT COUNT(*) FROM pragma_table_info('ships') WHERE name='transit_from_x';")
+  EXTRA_SETS=""
+  if [ "$HAS_TRANSIT_COLS" = "1" ]; then
+    EXTRA_SETS=", transit_from_x = NULL, transit_from_y = NULL, transit_to_x = NULL, transit_to_y = NULL"
+  fi
   sqlite3 "$TEST_DB" "
     UPDATE ships
     SET location_id       = to_location_id,
         from_location_id  = NULL,
         to_location_id    = NULL,
         departed_at       = NULL,
-        arrives_at        = NULL,
-        transit_from_x    = NULL,
-        transit_from_y    = NULL,
-        transit_to_x      = NULL,
-        transit_to_y      = NULL
+        arrives_at        = NULL
+        $EXTRA_SETS
     WHERE arrives_at IS NOT NULL;
   "
   echo "  ✔ All ships docked at their destinations."
@@ -162,11 +165,13 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 
 # Copy everything except transient/git dirs
+# Sort output so directories are created before their contents
 find . -mindepth 1 \
   -not -path './.git/*' -not -name '.git' \
   -not -path './__pycache__/*' -not -name '__pycache__' \
-  -not -path './data/*' -not -name 'data' \
+  -not -path './data/*' -not -path './data' \
   -not -path './tests/__pycache__/*' \
+  | sort \
   | while IFS= read -r f; do
     if [ -d "$f" ]; then
       mkdir -p "$TEST_DIR/$f"

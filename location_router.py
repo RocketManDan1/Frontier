@@ -109,6 +109,73 @@ def api_locations(
     response: Dict[str, Any] = {"locations": locations}
     if effective_game_time_s is not None:
         response["game_time_s"] = effective_game_time_s
+
+    # Body physics data for client-side orbital mechanics (Phase 3)
+    try:
+        phys_cfg = celestial_config.load_celestial_config()
+        body_physics: Dict[str, Any] = {}
+        for body in (phys_cfg.get("bodies") or []):
+            bid = str(body.get("id", "")).strip()
+            if not bid:
+                continue
+            mu = body.get("mu_km3_s2")
+            if mu is None:
+                continue
+            body_physics[bid] = {"mu_km3_s2": float(mu)}
+            soi = body.get("soi_radius_km")
+            if soi is not None:
+                body_physics[bid]["soi_radius_km"] = float(soi)
+            radius = body.get("radius_km")
+            if radius is not None:
+                body_physics[bid]["radius_km"] = float(radius)
+
+        # Orbit node metadata: location_id → {body_id, radius_km}
+        orbit_nodes: Dict[str, Any] = {}
+        for node in (phys_cfg.get("orbit_nodes") or []):
+            if not isinstance(node, dict):
+                continue
+            nid = str(node.get("id", "")).strip()
+            nbid = str(node.get("body_id", "")).strip()
+            nrad = node.get("radius_km")
+            if nid and nbid and nrad is not None:
+                orbit_nodes[nid] = {"body_id": nbid, "radius_km": float(nrad)}
+
+        response["body_physics"] = body_physics
+        response["orbit_nodes"] = orbit_nodes
+
+        # Body orbital elements for client-side propagation (Phase 6 ghost projection)
+        UNIX_EPOCH_JD = 2440587.5
+        body_orbits: Dict[str, Any] = {}
+        for body in (phys_cfg.get("bodies") or []):
+            bid = str(body.get("id", "")).strip()
+            if not bid:
+                continue
+            pos = body.get("position")
+            if not isinstance(pos, dict) or pos.get("type") != "keplerian":
+                continue
+            try:
+                a_km = float(pos["a_km"])
+                e_val = float(pos.get("e", 0.0))
+                omega_deg = float(pos.get("omega_deg", 0.0))
+                M0_deg = float(pos.get("M0_deg", 0.0))
+                epoch_jd = float(pos["epoch_jd"])
+                center = str(pos.get("center_body_id", "sun"))
+                epoch_s = (epoch_jd - UNIX_EPOCH_JD) * 86400.0
+                body_orbits[bid] = {
+                    "center_body_id": center,
+                    "a_km": a_km,
+                    "e": e_val,
+                    "omega_deg": omega_deg,
+                    "M0_deg": M0_deg,
+                    "epoch_s": epoch_s,
+                    "direction": 1,
+                }
+            except (KeyError, ValueError, TypeError):
+                continue
+        response["body_orbits"] = body_orbits
+    except Exception:
+        pass  # Non-critical; frontend degrades gracefully
+
     return response
 
 

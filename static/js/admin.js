@@ -117,7 +117,11 @@
 
       const loc = document.createElement("div");
       loc.className = "muted small";
-      loc.textContent = `@ ${s.location_id || `${s.from_location_id} → ${s.to_location_id}`}`;
+      const isStranded = s.status === "stranded";
+      loc.textContent = isStranded
+        ? `⚠ STRANDED — orbiting ${s.orbit_body_id || "unknown"}`
+        : `@ ${s.location_id || `${s.from_location_id} → ${s.to_location_id}`}`;
+      if (isStranded) loc.style.color = "#ff8844";
 
       meta.appendChild(main);
       meta.appendChild(loc);
@@ -139,6 +143,16 @@
       const actions = document.createElement("div");
       actions.className = "adminShipActions";
       actions.appendChild(refuelBtn);
+      if (isStranded) {
+        const rescueBtn = document.createElement("button");
+        rescueBtn.type = "button";
+        rescueBtn.className = "btnSecondary";
+        rescueBtn.textContent = "Rescue";
+        rescueBtn.style.cssText = "background:rgba(255,136,68,0.15);border-color:rgba(255,136,68,0.5);color:#ff8844;";
+        rescueBtn.setAttribute("data-rescue-ship-id", s.id);
+        rescueBtn.setAttribute("data-rescue-ship-name", s.name);
+        actions.appendChild(rescueBtn);
+      }
       actions.appendChild(delBtn);
 
       li.appendChild(meta);
@@ -148,6 +162,37 @@
   }
 
   recentShipsEl.addEventListener("click", async (e) => {
+    // Rescue button (stranded ships)
+    const rescueBtn = e.target.closest("button[data-rescue-ship-id]");
+    if (rescueBtn) {
+      const shipId = rescueBtn.getAttribute("data-rescue-ship-id") || "";
+      const shipName = rescueBtn.getAttribute("data-rescue-ship-name") || shipId;
+      if (!shipId) return;
+
+      rescueBtn.disabled = true;
+      setMessage(`Rescuing ${shipName}…`, false);
+
+      try {
+        const resp = await fetch(`/api/admin/ships/${encodeURIComponent(shipId)}/rescue`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          setMessage(data.detail || "Failed to rescue ship.", true);
+          rescueBtn.disabled = false;
+          return;
+        }
+        setMessage(`Rescued ${data.ship.name} → ${data.ship.location_name} (refuelled to ${Number(data.ship.fuel_kg || 0).toFixed(0)} kg).`, false);
+        await loadRecentShips();
+      } catch (err) {
+        setMessage(`Rescue failed: ${err.message || err}`, true);
+        rescueBtn.disabled = false;
+      }
+      return;
+    }
+
     const refuelBtn = e.target.closest("button[data-refuel-ship-id]");
     if (refuelBtn) {
       const shipId = refuelBtn.getAttribute("data-refuel-ship-id") || "";
