@@ -4,7 +4,7 @@
   "research_node": "early_gravity_construction",
   "tech_level": 1,
   "branch": "mechanical_excavation",
-  "mass_t": 2.5,
+  "mass_t": 2,
   "operational_environment": "surface_gravity",
   "min_surface_gravity_ms2": 1.6,
   "power_requirements": {
