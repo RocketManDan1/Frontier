@@ -13,7 +13,7 @@
       "qty": 0.08
     }
   ],
-  "build_time_s": 1800,
+  "build_time_s": 800,
   "facility_type": "refinery",
   "refinery_category": "nuclear_exotic",
   "min_tech_tier": 2,
