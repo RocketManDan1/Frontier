@@ -9,7 +9,7 @@
       "qty": 1
     }
   ],
-  "build_time_s": 120,
+  "build_time_s": 70,
   "facility_type": "refinery",
   "refinery_category": "all_refineries",
   "min_tech_tier": 1,
