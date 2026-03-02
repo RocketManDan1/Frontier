@@ -4,7 +4,7 @@
   "research_node": "vacuum_metallurgy",
   "tech_level": 2,
   "branch": "metallurgy",
-  "mass_t": 38,
+  "mass_t": 12,
   "power_requirements": {
     "electric_mw": 2.8
   },
