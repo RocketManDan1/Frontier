@@ -21,7 +21,7 @@
       "qty": 0.05
     }
   ],
-  "build_time_s": 1300,
+  "build_time_s": 40,
   "facility_type": "factory",
   "refinery_category": "volatiles_cryogenics",
   "min_tech_tier": 2,
