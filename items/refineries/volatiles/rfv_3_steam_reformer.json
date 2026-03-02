@@ -4,7 +4,7 @@
   "research_node": "catalytic_reforming",
   "tech_level": 3,
   "branch": "volatiles_cryogenics",
-  "mass_t": 50,
+  "mass_t": 16,
   "power_requirements": {
     "electric_mw": 4.2
   },
