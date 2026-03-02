@@ -4,7 +4,7 @@
   "research_node": "plasma_synthesis",
   "tech_level": 3,
   "branch": "lithic_processing",
-  "mass_t": 60,
+  "mass_t": 16,
   "power_requirements": {
     "electric_mw": 5.5
   },
