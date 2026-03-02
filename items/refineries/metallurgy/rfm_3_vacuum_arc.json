@@ -4,7 +4,7 @@
   "research_node": "electron_beam_metallurgy",
   "tech_level": 3,
   "branch": "metallurgy",
-  "mass_t": 110,
+  "mass_t": 16,
   "power_requirements": {
     "electric_mw": 10.0
   },
