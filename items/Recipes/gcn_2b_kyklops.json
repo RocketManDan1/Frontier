@@ -6,23 +6,23 @@
   "inputs": [
     {
       "item_id": "structural_alloys",
-      "qty": 12670.0
+      "qty": 6500.0
     },
     {
       "item_id": "advanced_aerospace_alloys",
-      "qty": 7330.0
+      "qty": 2000.0
     },
     {
       "item_id": "advanced_ceramics",
-      "qty": 6000.0
+      "qty": 3500.0
     },
     {
       "item_id": "semiconductor_materials",
-      "qty": 4670.0
+      "qty": 2250.0
     },
     {
       "item_id": "megastructure_mass",
-      "qty": 2660.0
+      "qty": 1000.0
     }
   ],
   "build_time_s": 2700,
