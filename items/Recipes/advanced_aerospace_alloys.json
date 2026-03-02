@@ -21,7 +21,7 @@
       "qty": 0.06
     }
   ],
-  "build_time_s": 800,
+  "build_time_s": 40,
   "facility_type": "refinery",
   "refinery_category": "metallurgy",
   "min_tech_tier": 2,
