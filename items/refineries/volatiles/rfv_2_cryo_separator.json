@@ -4,7 +4,7 @@
   "research_node": "cryogenic_separation",
   "tech_level": 2,
   "branch": "volatiles_cryogenics",
-  "mass_t": 16,
+  "mass_t": 12,
   "power_requirements": {
     "electric_mw": 1.2
   },
