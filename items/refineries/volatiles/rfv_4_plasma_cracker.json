@@ -4,7 +4,7 @@
   "research_node": "thermochemical_cracking",
   "tech_level": 4,
   "branch": "volatiles_cryogenics",
-  "mass_t": 140,
+  "mass_t": 20,
   "power_requirements": {
     "electric_mw": 12.0
   },
