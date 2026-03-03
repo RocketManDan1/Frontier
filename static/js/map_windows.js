@@ -16,6 +16,7 @@
     sites: { title: "Sites", url: "/sites", icon: "/static/img/dock/sites.svg" },
     research: { title: "Research", url: "/research", icon: "/static/img/dock/research.png" },
     profile: { title: "Organization", url: "/organization?embed=1", icon: "/static/img/dock/profile.png" },
+    contracts: { title: "Contracts", url: "/contracts?embed=1", icon: "/static/img/dock/contracts.svg" },
     admin: { title: "Admin", url: "/admin", icon: "" },
   };
 

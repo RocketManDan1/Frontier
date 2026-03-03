@@ -698,6 +698,65 @@ def _migration_0017_deprecate_transfer_path(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migration_0018_orbit_columns(conn: sqlite3.Connection) -> None:
+    """Add orbital-element columns to ships for physics-based ship positioning."""
+    _safe_add_column(conn, "ships", "orbit_json", "TEXT")
+    _safe_add_column(conn, "ships", "maneuver_json", "TEXT")
+    _safe_add_column(conn, "ships", "orbit_body_id", "TEXT")
+    _safe_add_column(conn, "ships", "orbit_predictions_json", "TEXT")
+    conn.commit()
+
+
+def _migration_0019_contracts(conn: sqlite3.Connection) -> None:
+    """Create the contracts table for player-to-player and polity contracts."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS contracts (
+          id TEXT PRIMARY KEY,
+          contract_type TEXT NOT NULL DEFAULT 'item_exchange',
+          title TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL DEFAULT '',
+          issuer_org_id TEXT,
+          assignee_org_id TEXT,
+          location_id TEXT,
+          destination_id TEXT,
+          price REAL NOT NULL DEFAULT 0,
+          reward REAL NOT NULL DEFAULT 0,
+          availability TEXT NOT NULL DEFAULT 'public',
+          status TEXT NOT NULL DEFAULT 'outstanding',
+          created_at REAL,
+          expires_at REAL,
+          completed_at REAL,
+          items_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_contracts_issuer ON contracts(issuer_org_id);
+        CREATE INDEX IF NOT EXISTS idx_contracts_assignee ON contracts(assignee_org_id);
+        CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
+        CREATE INDEX IF NOT EXISTS idx_contracts_location ON contracts(location_id);
+        """
+    )
+    conn.commit()
+
+
+def _migration_0020_auction_bids(conn: sqlite3.Connection) -> None:
+    """Add current_bid and current_bidder_org_id to contracts for auction support."""
+    _safe_add_column(conn, "contracts", "current_bid", "REAL NOT NULL DEFAULT 0")
+    _safe_add_column(conn, "contracts", "current_bidder_org_id", "TEXT")
+    conn.commit()
+
+
+def _migration_0021_contract_escrow(conn: sqlite3.Connection) -> None:
+    """Add escrow_usd column to contracts for tracking money held in escrow."""
+    _safe_add_column(conn, "contracts", "escrow_usd", "REAL NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def _migration_0022_courier_container(conn: sqlite3.Connection) -> None:
+    """Add courier_container_id to contracts for sealed courier cargo crates."""
+    _safe_add_column(conn, "contracts", "courier_container_id", "TEXT")
+    conn.commit()
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -717,6 +776,11 @@ def _migrations() -> List[Migration]:
     Migration("0015_industry_v2", "Industry v2: constructor modes, refinery slots, construction queue", _migration_0015_industry_v2),
     Migration("0016_refinery_cumulative", "Add cumulative output tracking to refinery slots", _migration_0016_refinery_cumulative),
     Migration("0017_deprecate_transfer_path", "Clear legacy transfer_path_json on all ships", _migration_0017_deprecate_transfer_path),
+    Migration("0018_orbit_columns", "Add orbital-element columns to ships", _migration_0018_orbit_columns),
+    Migration("0019_contracts", "Create contracts table for player/polity contracts", _migration_0019_contracts),
+    Migration("0020_auction_bids", "Add auction bid tracking columns to contracts", _migration_0020_auction_bids),
+    Migration("0021_contract_escrow", "Add escrow_usd column to contracts", _migration_0021_contract_escrow),
+    Migration("0022_courier_container", "Add courier_container_id column to contracts", _migration_0022_courier_container),
     ]
 
 

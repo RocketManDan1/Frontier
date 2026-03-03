@@ -38,6 +38,55 @@ def api_catalog_items(request: Request, conn: sqlite3.Connection = Depends(get_d
     }
 
 
+@router.get("/api/catalog/browse")
+def api_catalog_browse(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Return a flat list of all game items for buy-order/barter pickers.
+
+    Returns three groups: raw_materials, finished_goods, modules.
+    Each item has: id, name, category.
+    """
+    require_login(conn, request)
+
+    raw_materials = []
+    finished_goods = []
+    modules = []
+
+    # Resources (raw materials + finished goods)
+    for rid, r in catalog_service.load_resource_catalog().items():
+        cat_id = str(r.get("category_id") or "resource").lower()
+        entry = {"id": str(rid), "name": str(r.get("name") or rid), "category": cat_id}
+        if cat_id in ("raw_material", "fuel"):
+            raw_materials.append(entry)
+        else:
+            finished_goods.append(entry)
+
+    # Equipment / modules
+    module_loaders = [
+        ("thruster", catalog_service.load_thruster_main_catalog),
+        ("reactor", catalog_service.load_reactor_catalog),
+        ("generator", catalog_service.load_generator_catalog),
+        ("radiator", catalog_service.load_radiator_catalog),
+        ("storage", catalog_service.load_storage_catalog),
+        ("robonaut", catalog_service.load_robonaut_catalog),
+        ("constructor", catalog_service.load_constructor_catalog),
+        ("refinery", catalog_service.load_refinery_catalog),
+    ]
+    for cat_name, loader in module_loaders:
+        for mid, m in loader().items():
+            modules.append({
+                "id": str(mid),
+                "name": str(m.get("name") or mid),
+                "category": cat_name,
+            })
+
+    key = lambda x: x["name"].lower()
+    return {
+        "raw_materials": sorted(raw_materials, key=key),
+        "finished_goods": sorted(finished_goods, key=key),
+        "modules": sorted(modules, key=key),
+    }
+
+
 @router.get("/api/health")
 def api_health(conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     conn.execute("SELECT 1")

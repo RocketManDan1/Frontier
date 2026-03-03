@@ -29,6 +29,15 @@ _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY = {
     "refinery": "refineries",
 }
 
+# Refineries use subtree-specific research nodes (e.g. refineries_lithic_lvl_1)
+# rather than a single refineries_lvl_N path.
+_REFINERY_CATEGORY_TO_RESEARCH_PREFIX = {
+    "lithic_processing": "refineries_lithic",
+    "metallurgy": "refineries_metallurgy",
+    "nuclear_exotic": "refineries_nuclear",
+    "volatiles_cryogenics": "refineries_volatiles",
+}
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1577,7 +1586,16 @@ def get_available_recipes_for_location(
                 output_category = _output_category_map.get(out_id, "other")
                 research_category = _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY.get(output_category)
                 if research_category:
-                    required_node_id = f"{research_category}_lvl_{required_tier}"
+                    # Refineries have per-branch subtrees in the research tree
+                    if output_category == "refinery":
+                        ref_cat = str(recipe.get("refinery_category") or "")
+                        subtree_prefix = _REFINERY_CATEGORY_TO_RESEARCH_PREFIX.get(ref_cat)
+                        if subtree_prefix:
+                            required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
+                        else:
+                            required_node_id = f"{research_category}_lvl_{required_tier}"
+                    else:
+                        required_node_id = f"{research_category}_lvl_{required_tier}"
                     if required_node_id not in unlocked_tech_ids:
                         continue
 

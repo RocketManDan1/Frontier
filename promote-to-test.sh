@@ -88,7 +88,7 @@ fi
 
 PENDING_0015=$(get_sql_scalar "SELECT CASE WHEN EXISTS(SELECT 1 FROM schema_migrations WHERE migration_id='0015_industry_v2') THEN 0 ELSE 1 END;")
 ACTIVE_JOBS=$(get_sql_scalar "SELECT CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='production_jobs') THEN (SELECT COUNT(*) FROM production_jobs WHERE status='active') ELSE 0 END;")
-IN_TRANSIT=$(get_sql_scalar "SELECT CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ships') THEN (SELECT COUNT(*) FROM ships WHERE arrives_at IS NOT NULL) ELSE 0 END;")
+IN_TRANSIT=$(get_sql_scalar "SELECT CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ships') THEN (SELECT COUNT(*) FROM ships WHERE arrives_at IS NOT NULL OR (orbit_json IS NOT NULL AND maneuver_json IS NOT NULL AND maneuver_json != '[]' AND maneuver_json != '' AND location_id IS NULL)) ELSE 0 END;")
 
 echo "▸ Preflight summary"
 echo "  - active production jobs: $ACTIVE_JOBS"
@@ -138,6 +138,7 @@ echo "▸ Backed up test DB → $BACKUP_PATH"
 # ── 4. Optional: teleport all in-transit ships to destinations ──────
 if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" = true ]; then
   echo "▸ Teleporting $IN_TRANSIT in-transit ship(s) to their destinations..."
+  # Legacy transit ships (arrives_at timer)
   sqlite3 "$TEST_DB" "
     UPDATE ships
     SET location_id       = to_location_id,
@@ -148,8 +149,36 @@ if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" = true ]; then
         transit_from_x    = NULL,
         transit_from_y    = NULL,
         transit_to_x      = NULL,
-        transit_to_y      = NULL
+        transit_to_y      = NULL,
+        orbit_json        = NULL,
+        maneuver_json     = NULL,
+        orbit_body_id     = NULL,
+        orbit_predictions_json = NULL,
+        trajectory_json   = NULL
     WHERE arrives_at IS NOT NULL;
+  "
+  # Orbit-model transit ships (pending maneuvers, not yet docked)
+  sqlite3 "$TEST_DB" "
+    UPDATE ships
+    SET location_id       = COALESCE(to_location_id, location_id),
+        from_location_id  = NULL,
+        to_location_id    = NULL,
+        departed_at       = NULL,
+        arrives_at        = NULL,
+        transit_from_x    = NULL,
+        transit_from_y    = NULL,
+        transit_to_x      = NULL,
+        transit_to_y      = NULL,
+        orbit_json        = NULL,
+        maneuver_json     = NULL,
+        orbit_body_id     = NULL,
+        orbit_predictions_json = NULL,
+        trajectory_json   = NULL
+    WHERE orbit_json IS NOT NULL
+      AND maneuver_json IS NOT NULL
+      AND maneuver_json != '[]'
+      AND maneuver_json != ''
+      AND location_id IS NULL;
   "
   echo "  ✔ All ships docked at their destinations."
 fi

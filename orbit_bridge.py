@@ -799,7 +799,10 @@ def _check_auto_docking(conn: sqlite3.Connection, now_s: float) -> None:
                    transit_to_x = NULL,
                    transit_to_y = NULL,
                    trajectory_json = NULL,
-                   orbit_predictions_json = NULL
+                   orbit_predictions_json = NULL,
+                   orbit_json = NULL,
+                   maneuver_json = NULL,
+                   orbit_body_id = NULL
                WHERE id = ?""",
             (loc_id, ship_id),
         )

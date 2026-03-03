@@ -43,6 +43,10 @@ def _ship_status(r) -> str:
 
     Returns one of: "transit", "stranded", "docked".
     """
+    # If the ship has a location_id it is docked, regardless of any
+    # stale orbit/maneuver data that may still be present.
+    if r["location_id"]:
+        return "docked"
     # Legacy transit (arrives_at timer)
     if r["arrives_at"]:
         return "transit"
@@ -51,7 +55,7 @@ def _ship_status(r) -> str:
     if r["orbit_json"] and mj and mj not in ("", "[]"):
         return "transit"
     # Stranded: in orbit but not docked, no pending maneuvers
-    if r["orbit_json"] and not r["location_id"]:
+    if r["orbit_json"]:
         return "stranded"
     return "docked"
 
@@ -93,6 +97,49 @@ class InventoryContainerReq(BaseModel):
 
 class ShipDeconstructReq(BaseModel):
     keep_ship_record: bool = False
+
+
+# ── Trajectory generation from orbit predictions ──────────
+
+def _trajectory_from_orbit_predictions(
+    predictions: List[Dict[str, Any]],
+    n_points: int = 64,
+) -> Optional[List[List[float]]]:
+    """Generate a heliocentric trajectory polyline from orbit predictions.
+
+    Finds the sun-centered orbit segment and samples positions along it
+    using the Kepler solver.  Returns [[x_km, y_km], ...] or None.
+    """
+    import orbit_service
+
+    sun_seg = None
+    for seg in predictions:
+        if seg.get("body_id") == "sun" and seg.get("elements"):
+            sun_seg = seg
+            break
+
+    if not sun_seg:
+        return None
+
+    elements = sun_seg["elements"]
+    from_s = float(sun_seg.get("from_s") or 0)
+    to_s_raw = sun_seg.get("to_s")
+    to_s = float(to_s_raw) if to_s_raw is not None else 0.0
+    if to_s <= from_s:
+        return None
+
+    try:
+        cfg = celestial_config.load_celestial_config()
+        sun_mu = celestial_config.get_body_mu(cfg, "sun")
+    except Exception:
+        return None
+
+    points: List[List[float]] = []
+    for i in range(n_points + 1):
+        t = from_s + (to_s - from_s) * i / n_points
+        pos = orbit_service.propagate_position(elements, sun_mu, t)
+        points.append([round(pos[0], 1), round(pos[1], 1)])
+    return points
 
 
 # ── Routes ─────────────────────────────────────────────────
@@ -887,6 +934,18 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             except (json.JSONDecodeError, TypeError):
                 pass
 
+        # Backfill: generate trajectory from orbit predictions for ships
+        # that have predictions but no stored trajectory polyline.
+        if r["arrives_at"] and not ship_data.get("trajectory") and r["orbit_predictions_json"]:
+            try:
+                preds_raw = json.loads(r["orbit_predictions_json"])
+                if preds_raw:
+                    gen_traj = _trajectory_from_orbit_predictions(preds_raw)
+                    if gen_traj:
+                        ship_data["trajectory"] = gen_traj
+            except Exception:
+                pass
+
         # Flag interplanetary transfers for frontend rendering
         if r["arrives_at"] and r["from_location_id"] and r["to_location_id"]:
             ship_data["is_interplanetary"] = _is_interplanetary(
@@ -1163,8 +1222,16 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         predictions = burn_plan.get("orbit_predictions", [])
         if predictions:
             orbit_predictions_json_str = json.dumps(predictions)
-        # Skip legacy trajectory — orbit predictions supersede it
-        trajectory_json_str = None
+        # Generate trajectory polyline from orbit predictions so
+        # the legacy (non-OrbitRenderer) frontend path has polyline data
+        # for accurate interplanetary arc rendering.
+        if predictions:
+            try:
+                ip_traj = _trajectory_from_orbit_predictions(predictions)
+                if ip_traj:
+                    trajectory_json_str = json.dumps(ip_traj)
+            except Exception:
+                logging.exception("Failed to generate trajectory from predictions for %s", ship_id)
         # Override arrives_at with orbit model's physical TOF so the ETA
         # displayed on the frontend matches the actual burn schedule.
         model_tof = burn_plan.get("total_tof_s")

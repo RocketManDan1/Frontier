@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Create Contract — Frontier: Sol 2000</title>
+    <link rel="stylesheet" href="/static/styles.css?v=contracts3" />
+    <style>
+      .ccCreatePage .ccWizard {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        border: none;
+        border-radius: 0;
+        width: 100%;
+        max-width: 780px;
+        margin: 0 auto;
+        box-shadow: none;
+      }
+      .ccCreatePage .ccWizardBody {
+        flex: 1;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+
+  <body class="contractsPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">
+              <svg class="contractsTitleIcon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22" aria-hidden="true">
+                <rect x="4" y="10" width="26" height="17" rx="1.5" fill="#c8a85c"/>
+                <polygon points="4,10 17,20 30,10" fill="#b89844"/>
+              </svg>
+              Create Contract
+            </div>
+            <div class="subtitle">Set up a new contract</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/sites">Sites</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/organization">Organization</a>
+            <a class="tab active" href="/contracts">Contracts</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="contractsLayout ccCreatePage">
+        <div class="ccWizard">
+        <div class="ccWizardHeader">
+          <svg class="ccWizardIcon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+            <rect x="6" y="4" width="22" height="28" rx="1.5" fill="#c8a85c"/>
+            <rect x="9" y="8" width="16" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+            <rect x="9" y="13" width="16" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+            <rect x="9" y="18" width="10" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+          </svg>
+          <span class="ccWizardTitle">Create Contract</span>
+          <div class="ccWizardHeaderActions">
+            <button class="ccWizardHeaderBtn ccWizardClose" type="button" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <div class="ccWizardBody">
+
+          <!-- ═══════════ Step 1: Select Contract Type ═══════════ -->
+          <div id="ccStep1" class="ccStep" style="display:block;">
+            <h3 class="ccStepTitle">Select Contract Type (1/4)</h3>
+            <div class="ccStepBody">
+              <div class="ccFieldGroup">
+                <label class="ccLabel">Contract Type</label>
+                <label class="ccRadio"><input type="radio" name="ccType" value="auction" checked /> Auction</label>
+                <label class="ccRadio"><input type="radio" name="ccType" value="courier" /> Courier</label>
+                <label class="ccRadio"><input type="radio" name="ccType" value="item_exchange" /> Item Exchange</label>
+              </div>
+
+              <!-- Item Exchange sub-option: buy or sell -->
+              <div id="ccExchangeDir" class="ccFieldGroup" style="display:none;">
+                <label class="ccLabel">Exchange Direction</label>
+                <label class="ccRadio"><input type="radio" name="ccExDir" value="sell" checked /> Want to Sell</label>
+                <label class="ccRadio"><input type="radio" name="ccExDir" value="buy" /> Want to Buy</label>
+              </div>
+
+              <div class="ccFieldGroup">
+                <label class="ccLabel">Availability</label>
+                <label class="ccRadio"><input type="radio" name="ccAvail" value="public" checked /> Public</label>
+                <label class="ccRadio"><input type="radio" name="ccAvail" value="private" /> Private</label>
+                <div id="ccPrivateFields" class="ccPrivateFields" style="display:none;">
+                  <div class="ccFieldRow">
+                    <label class="ccLabel ccLabelInline">Target Corporation</label>
+                    <select id="ccPrivateCorp" class="ccSelect">
+                      <option value="">Loading corporations…</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ccStepSplit">
+                <button id="btnCreateContract" class="btnAccent ccCreateBtn" type="button">Create Contract</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══════════ Step 2: Pick Items ═══════════ -->
+          <div id="ccStep2" class="ccStep" style="display:none;">
+            <h3 class="ccStepTitle">Pick Items (2/4)</h3>
+            <div class="ccStepBody">
+
+              <!-- Mode toggle: Cargo vs Assembled Ships (for auction/courier/sell) -->
+              <div id="ccItemModeBar" class="ccItemModeBar">
+                <button id="ccModeItems" class="ccModeBtn active" type="button">Cargo &amp; Modules</button>
+                <button id="ccModeShips" class="ccModeBtn" type="button">Assembled Ships</button>
+              </div>
+
+              <!-- Cargo/module picker (from inventory) -->
+              <div id="ccPickerInventory">
+                <select id="ccLocationSelect" class="ccSelect ccLocationSelect">
+                  <option value="">Loading locations…</option>
+                </select>
+                <div class="ccItemTable">
+                  <div class="ccItemHeader">
+                    <span class="ccItemCheck">&nbsp;</span>
+                    <span class="ccItemColType">Type</span>
+                    <span class="ccItemColQty">Qty</span>
+                    <span class="ccItemColVol">Volume</span>
+                    <span class="ccItemColDetail">Details</span>
+                  </div>
+                  <div id="ccItemList" class="ccItemList">
+                    <div class="ccItemEmpty">Select a location to view items</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Ship picker (from fleet) -->
+              <div id="ccPickerShips" style="display:none;">
+                <div class="ccItemTable">
+                  <div class="ccItemHeader">
+                    <span class="ccItemCheck">&nbsp;</span>
+                    <span class="ccItemColType">Ship Name</span>
+                    <span class="ccItemColQty">Mass</span>
+                    <span class="ccItemColVol">Location</span>
+                    <span class="ccItemColDetail">Parts</span>
+                  </div>
+                  <div id="ccShipList" class="ccItemList">
+                    <div class="ccItemEmpty">Loading ships…</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Buy order catalog picker (for item_exchange buy) -->
+              <div id="ccPickerCatalog" style="display:none;">
+                <div class="ccCatalogSearch">
+                  <input id="ccCatalogSearchInput" type="text" class="ccInput" placeholder="Search items by name…" />
+                  <select id="ccCatalogFilter" class="ccSelect">
+                    <option value="all">All Categories</option>
+                    <option value="raw_materials">Raw Materials</option>
+                    <option value="finished_goods">Finished Goods</option>
+                    <option value="modules">Modules / Equipment</option>
+                  </select>
+                </div>
+                <div class="ccItemTable">
+                  <div class="ccItemHeader">
+                    <span class="ccItemCheck">&nbsp;</span>
+                    <span class="ccItemColType">Item</span>
+                    <span class="ccItemColQty">Quantity</span>
+                    <span class="ccItemColVol">Category</span>
+                  </div>
+                  <div id="ccCatalogList" class="ccItemList">
+                    <div class="ccItemEmpty">Loading catalog…</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ccSelectedSummary">Selected items: <span id="ccSelectedCount">0</span> (<span id="ccSelectedVolume">0</span> m&sup3;)</div>
+            </div>
+          </div>
+
+          <!-- ═══════════ Step 3: Price & Options ═══════════ -->
+          <div id="ccStep3" class="ccStep" style="display:none;">
+            <h3 class="ccStepTitle" id="ccStep3Title">Set Options (3/4)</h3>
+            <div class="ccStepBody">
+
+              <!-- Auction options -->
+              <div id="ccOpts_auction" class="ccOptsBlock">
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Starting Bid</label>
+                  <input id="ccStartingBid" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Buyout Price (optional)</label>
+                  <input id="ccBuyoutPrice" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Auction Duration</label>
+                  <select id="ccAuctionTime" class="ccSelect">
+                    <option value="180">180 Days</option>
+                    <option value="360">360 Days</option>
+                    <option value="1825">5 Years</option>
+                  </select>
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Description (optional)</label>
+                  <textarea id="ccDescAuction" class="ccTextarea" rows="3"></textarea>
+                </div>
+              </div>
+
+              <!-- Courier options -->
+              <div id="ccOpts_courier" class="ccOptsBlock" style="display:none;">
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Destination</label>
+                  <select id="ccCourierDest" class="ccSelect">
+                    <option value="">Select destination…</option>
+                  </select>
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Reward (payment to courier)</label>
+                  <input id="ccCourierReward" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Collateral</label>
+                  <input id="ccCourierCollateral" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Days to Complete</label>
+                  <select id="ccCourierExpiry" class="ccSelect">
+                    <option value="30">30 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="180">180 Days</option>
+                    <option value="360">360 Days</option>
+                  </select>
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Description (optional)</label>
+                  <textarea id="ccDescCourier" class="ccTextarea" rows="3"></textarea>
+                </div>
+              </div>
+
+              <!-- Item Exchange options -->
+              <div id="ccOpts_exchange" class="ccOptsBlock" style="display:none;">
+                <div class="ccFieldGroup">
+                  <label class="ccLabel">Pricing Method</label>
+                  <label class="ccRadio"><input type="radio" name="ccPriceMethod" value="isk" checked /> Set Price</label>
+                  <label class="ccRadio"><input type="radio" name="ccPriceMethod" value="barter" /> Barter</label>
+                </div>
+
+                <!-- Set price fields -->
+                <div id="ccExchangePriceFields">
+                  <div class="ccFieldRow">
+                    <label class="ccLabel ccLabelInline" id="ccExPriceLabel">Price</label>
+                    <input id="ccExchangePrice" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                  </div>
+                </div>
+
+                <!-- Barter fields (search catalog for what you want in return) -->
+                <div id="ccExchangeBarterFields" style="display:none;">
+                  <label class="ccLabel">Items Wanted in Return</label>
+                  <div class="ccCatalogSearch">
+                    <input id="ccBarterSearchInput" type="text" class="ccInput" placeholder="Search items…" />
+                    <select id="ccBarterFilter" class="ccSelect">
+                      <option value="all">All Categories</option>
+                      <option value="raw_materials">Raw Materials</option>
+                      <option value="finished_goods">Finished Goods</option>
+                      <option value="modules">Modules / Equipment</option>
+                    </select>
+                  </div>
+                  <div class="ccItemTable">
+                    <div class="ccItemHeader">
+                      <span class="ccItemCheck">&nbsp;</span>
+                      <span class="ccItemColType">Item</span>
+                      <span class="ccItemColQty">Quantity</span>
+                      <span class="ccItemColVol">Category</span>
+                    </div>
+                    <div id="ccBarterList" class="ccItemList ccItemListShort">
+                      <div class="ccItemEmpty">Search for items</div>
+                    </div>
+                  </div>
+                  <div class="ccSelectedSummary">Barter items selected: <span id="ccBarterCount">0</span></div>
+                </div>
+
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Expiration</label>
+                  <select id="ccExchangeExpiry" class="ccSelect">
+                    <option value="14">14 Days</option>
+                    <option value="30">30 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="180">180 Days</option>
+                  </select>
+                </div>
+                <div class="ccFieldRow">
+                  <label class="ccLabel ccLabelInline">Description (optional)</label>
+                  <textarea id="ccDescExchange" class="ccTextarea" rows="3"></textarea>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ═══════════ Step 4: Confirm ═══════════ -->
+          <div id="ccStep4" class="ccStep" style="display:none;">
+            <h3 class="ccStepTitle">Confirm (4/4)</h3>
+            <div class="ccStepBody">
+              <table class="ccConfirmTable">
+                <tr><td class="ccConfirmLabel">Contract Type</td><td id="ccConfType" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfDirRow" style="display:none;"><td class="ccConfirmLabel">Direction</td><td id="ccConfDir" class="ccConfirmValue"></td></tr>
+                <tr><td class="ccConfirmLabel">Availability</td><td id="ccConfAvail" class="ccConfirmValue"></td></tr>
+                <tr><td class="ccConfirmLabel">Location</td><td id="ccConfLocation" class="ccConfirmValue ccConfLink"></td></tr>
+                <tr id="ccConfDestRow" style="display:none;"><td class="ccConfirmLabel">Destination</td><td id="ccConfDest" class="ccConfirmValue"></td></tr>
+                <tr><td class="ccConfirmLabel">Expiration</td><td id="ccConfExpiry" class="ccConfirmValue"></td></tr>
+              </table>
+              <hr class="ccConfirmDivider" />
+              <table class="ccConfirmTable" id="ccConfPriceTable">
+                <tr id="ccConfBidRow"><td class="ccConfirmLabel">Starting Bid</td><td id="ccConfBid" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfBuyoutRow"><td class="ccConfirmLabel">Buyout Price</td><td id="ccConfBuyout" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfPriceRow" style="display:none;"><td class="ccConfirmLabel">Price</td><td id="ccConfPrice" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfRewardRow" style="display:none;"><td class="ccConfirmLabel">Reward</td><td id="ccConfReward" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfCollateralRow" style="display:none;"><td class="ccConfirmLabel">Collateral</td><td id="ccConfCollateral" class="ccConfirmValue"></td></tr>
+              </table>
+              <hr class="ccConfirmDivider" />
+              <table class="ccConfirmTable">
+                <tr><td class="ccConfirmLabel">Items</td><td id="ccConfItems" class="ccConfirmValue"></td></tr>
+                <tr id="ccConfBarterRow" style="display:none;"><td class="ccConfirmLabel">Barter Items</td><td id="ccConfBarter" class="ccConfirmValue"></td></tr>
+              </table>
+              <div id="ccConfDesc" class="ccConfirmDesc"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Wizard footer -->
+        <div class="ccWizardFooter">
+          <button id="ccBtnCancel" class="ccBtn ccBtnCancel" type="button">Cancel</button>
+          <button id="ccBtnPrev" class="ccBtn ccBtnPrev" type="button" style="display:none;">Previous</button>
+          <button id="ccBtnNext" class="ccBtn ccBtnNext" type="button">Next</button>
+          <button id="ccBtnFinish" class="ccBtn ccBtnFinish btnAccent" type="button" style="display:none;">Finish</button>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/clock.js?v=ck1"></script>
+    <script src="/static/js/auth.js?v=au2"></script>
+    <script src="/static/js/contract_create.js?v=cc3"></script>
+  </body>
+</html>

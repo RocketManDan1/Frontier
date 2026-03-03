@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34" fill="none">
+  <!-- Envelope body -->
+  <rect x="4" y="10" width="26" height="17" rx="1.5" fill="#8a9bb0"/>
+  <!-- Envelope flap -->
+  <polygon points="4,10 17,20 30,10" fill="#7a8c9e"/>
+  <!-- Inner shadow line -->
+  <line x1="4" y1="27" x2="17" y2="19" stroke="#6a7c8e" stroke-width="0.6" opacity="0.5"/>
+  <line x1="30" y1="27" x2="17" y2="19" stroke="#6a7c8e" stroke-width="0.6" opacity="0.5"/>
+  <!-- Seal dot -->
+  <circle cx="17" cy="19" r="2" fill="#c8a85c" opacity="0.85"/>
+</svg>

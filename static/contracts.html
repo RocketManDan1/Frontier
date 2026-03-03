@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Frontier: Sol 2000 — Contracts</title>
+    <link rel="stylesheet" href="/static/styles.css?v=contracts1" />
+  </head>
+
+  <body class="contractsPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Contracts</div>
+            <div class="subtitle" id="contractsSubtitle">Trade agreements, courier missions, and auctions</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/sites">Sites</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/organization">Organization</a>
+            <a class="tab active" href="/contracts">Contracts</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <!-- Sub-tabs -->
+      <div class="contractsSubTabs" role="tablist" aria-label="Contract sections">
+        <button id="contractsTabBtnIncoming" class="contractsSubTabBtn active" type="button" role="tab" aria-selected="true" data-contracts-tab="incoming">Contracts</button>
+        <button id="contractsTabBtnMy" class="contractsSubTabBtn" type="button" role="tab" aria-selected="false" data-contracts-tab="my">My Contracts</button>
+        <button id="contractsTabBtnSearch" class="contractsSubTabBtn" type="button" role="tab" aria-selected="false" data-contracts-tab="search">Contract Search</button>
+      </div>
+
+      <!-- ═══════════════ TAB 1: Contracts (Incoming) ═══════════════ -->
+      <div id="contractsTabIncoming" class="contractsTabPane">
+        <div class="contractsStartPage">
+          <div class="contractsStartHeader">
+            <div class="contractsStartText">
+              <h2>Active Contracts</h2>
+              <p class="muted">Contracts you have accepted or that are assigned to you.</p>
+            </div>
+          </div>
+
+          <div id="contractsIncomingList" class="contractsIncomingList">
+            <!-- Accepted contracts will be listed here -->
+          </div>
+
+          <div class="contractsCreateBar">
+            <button id="btnCreateContractIncoming" class="btnOutline contractsCreateBtn" type="button">Create Contract</button>
+          </div>
+        </div>
+      </div>
+
+        <!-- ═══════════════ TAB 2: My Contracts ═══════════════ -->
+        <div id="contractsTabMy" class="contractsTabPane" style="display:none;">
+          <div class="contractsMyPage">
+            <div class="contractsMyFilters">
+              <div class="contractsFilterGroup">
+                <label class="contractsFilterLabel">Contract Type</label>
+                <select id="myContractType" class="contractsSelect">
+                  <option value="auction">Auction</option>
+                  <option value="item_exchange">Item Exchange</option>
+                  <option value="courier">Courier</option>
+                </select>
+              </div>
+              <div class="contractsFilterGroup">
+                <label class="contractsFilterLabel">Action</label>
+                <select id="myContractAction" class="contractsSelect">
+                  <option value="issued_to_by">Issued To/By</option>
+                  <option value="issued_to">Issued To</option>
+                  <option value="issued_by">Issued By</option>
+                </select>
+              </div>
+              <div class="contractsFilterGroup">
+                <label class="contractsFilterLabel">Owner</label>
+                <select id="myContractOwner" class="contractsSelect">
+                  <option value="me" id="myContractOwnerMe">Me</option>
+                </select>
+              </div>
+              <div class="contractsFilterGroup">
+                <label class="contractsFilterLabel">Status</label>
+                <select id="myContractStatus" class="contractsSelect">
+                  <option value="outstanding">Outstanding</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="expired">Expired</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              <div class="contractsFilterGroup contractsFilterNav">
+                <button class="contractsPagerBtn" id="myContractsPrev" type="button" disabled>&lsaquo;</button>
+                <button class="contractsPagerBtn" id="myContractsNext" type="button">&rsaquo;</button>
+              </div>
+              <button id="btnGetContracts" class="btnOutline contractsGetBtn" type="button">Get Contracts</button>
+            </div>
+
+            <!-- Table header -->
+            <div class="contractsTableHeader">
+              <span class="ctCol ctColContract">Contract</span>
+              <span class="ctCol ctColType">Type</span>
+              <span class="ctCol ctColFrom">From</span>
+              <span class="ctCol ctColTo">To</span>
+              <span class="ctCol ctColDate">Date Issued</span>
+              <span class="ctCol ctColTime">Time Left</span>
+              <span class="ctCol ctColInfo">Info by Issuer</span>
+            </div>
+
+            <div id="myContractsList" class="contractsResultArea contractsTableBody">
+              <div class="contractsEmptyMsg">No Contracts Found</div>
+            </div>
+
+            <div class="contractsCreateBar">
+              <button id="btnCreateContractMy" class="btnOutline contractsCreateBtn" type="button">Create Contract</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════ TAB 3: Contract Search ═══════════════ -->
+        <div id="contractsTabSearch" class="contractsTabPane" style="display:none;">
+          <div class="contractsSearchPage">
+            <!-- Search type sub-tabs -->
+            <div class="contractsSearchTypeTabs">
+              <button class="contractsSearchTypeBtn active" data-search-type="buy_sell" type="button">Buy &amp; Sell</button>
+              <button class="contractsSearchTypeBtn" data-search-type="courier" type="button">Courier</button>
+            </div>
+
+            <div class="contractsSearchLayout">
+              <!-- Left: Filters sidebar -->
+              <aside class="contractsSearchSidebar">
+                <!-- Buy & Sell filters -->
+                <div id="buySellFilters" class="contractsSearchField">
+                  <label class="contractsFilterLabel">Contract Type</label>
+                  <select id="searchContractType" class="contractsSelect">
+                    <option value="auction">Auctions</option>
+                    <option value="all">All</option>
+                    <option value="want_to_sell">Want To Sell</option>
+                    <option value="want_to_buy">Want To Buy</option>
+                  </select>
+                </div>
+
+                <!-- Courier filters (hidden by default) -->
+                <div id="courierFilters" style="display:none;">
+                  <div class="contractsSearchField">
+                    <label class="contractsFilterLabel">Pickup Zone</label>
+                    <div id="zoneBarPickup" class="czBar" data-zone-field="pickup"></div>
+                  </div>
+                  <div class="contractsSearchField">
+                    <label class="contractsFilterLabel">Drop-off Zone</label>
+                    <div id="zoneBarDropoff" class="czBar" data-zone-field="dropoff"></div>
+                  </div>
+                </div>
+
+                <button id="btnSearchContracts" class="btnOutline contractsSearchBtn" type="button">Search</button>
+                <div class="contractsSearchStatus" id="searchStatus">Search not started</div>
+              </aside>
+
+              <!-- Right: Spreadsheet results -->
+              <div class="contractsSearchResults">
+                <div class="contractsSearchResultsHeader">
+                  <div class="csrhLeft">
+                    <span class="csrhLabel" id="searchFoundLabel"></span>
+                  </div>
+                  <div class="csrhRight">
+                    <span class="csrhSortLabel">Sort: Pages By</span>
+                    <select id="searchSortBy" class="contractsSelect contractsSelectSmall">
+                      <option value="price_asc">Price (Lowest First)</option>
+                      <option value="price_desc">Price (Highest First)</option>
+                      <option value="date_desc">Date Created (Newest)</option>
+                      <option value="date_asc">Date Created (Oldest)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Column headers -->
+                <div class="csTableHeader" id="csTableHeader">
+                  <span class="csCol csColContract">Contract</span>
+                  <span class="csCol csColLocation">Location</span>
+                  <span class="csCol csColPrice">Price</span>
+                  <span class="csCol csColTimeLeft">Time Left</span>
+                  <span class="csCol csColCreated">Created</span>
+                  <span class="csCol csColIssuer">Info by Issuer</span>
+                </div>
+
+                <!-- Rows -->
+                <div id="searchResultsList" class="csTableBody">
+                  <div class="contractsSearchPrompt">Click &ldquo;Search&rdquo; to fetch contracts</div>
+                </div>
+
+                <!-- Footer -->
+                <div class="csTableFooter" id="searchFooter">
+                  <span id="searchFoundCount"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+    </div>
+
+    <!-- ═══════════════ Contract Detail Modal ═══════════════ -->
+    <div id="contractDetailOverlay" class="cdOverlay" style="display:none;">
+      <div class="cdWindow">
+        <!-- Title bar -->
+        <div class="cdTitleBar">
+          <svg class="cdTitleIcon" viewBox="0 0 24 24" width="18" height="18" fill="none">
+            <rect x="3" y="2" width="18" height="20" rx="2" fill="#8a9bb0"/>
+            <rect x="6" y="5" width="12" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+            <rect x="6" y="9" width="12" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+            <rect x="6" y="13" width="8" height="2" rx="0.5" fill="#1a2533" opacity="0.5"/>
+          </svg>
+          <span class="cdTitleText">Contract</span>
+          <div class="cdTitleActions">
+            <button class="cdCloseBtn" id="cdCloseTop" type="button" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <!-- Contract header (icon + summary line) -->
+        <div class="cdScrollBody">
+        <div class="cdHeader">
+          <div class="cdHeaderIcon" id="cdHeaderIcon"></div>
+          <div class="cdHeaderText" id="cdHeaderText"></div>
+        </div>
+
+        <div class="cdDivider"></div>
+
+        <!-- Info fields section -->
+        <div class="cdInfoSection" id="cdInfoSection"></div>
+
+        <div class="cdDivider"></div>
+
+        <!-- Type-specific details section -->
+        <div class="cdDetailsSection" id="cdDetailsSection"></div>
+
+        <!-- Items table (for auctions & item exchange) -->
+        <div class="cdItemsSection" id="cdItemsSection" style="display:none;">
+          <div class="cdDivider"></div>
+          <div class="cdItemsHeader" id="cdItemsHeader">You Will Get</div>
+          <div class="cdItemsTableHeader">
+            <span class="cdItemCol cdItemName">Name</span>
+            <span class="cdItemCol cdItemQty">Qty</span>
+            <span class="cdItemCol cdItemType">Type</span>
+          </div>
+          <div class="cdItemsTableBody" id="cdItemsTableBody"></div>
+        </div>
+
+        <!-- Bid section (auction only) -->
+        <div class="cdBidSection" id="cdBidSection" style="display:none;">
+          <div class="cdDivider"></div>
+          <div class="cdBidRow">
+            <label class="cdBidLabel">Your bid</label>
+            <input type="number" id="cdBidInput" class="cdBidInput" min="0" step="1000" />
+          </div>
+          <div class="cdBidRow">
+            <label class="cdBidBuyoutLabel">
+              <input type="checkbox" id="cdBidBuyout" /> Buyout
+            </label>
+          </div>
+        </div>
+        </div>
+
+        <!-- Footer buttons -->
+        <div class="cdFooter">
+          <div class="cdFooterLeft">
+            <button class="cdMenuBtn" title="Options">&#9776;</button>
+          </div>
+          <div class="cdFooterRight">
+            <button class="cdBtn cdBtnAccept" id="cdBtnAccept" style="display:none;" type="button">Accept</button>
+            <button class="cdBtn cdBtnBid" id="cdBtnBid" style="display:none;" type="button">Place Bid</button>
+            <button class="cdBtn cdBtnComplete" id="cdBtnComplete" style="display:none;" type="button">Complete Delivery</button>
+            <button class="cdBtn cdBtnClose" id="cdBtnClose" type="button">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/auth.js?v=au2"></script>
+    <script src="/static/js/clock.js?v=ti3"></script>
+    <script src="/static/js/item_display.js?v=id1"></script>
+    <script src="/static/js/contracts.js?v=contracts4"></script>
+  </body>
+</html>

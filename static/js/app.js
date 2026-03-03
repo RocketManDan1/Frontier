@@ -1092,6 +1092,7 @@
   let ships = [];
   let bodyPhysics = {};    // body_id → { mu_km3_s2, soi_radius_km?, radius_km? }
   let orbitNodeMeta = {};  // location_id → { body_id, radius_km }
+  let bodyOrbits = {};     // group_id → { a_km, e, b_km, periapsis_angle_rad, center_group_id }
   let treeCache = null;
   let mapOverviewRenderKey = "";
   const mapOverviewOpenState = new Map();
@@ -2657,6 +2658,14 @@
   const EUROPA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const GANYMEDE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const CALLISTO_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const SATURN_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const MIMAS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const ENCELADUS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const TETHYS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const DIONE_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const RHEA_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const TITAN_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
+  const IAPETUS_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT;
   const LOCAL_ORBIT_SCALE = HELIO_LINEAR_WORLD_PER_KM * LOCAL_ORBIT_EXPANSION_MULT; // unified value
 
   // ---------- Orbit-rendering helpers ----------
@@ -2746,9 +2755,12 @@
   const PLANET_ICON_SCREEN_MULT = 1.5;
   const MOON_ICON_SCREEN_PX = 16;
   const JOVIAN_MOON_ICON_SCREEN_PX = 18;
+  const SATURNIAN_MOON_ICON_SCREEN_PX = 18;
   const SUN_ICON_SCREEN_PX = 28;
+  const PLANET_ICON_SCREEN_PX = 22;
+  const BELT_ICON_SCREEN_PX = 18;
   const ASTEROID_ICON_SCREEN_PX = 16;
-  const ASTEROID_HINTS = ["asteroid", "zoozve", "ceres", "vesta", "pallas", "hygiea", "io", "europa", "ganymede", "callisto", "trojan", "greek"];
+  const ASTEROID_HINTS = ["asteroid", "zoozve", "ceres", "vesta", "pallas", "hygiea", "psyche", "lutetia", "kalliope", "hesperia", "undina", "antigone", "kleopatra", "io", "europa", "ganymede", "callisto", "mimas", "enceladus", "tethys", "dione", "rhea", "titan", "iapetus", "trojan", "greek"];
   const PLANET_ICON_ZOOM_COMP_MAX = 320;
   const PLANET_LABEL_ZOOM_COMP_MAX = 42;
 
@@ -2763,12 +2775,27 @@
     "VESTA_LO", "VESTA_HO",
     "PALLAS_LO", "PALLAS_HO",
     "HYGIEA_LO", "HYGIEA_HO",
+    "PSYCHE_LO", "PSYCHE_HO",
+    "LUTETIA_LO", "LUTETIA_HO",
+    "KALLIOPE_LO", "KALLIOPE_HO",
+    "HESPERIA_LO", "HESPERIA_HO",
+    "UNDINA_LO", "UNDINA_HO",
+    "ANTIGONE_LO", "ANTIGONE_HO",
+    "KLEOPATRA_LO", "KLEOPATRA_HO",
     "PHOBOS_LO", "DEIMOS_LO", "ZOOZVE_LO",
     "JUP_LO", "JUP_HO",
     "IO_LO", "IO_HO",
     "EUROPA_LO", "EUROPA_HO",
     "GANYMEDE_LO", "GANYMEDE_HO",
     "CALLISTO_LO", "CALLISTO_HO",
+    "SAT_LO", "SAT_HO",
+    "MIMAS_LO", "MIMAS_HO",
+    "ENCELADUS_LO", "ENCELADUS_HO",
+    "TETHYS_LO", "TETHYS_HO",
+    "DIONE_LO", "DIONE_HO",
+    "RHEA_LO", "RHEA_HO",
+    "TITAN_LO", "TITAN_HO",
+    "IAPETUS_LO", "IAPETUS_HO",
     "HEKTOR_LO", "AGAMEMNON_LO", "ACHILLES_LO", "DIOMEDES_LO", "ODYSSEUS_LO",
     "PATROCLUS_LO", "MENTOR_LO", "PARIS_LO", "DEIPHOBUS_LO", "AENEAS_LO",
   ]);
@@ -3165,6 +3192,653 @@
     pitB.endFill();
 
     c.addChild(rock, ridge, pitA, pitB);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  /* ========== Planet icon glyphs ========== */
+
+  function makeMercuryIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(10, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — grey-brown, like our Moon but warmer
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0xa09486, 0.96);
+    disk.lineStyle(Math.max(0.8, s * 0.06), 0xc4b8aa, 0.82);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Caloris Basin — large impact structure, upper-left
+    const caloris = new PIXI.Graphics();
+    caloris.lineStyle(Math.max(0.5, s * 0.04), 0x7a6e60, 0.6);
+    caloris.drawCircle(-s * 0.14, -s * 0.12, Math.max(1.2, s * 0.12));
+    caloris.beginFill(0x8c7e70, 0.4);
+    caloris.drawCircle(-s * 0.14, -s * 0.12, Math.max(0.9, s * 0.09));
+    caloris.endFill();
+
+    // Scattered craters
+    const craterA = new PIXI.Graphics();
+    craterA.beginFill(0x706256, 0.65);
+    craterA.drawCircle(s * 0.18, s * 0.06, Math.max(0.6, s * 0.065));
+    craterA.endFill();
+    const craterB = new PIXI.Graphics();
+    craterB.beginFill(0x7d7060, 0.55);
+    craterB.drawCircle(s * 0.04, s * 0.2, Math.max(0.5, s * 0.05));
+    craterB.endFill();
+    const craterC = new PIXI.Graphics();
+    craterC.beginFill(0x6b5f52, 0.5);
+    craterC.drawCircle(-s * 0.22, s * 0.14, Math.max(0.45, s * 0.045));
+    craterC.endFill();
+
+    // Subtle ray system from large crater
+    const rays = new PIXI.Graphics();
+    rays.lineStyle(Math.max(0.35, s * 0.03), 0xbfb3a5, 0.28);
+    rays.moveTo(s * 0.18, s * 0.06);
+    rays.lineTo(s * 0.35, s * 0.2);
+    rays.moveTo(s * 0.18, s * 0.06);
+    rays.lineTo(s * 0.32, -s * 0.12);
+
+    c.addChild(disk, caloris, craterA, craterB, craterC, rays);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeVenusIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(10, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — thick, pale yellow-white cloud cover
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0xe2d1a8, 0.96);
+    disk.lineStyle(Math.max(0.8, s * 0.06), 0xf0e4c8, 0.78);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Subtle horizontal cloud bands (Y-shaped pattern hints)
+    const bands = new PIXI.Graphics();
+    bands.lineStyle(Math.max(0.7, s * 0.055), 0xc9b888, 0.45);
+    bands.moveTo(-r * 0.9, -s * 0.12);
+    bands.bezierCurveTo(-r * 0.3, -s * 0.18, r * 0.3, -s * 0.06, r * 0.9, -s * 0.1);
+    bands.lineStyle(Math.max(0.6, s * 0.05), 0xd4c498, 0.38);
+    bands.moveTo(-r * 0.85, s * 0.08);
+    bands.bezierCurveTo(-r * 0.2, s * 0.14, r * 0.2, s * 0.04, r * 0.85, s * 0.1);
+    bands.lineStyle(Math.max(0.5, s * 0.04), 0xbfaa78, 0.32);
+    bands.moveTo(-r * 0.7, s * 0.25);
+    bands.bezierCurveTo(-r * 0.1, s * 0.3, r * 0.3, s * 0.22, r * 0.75, s * 0.26);
+
+    // Bright limb highlight — thick atmosphere scatters light
+    const limb = new PIXI.Graphics();
+    limb.lineStyle(Math.max(0.6, s * 0.05), 0xfff8e8, 0.3);
+    limb.arc(0, 0, r * 0.88, -Math.PI * 0.45, Math.PI * 0.45);
+
+    c.addChild(disk, bands, limb);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeEarthIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(10, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — deep ocean blue
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0x1a5fb4, 0.96);
+    disk.lineStyle(Math.max(0.8, s * 0.06), 0x5baaf5, 0.72);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Continent shapes — green-brown landmasses (stylized)
+    // Africa/Europe blob (center-right)
+    const landA = new PIXI.Graphics();
+    landA.beginFill(0x3a7d44, 0.78);
+    landA.moveTo(s * 0.02, -s * 0.2);
+    landA.lineTo(s * 0.12, -s * 0.22);
+    landA.lineTo(s * 0.18, -s * 0.1);
+    landA.lineTo(s * 0.14, s * 0.08);
+    landA.lineTo(s * 0.08, s * 0.18);
+    landA.lineTo(s * 0.0, s * 0.12);
+    landA.lineTo(-s * 0.04, -s * 0.06);
+    landA.closePath();
+    landA.endFill();
+
+    // Americas blob (left)
+    const landB = new PIXI.Graphics();
+    landB.beginFill(0x4a8a3d, 0.72);
+    landB.moveTo(-s * 0.26, -s * 0.14);
+    landB.lineTo(-s * 0.18, -s * 0.22);
+    landB.lineTo(-s * 0.1, -s * 0.16);
+    landB.lineTo(-s * 0.12, -s * 0.02);
+    landB.lineTo(-s * 0.18, s * 0.1);
+    landB.lineTo(-s * 0.24, s * 0.08);
+    landB.closePath();
+    landB.endFill();
+
+    // Polar ice cap (top)
+    const ice = new PIXI.Graphics();
+    ice.beginFill(0xeef4ff, 0.7);
+    ice.arc(0, 0, r * 0.92, -Math.PI * 0.82, -Math.PI * 0.18);
+    ice.lineTo(0, -r * 0.55);
+    ice.closePath();
+    ice.endFill();
+
+    // Cloud wisps
+    const clouds = new PIXI.Graphics();
+    clouds.lineStyle(Math.max(0.5, s * 0.04), 0xffffff, 0.35);
+    clouds.moveTo(-r * 0.7, s * 0.0);
+    clouds.bezierCurveTo(-r * 0.3, -s * 0.06, r * 0.1, s * 0.04, r * 0.6, -s * 0.02);
+    clouds.lineStyle(Math.max(0.4, s * 0.035), 0xffffff, 0.28);
+    clouds.moveTo(-r * 0.5, s * 0.2);
+    clouds.bezierCurveTo(-r * 0.1, s * 0.16, r * 0.2, s * 0.22, r * 0.55, s * 0.18);
+
+    // Atmospheric blue haze at limb
+    const atmo = new PIXI.Graphics();
+    atmo.lineStyle(Math.max(0.8, s * 0.06), 0x6bb8ff, 0.25);
+    atmo.drawCircle(0, 0, r * 1.06);
+
+    c.addChild(disk, landA, landB, ice, clouds, atmo);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeMarsIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(10, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — rusty red-orange
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0xc1603c, 0.96);
+    disk.lineStyle(Math.max(0.8, s * 0.06), 0xd9845a, 0.8);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Syrtis Major — dark volcanic region
+    const syrtis = new PIXI.Graphics();
+    syrtis.beginFill(0x6e3422, 0.65);
+    syrtis.moveTo(s * 0.02, -s * 0.08);
+    syrtis.lineTo(s * 0.14, -s * 0.18);
+    syrtis.lineTo(s * 0.2, -s * 0.04);
+    syrtis.lineTo(s * 0.1, s * 0.08);
+    syrtis.lineTo(-s * 0.02, s * 0.02);
+    syrtis.closePath();
+    syrtis.endFill();
+
+    // Another dark region — Acidalia Planitia
+    const dark2 = new PIXI.Graphics();
+    dark2.beginFill(0x7a3e28, 0.5);
+    dark2.drawCircle(-s * 0.14, s * 0.02, Math.max(0.8, s * 0.08));
+    dark2.endFill();
+
+    // North polar ice cap
+    const poleCap = new PIXI.Graphics();
+    poleCap.beginFill(0xf0e8dd, 0.8);
+    poleCap.arc(0, 0, r * 0.88, -Math.PI * 0.78, -Math.PI * 0.22);
+    poleCap.lineTo(0, -r * 0.6);
+    poleCap.closePath();
+    poleCap.endFill();
+
+    // Valles Marineris — long canyon line
+    const canyon = new PIXI.Graphics();
+    canyon.lineStyle(Math.max(0.45, s * 0.04), 0x8b3a20, 0.6);
+    canyon.moveTo(-s * 0.28, s * 0.14);
+    canyon.lineTo(-s * 0.06, s * 0.1);
+    canyon.lineTo(s * 0.16, s * 0.16);
+
+    c.addChild(disk, syrtis, dark2, poleCap, canyon);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeJupiterIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(12, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — warm tan/ochre
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0xc8a06a, 0.96);
+    disk.lineStyle(Math.max(0.8, s * 0.06), 0xdab882, 0.78);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Horizontal cloud bands — alternating dark brown and light tan
+    const bands = new PIXI.Graphics();
+    // North Equatorial Belt (dark)
+    bands.beginFill(0x8b5e3c, 0.6);
+    bands.drawRect(-r * 0.92, -s * 0.2, r * 1.84, s * 0.08);
+    bands.endFill();
+    // South Equatorial Belt (dark, wider)
+    bands.beginFill(0x7a4e30, 0.65);
+    bands.drawRect(-r * 0.92, s * 0.06, r * 1.84, s * 0.1);
+    bands.endFill();
+    // North Temperate Belt (thinner)
+    bands.beginFill(0x9a7050, 0.45);
+    bands.drawRect(-r * 0.85, -s * 0.32, r * 1.7, s * 0.05);
+    bands.endFill();
+    // South Temperate Belt
+    bands.beginFill(0x9a7050, 0.4);
+    bands.drawRect(-r * 0.85, s * 0.22, r * 1.7, s * 0.05);
+    bands.endFill();
+
+    // Clip bands to circle — overlay a masking ring
+    const maskRing = new PIXI.Graphics();
+    maskRing.beginFill(0x000000, 1);
+    maskRing.drawRect(-r * 1.5, -r * 1.5, r * 3, r * 3);
+    maskRing.beginHole();
+    maskRing.drawCircle(0, 0, r * 0.95);
+    maskRing.endHole();
+    maskRing.endFill();
+    // Use the mask to erase band overflow
+    const bandContainer = new PIXI.Container();
+    bandContainer.addChild(bands);
+    bandContainer.mask = (() => {
+      const m = new PIXI.Graphics();
+      m.beginFill(0xffffff);
+      m.drawCircle(0, 0, r * 0.95);
+      m.endFill();
+      return m;
+    })();
+    bandContainer.addChild(bandContainer.mask);
+
+    // Great Red Spot
+    const grs = new PIXI.Graphics();
+    grs.beginFill(0xc44a2a, 0.72);
+    grs.drawEllipse(s * 0.12, s * 0.12, Math.max(1, s * 0.08), Math.max(0.7, s * 0.05));
+    grs.endFill();
+    grs.lineStyle(Math.max(0.35, s * 0.03), 0xa53820, 0.5);
+    grs.drawEllipse(s * 0.12, s * 0.12, Math.max(1.3, s * 0.1), Math.max(0.9, s * 0.065));
+
+    c.addChild(disk, bandContainer, grs);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeSaturnIconGlyph(sizePx = PLANET_ICON_SCREEN_PX) {
+    const s = Math.max(10, Number(sizePx) || PLANET_ICON_SCREEN_PX);
+    const r = s * 0.42; // slightly smaller body to leave room for rings
+    const c = new PIXI.Container();
+
+    // Base disk — pale gold/tan gas giant
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0xe4c87a, 0.96);
+    disk.lineStyle(Math.max(0.7, s * 0.05), 0xf0dca0, 0.72);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Subtle atmospheric bands
+    const bands = new PIXI.Graphics();
+    bands.lineStyle(Math.max(0.6, s * 0.04), 0xd0a848, 0.42);
+    bands.moveTo(-r * 0.88, -r * 0.35);
+    bands.bezierCurveTo(-r * 0.3, -r * 0.42, r * 0.3, -r * 0.28, r * 0.88, -r * 0.35);
+    bands.lineStyle(Math.max(0.55, s * 0.038), 0xc89840, 0.36);
+    bands.moveTo(-r * 0.9, r * 0.08);
+    bands.bezierCurveTo(-r * 0.3, r * 0.15, r * 0.3, r * 0.02, r * 0.9, r * 0.08);
+    bands.lineStyle(Math.max(0.5, s * 0.035), 0xba8838, 0.3);
+    bands.moveTo(-r * 0.85, r * 0.4);
+    bands.bezierCurveTo(-r * 0.2, r * 0.48, r * 0.2, r * 0.35, r * 0.85, r * 0.42);
+
+    // Clip bands to disk
+    const bandContainer = new PIXI.Container();
+    bandContainer.addChild(bands);
+    bandContainer.mask = (() => {
+      const m = new PIXI.Graphics();
+      m.beginFill(0xffffff);
+      m.drawCircle(0, 0, r * 0.95);
+      m.endFill();
+      return m;
+    })();
+    bandContainer.addChild(bandContainer.mask);
+
+    // Rings — the iconic feature
+    const rings = new PIXI.Graphics();
+    // Outer ring (A ring) — brighter
+    rings.lineStyle(Math.max(1.0, s * 0.055), 0xd8c490, 0.55);
+    rings.drawEllipse(0, 0, s * 0.6, s * 0.18);
+    // Middle ring (B ring) — brightest, widest
+    rings.lineStyle(Math.max(1.4, s * 0.07), 0xe8d8a8, 0.65);
+    rings.drawEllipse(0, 0, s * 0.52, s * 0.15);
+    // Inner ring (C ring) — faint
+    rings.lineStyle(Math.max(0.6, s * 0.035), 0xc0a870, 0.3);
+    rings.drawEllipse(0, 0, s * 0.44, s * 0.12);
+    // Cassini Division hint — dark gap
+    rings.lineStyle(Math.max(0.5, s * 0.03), 0x000000, 0.2);
+    rings.drawEllipse(0, 0, s * 0.48, s * 0.14);
+
+    c.addChild(rings, disk, bandContainer);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeSaturnianMoonIconGlyph(moonId, sizePx = SATURNIAN_MOON_ICON_SCREEN_PX) {
+    const s = Math.max(7, Number(sizePx) || SATURNIAN_MOON_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const id = String(moonId || "").toUpperCase();
+    const paletteByMoon = {
+      MIMAS:     { base: 0xc8c0b8, stroke: 0xe0d8d0, accentA: 0x686060, accentB: 0x989088, accentC: 0x504848 },
+      ENCELADUS: { base: 0xf0ece8, stroke: 0xfcf8f4, accentA: 0x88c8d8, accentB: 0xa0e0f0, accentC: 0x6898a8 },
+      TETHYS:    { base: 0xd8d0c8, stroke: 0xece4dc, accentA: 0x807870, accentB: 0xa09888, accentC: 0x585048 },
+      DIONE:     { base: 0xc8c4bc, stroke: 0xe0dcd4, accentA: 0x8a8278, accentB: 0xb0a898, accentC: 0x585048 },
+      RHEA:      { base: 0xd0c8c0, stroke: 0xe8e0d8, accentA: 0x787068, accentB: 0xa09890, accentC: 0x504840 },
+      TITAN:     { base: 0xd4a040, stroke: 0xe8c060, accentA: 0xb07820, accentB: 0xc89830, accentC: 0x906018 },
+      IAPETUS:   { base: 0xa89880, stroke: 0xc0b098, accentA: 0x382820, accentB: 0xf0e8d8, accentC: 0x504030 },
+    };
+    const palette = paletteByMoon[id] || paletteByMoon.RHEA;
+
+    const c = new PIXI.Container();
+
+    const disk = new PIXI.Graphics();
+    disk.beginFill(palette.base, 0.96);
+    disk.lineStyle(Math.max(0.75, s * 0.07), palette.stroke, 0.86);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    if (id === "MIMAS") {
+      // Giant Herschel crater — "Death Star" look
+      const herschel = new PIXI.Graphics();
+      herschel.lineStyle(Math.max(0.6, s * 0.055), palette.accentA, 0.7);
+      herschel.drawCircle(s * 0.12, -s * 0.05, Math.max(1.2, s * 0.14));
+      herschel.beginFill(palette.accentC, 0.5);
+      herschel.drawCircle(s * 0.12, -s * 0.05, Math.max(0.8, s * 0.09));
+      herschel.endFill();
+      // Central peak
+      const peak = new PIXI.Graphics();
+      peak.beginFill(palette.accentB, 0.6);
+      peak.drawCircle(s * 0.12, -s * 0.05, Math.max(0.4, s * 0.035));
+      peak.endFill();
+      c.addChild(disk, herschel, peak);
+    } else if (id === "ENCELADUS") {
+      // Bright icy surface with blueish "tiger stripes" (cryovolcanic fissures)
+      const stripes = new PIXI.Graphics();
+      stripes.lineStyle(Math.max(0.45, s * 0.04), palette.accentA, 0.65);
+      stripes.moveTo(-s * 0.08, s * 0.18);
+      stripes.lineTo(-s * 0.22, s * 0.35);
+      stripes.moveTo(s * 0.02, s * 0.16);
+      stripes.lineTo(-s * 0.08, s * 0.38);
+      stripes.moveTo(s * 0.12, s * 0.18);
+      stripes.lineTo(s * 0.06, s * 0.36);
+      stripes.lineStyle(Math.max(0.4, s * 0.035), palette.accentB, 0.45);
+      stripes.moveTo(-s * 0.15, s * 0.22);
+      stripes.lineTo(-s * 0.28, s * 0.38);
+      // Plume hint at south pole
+      const plume = new PIXI.Graphics();
+      plume.beginFill(palette.accentC, 0.25);
+      plume.drawEllipse(0, s * 0.42, Math.max(1, s * 0.08), Math.max(0.5, s * 0.04));
+      plume.endFill();
+      c.addChild(disk, stripes, plume);
+    } else if (id === "TETHYS") {
+      // Huge Odysseus crater + Ithaca Chasma rift
+      const odysseus = new PIXI.Graphics();
+      odysseus.lineStyle(Math.max(0.55, s * 0.05), palette.accentA, 0.6);
+      odysseus.drawCircle(-s * 0.1, -s * 0.08, Math.max(1, s * 0.12));
+      odysseus.beginFill(palette.accentC, 0.35);
+      odysseus.drawCircle(-s * 0.1, -s * 0.08, Math.max(0.7, s * 0.08));
+      odysseus.endFill();
+      // Ithaca Chasma — long rift valley
+      const rift = new PIXI.Graphics();
+      rift.lineStyle(Math.max(0.5, s * 0.045), palette.accentB, 0.55);
+      rift.moveTo(s * 0.08, -s * 0.32);
+      rift.lineTo(s * 0.12, s * 0.02);
+      rift.lineTo(s * 0.06, s * 0.28);
+      c.addChild(disk, odysseus, rift);
+    } else if (id === "DIONE") {
+      // Wispy terrain (bright ice cliffs on trailing hemisphere)
+      const wisps = new PIXI.Graphics();
+      wisps.lineStyle(Math.max(0.4, s * 0.038), 0xe0d8c8, 0.55);
+      wisps.moveTo(s * 0.1, -s * 0.2);
+      wisps.bezierCurveTo(s * 0.2, -s * 0.1, s * 0.22, s * 0.05, s * 0.15, s * 0.18);
+      wisps.lineStyle(Math.max(0.35, s * 0.032), 0xd8d0c0, 0.45);
+      wisps.moveTo(s * 0.18, -s * 0.12);
+      wisps.bezierCurveTo(s * 0.28, 0, s * 0.25, s * 0.12, s * 0.2, s * 0.22);
+      // Craters
+      const craterA = new PIXI.Graphics();
+      craterA.beginFill(palette.accentA, 0.5);
+      craterA.drawCircle(-s * 0.16, -s * 0.08, Math.max(0.6, s * 0.065));
+      craterA.endFill();
+      c.addChild(disk, wisps, craterA);
+    } else if (id === "RHEA") {
+      // Heavily cratered icy surface
+      const craterA = new PIXI.Graphics();
+      craterA.beginFill(palette.accentA, 0.6);
+      craterA.drawCircle(-s * 0.16, -s * 0.1, Math.max(0.7, s * 0.075));
+      craterA.endFill();
+      const craterB = new PIXI.Graphics();
+      craterB.beginFill(palette.accentB, 0.5);
+      craterB.drawCircle(s * 0.12, s * 0.14, Math.max(0.6, s * 0.065));
+      craterB.endFill();
+      const craterC = new PIXI.Graphics();
+      craterC.beginFill(palette.accentC, 0.55);
+      craterC.drawCircle(s * 0.18, -s * 0.12, Math.max(0.5, s * 0.055));
+      craterC.endFill();
+      // Subtle wispy streaks
+      const streaks = new PIXI.Graphics();
+      streaks.lineStyle(Math.max(0.35, s * 0.03), 0xe8e0d8, 0.35);
+      streaks.moveTo(-s * 0.1, s * 0.05);
+      streaks.lineTo(s * 0.2, s * 0.02);
+      c.addChild(disk, craterA, craterB, craterC, streaks);
+    } else if (id === "TITAN") {
+      // Thick orange haze atmosphere — no surface detail visible
+      const haze = new PIXI.Graphics();
+      haze.beginFill(palette.accentA, 0.5);
+      haze.drawCircle(0, 0, r * 0.85);
+      haze.endFill();
+      // Atmospheric banding
+      const atmo = new PIXI.Graphics();
+      atmo.lineStyle(Math.max(0.7, s * 0.055), palette.accentB, 0.42);
+      atmo.moveTo(-r * 0.85, -r * 0.25);
+      atmo.bezierCurveTo(-r * 0.3, -r * 0.35, r * 0.3, -r * 0.15, r * 0.85, -r * 0.25);
+      atmo.lineStyle(Math.max(0.6, s * 0.05), palette.accentC, 0.35);
+      atmo.moveTo(-r * 0.8, r * 0.3);
+      atmo.bezierCurveTo(-r * 0.2, r * 0.38, r * 0.2, r * 0.22, r * 0.8, r * 0.3);
+      // Outer atmospheric glow
+      const glow = new PIXI.Graphics();
+      glow.lineStyle(Math.max(0.8, s * 0.06), 0xe8b830, 0.2);
+      glow.drawCircle(0, 0, r * 1.08);
+      c.addChild(disk, haze, atmo, glow);
+    } else if (id === "IAPETUS") {
+      // Two-toned: dark leading hemisphere, bright trailing hemisphere
+      // Dark hemisphere (left side)
+      const darkSide = new PIXI.Graphics();
+      darkSide.beginFill(palette.accentA, 0.75);
+      darkSide.arc(0, 0, r * 0.9, Math.PI * 0.5, Math.PI * 1.5);
+      darkSide.endFill();
+      // Bright hemisphere (right side)
+      const brightSide = new PIXI.Graphics();
+      brightSide.beginFill(palette.accentB, 0.35);
+      brightSide.arc(0, 0, r * 0.9, -Math.PI * 0.5, Math.PI * 0.5);
+      brightSide.endFill();
+      // Equatorial ridge hint
+      const ridge = new PIXI.Graphics();
+      ridge.lineStyle(Math.max(0.4, s * 0.035), palette.accentC, 0.5);
+      ridge.moveTo(-r * 0.8, 0);
+      ridge.lineTo(r * 0.8, 0);
+      c.addChild(disk, darkSide, brightSide, ridge);
+    } else {
+      // Fallback: generic icy moon
+      const craterA = new PIXI.Graphics();
+      craterA.beginFill(palette.accentA, 0.55);
+      craterA.drawCircle(-s * 0.15, -s * 0.1, Math.max(0.6, s * 0.065));
+      craterA.endFill();
+      const craterB = new PIXI.Graphics();
+      craterB.beginFill(palette.accentB, 0.5);
+      craterB.drawCircle(s * 0.1, s * 0.15, Math.max(0.55, s * 0.06));
+      craterB.endFill();
+      c.addChild(disk, craterA, craterB);
+    }
+
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  /* ========== Asteroid belt body glyphs ========== */
+
+  function makeCeresIconGlyph(sizePx = BELT_ICON_SCREEN_PX) {
+    const s = Math.max(8, Number(sizePx) || BELT_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — grey-brown, dwarf planet
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0x7e7568, 0.96);
+    disk.lineStyle(Math.max(0.7, s * 0.06), 0xa09888, 0.78);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Occator crater bright spots — the famous bright deposits
+    const brightSpot = new PIXI.Graphics();
+    brightSpot.beginFill(0xf0ece4, 0.88);
+    brightSpot.drawCircle(s * 0.08, -s * 0.06, Math.max(0.6, s * 0.055));
+    brightSpot.endFill();
+    const brightSpot2 = new PIXI.Graphics();
+    brightSpot2.beginFill(0xe8e0d4, 0.65);
+    brightSpot2.drawCircle(s * 0.14, -s * 0.04, Math.max(0.4, s * 0.035));
+    brightSpot2.endFill();
+
+    // Subtle craters
+    const craterA = new PIXI.Graphics();
+    craterA.beginFill(0x5e574c, 0.5);
+    craterA.drawCircle(-s * 0.16, s * 0.1, Math.max(0.6, s * 0.06));
+    craterA.endFill();
+    const craterB = new PIXI.Graphics();
+    craterB.beginFill(0x686058, 0.45);
+    craterB.drawCircle(-s * 0.04, s * 0.18, Math.max(0.5, s * 0.05));
+    craterB.endFill();
+
+    // Surface variation — slight color patches
+    const patch = new PIXI.Graphics();
+    patch.beginFill(0x8a8070, 0.35);
+    patch.drawCircle(s * 0.14, s * 0.14, Math.max(0.8, s * 0.08));
+    patch.endFill();
+
+    c.addChild(disk, patch, craterA, craterB, brightSpot, brightSpot2);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeVestaIconGlyph(sizePx = BELT_ICON_SCREEN_PX) {
+    const s = Math.max(8, Number(sizePx) || BELT_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — lighter grey, high albedo for an asteroid
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0x9a9088, 0.96);
+    disk.lineStyle(Math.max(0.7, s * 0.06), 0xb8aea4, 0.78);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Rheasilvia impact basin — huge south-pole crater
+    const basin = new PIXI.Graphics();
+    basin.lineStyle(Math.max(0.55, s * 0.045), 0x6e6660, 0.6);
+    basin.arc(0, s * 0.08, r * 0.7, Math.PI * 0.15, Math.PI * 0.85);
+    basin.beginFill(0x7a7268, 0.4);
+    basin.drawCircle(0, s * 0.16, Math.max(1, s * 0.1));
+    basin.endFill();
+
+    // Central peak of Rheasilvia
+    const peak = new PIXI.Graphics();
+    peak.beginFill(0xc0b4a8, 0.6);
+    peak.drawCircle(0, s * 0.12, Math.max(0.5, s * 0.04));
+    peak.endFill();
+
+    // Dark terrain patches (eucrite/diogenite contrast)
+    const darkPatch = new PIXI.Graphics();
+    darkPatch.beginFill(0x5c5650, 0.45);
+    darkPatch.drawCircle(-s * 0.12, -s * 0.12, Math.max(0.7, s * 0.07));
+    darkPatch.endFill();
+
+    // Bright ejecta streaks
+    const streaks = new PIXI.Graphics();
+    streaks.lineStyle(Math.max(0.35, s * 0.03), 0xc8beb4, 0.35);
+    streaks.moveTo(s * 0.04, s * 0.1);
+    streaks.lineTo(s * 0.22, -s * 0.14);
+    streaks.moveTo(-s * 0.02, s * 0.12);
+    streaks.lineTo(-s * 0.2, -s * 0.08);
+
+    c.addChild(disk, basin, peak, darkPatch, streaks);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makePallasIconGlyph(sizePx = BELT_ICON_SCREEN_PX) {
+    const s = Math.max(8, Number(sizePx) || BELT_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — dark grey, low albedo B-type asteroid
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0x62594e, 0.96);
+    disk.lineStyle(Math.max(0.7, s * 0.06), 0x807468, 0.75);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Large impact crater
+    const craterMain = new PIXI.Graphics();
+    craterMain.lineStyle(Math.max(0.5, s * 0.045), 0x4a4238, 0.6);
+    craterMain.drawCircle(-s * 0.08, -s * 0.05, Math.max(1, s * 0.1));
+    craterMain.beginFill(0x524a40, 0.4);
+    craterMain.drawCircle(-s * 0.08, -s * 0.05, Math.max(0.7, s * 0.07));
+    craterMain.endFill();
+
+    // Smaller craters
+    const craterB = new PIXI.Graphics();
+    craterB.beginFill(0x4e463c, 0.5);
+    craterB.drawCircle(s * 0.16, s * 0.08, Math.max(0.55, s * 0.055));
+    craterB.endFill();
+    const craterC = new PIXI.Graphics();
+    craterC.beginFill(0x564e44, 0.45);
+    craterC.drawCircle(s * 0.06, s * 0.18, Math.max(0.45, s * 0.04));
+    craterC.endFill();
+
+    // Subtle ridge
+    const ridge = new PIXI.Graphics();
+    ridge.lineStyle(Math.max(0.4, s * 0.035), 0x8a7e72, 0.4);
+    ridge.moveTo(-s * 0.3, s * 0.16);
+    ridge.lineTo(-s * 0.08, s * 0.08);
+    ridge.lineTo(s * 0.18, s * 0.2);
+
+    c.addChild(disk, craterMain, craterB, craterC, ridge);
+    c.__baseSizePx = s;
+    return c;
+  }
+
+  function makeHygieaIconGlyph(sizePx = BELT_ICON_SCREEN_PX) {
+    const s = Math.max(8, Number(sizePx) || BELT_ICON_SCREEN_PX);
+    const r = s * 0.5;
+    const c = new PIXI.Container();
+
+    // Base disk — very dark, C-type carbonaceous asteroid, lowest albedo
+    const disk = new PIXI.Graphics();
+    disk.beginFill(0x484240, 0.96);
+    disk.lineStyle(Math.max(0.7, s * 0.06), 0x68605a, 0.72);
+    disk.drawCircle(0, 0, r);
+    disk.endFill();
+
+    // Subtle surface variation — very muted
+    const patchA = new PIXI.Graphics();
+    patchA.beginFill(0x544e4a, 0.4);
+    patchA.drawCircle(-s * 0.1, -s * 0.08, Math.max(0.8, s * 0.08));
+    patchA.endFill();
+    const patchB = new PIXI.Graphics();
+    patchB.beginFill(0x3e3836, 0.45);
+    patchB.drawCircle(s * 0.12, s * 0.1, Math.max(0.7, s * 0.07));
+    patchB.endFill();
+
+    // Large subtle depression
+    const basin = new PIXI.Graphics();
+    basin.lineStyle(Math.max(0.45, s * 0.04), 0x3a3432, 0.5);
+    basin.drawCircle(s * 0.02, -s * 0.04, Math.max(1, s * 0.11));
+
+    // Faint crater
+    const crater = new PIXI.Graphics();
+    crater.beginFill(0x3c3634, 0.5);
+    crater.drawCircle(-s * 0.18, s * 0.12, Math.max(0.5, s * 0.05));
+    crater.endFill();
+
+    c.addChild(disk, patchA, patchB, basin, crater);
     c.__baseSizePx = s;
     return c;
   }
@@ -3676,7 +4350,31 @@
       }
     }
 
-    // Non-interplanetary or Earth-Moon: use existing orbital Bézier
+    // ── Intra-system Hohmann arc (moon-to-moon or planet-orbit-to-moon) ──
+    // When both endpoints are within the same planetary system but orbit
+    // different sub-bodies (e.g. Mimas → Iapetus within Saturn), render a
+    // Hohmann arc around the planet center instead of a nearly-straight Bézier.
+    {
+      const fromBody = getLocationBodyCenter(fromLocId);
+      const toBody = getLocationBodyCenter(toLocId);
+      if (fromBody && toBody && fromBody.id !== toBody.id) {
+        const fromSolarGrp = getLocationSolarGroup(fromLocId);
+        const toSolarGrp = getLocationSolarGroup(toLocId);
+        if (fromSolarGrp && toSolarGrp && fromSolarGrp === toSolarGrp) {
+          const planetCenter = locationsById.get(fromSolarGrp);
+          if (planetCenter) {
+            const arc = computeHohmannArc(planetCenter.rx, planetCenter.ry, p0.x, p0.y, p3.x, p3.y);
+            arc.trackStartId = fromSolarGrp;
+            arc.trackStartOrig = { x: planetCenter.rx, y: planetCenter.ry };
+            arc.trackEndId = fromSolarGrp;
+            arc.trackEndOrig = { x: planetCenter.rx, y: planetCenter.ry };
+            return arc;
+          }
+        }
+      }
+    }
+
+    // Non-interplanetary same-body: use existing orbital Bézier
     const dx = p3.x - p0.x;
     const dy = p3.y - p0.y;
     const d = Math.max(1e-6, Math.hypot(dx, dy));
@@ -4034,6 +4732,7 @@
   let pallasGfx = null;
   let hygieaGfx = null;
   let jupiterGfx = null;
+  let saturnGfx = null;
   const mainPlanetGfx = [];
   let hoveredBodyId = null;
   let moonDetailAlpha = 1;
@@ -4047,18 +4746,46 @@
     const glyph = new PIXI.Container();
 
     const half = Math.max(2.8, radiusWorld);
-    if (String(name).toLowerCase() === "sun") {
+    const lname = String(name).toLowerCase();
+
+    // Planet-icon glyph dispatch table
+    const PLANET_GLYPH_MAP = {
+      mercury:  () => makeMercuryIconGlyph(PLANET_ICON_SCREEN_PX),
+      venus:    () => makeVenusIconGlyph(PLANET_ICON_SCREEN_PX),
+      earth:    () => makeEarthIconGlyph(PLANET_ICON_SCREEN_PX),
+      mars:     () => makeMarsIconGlyph(PLANET_ICON_SCREEN_PX),
+      jupiter:  () => makeJupiterIconGlyph(PLANET_ICON_SCREEN_PX + 4),
+      saturn:   () => makeSaturnIconGlyph(PLANET_ICON_SCREEN_PX + 6),
+    };
+    const BELT_GLYPH_MAP = {
+      ceres:    () => makeCeresIconGlyph(BELT_ICON_SCREEN_PX),
+      vesta:    () => makeVestaIconGlyph(BELT_ICON_SCREEN_PX),
+      pallas:   () => makePallasIconGlyph(BELT_ICON_SCREEN_PX),
+      hygiea:   () => makeHygieaIconGlyph(BELT_ICON_SCREEN_PX),
+    };
+
+    if (lname === "sun") {
       const sunBurst = makeSunGlyph(SUN_ICON_SCREEN_PX);
       sunBurst.__isSunIcon = true;
       glyph.addChild(sunBurst);
       c.__isSunIcon = true;
       c.__sunBaseSizePx = sunBurst.__baseSizePx || SUN_ICON_SCREEN_PX;
-    } else if (["moon", "luna"].includes(String(name).toLowerCase())) {
+    } else if (["moon", "luna"].includes(lname)) {
       const moonGlyph = makeMoonIconGlyph(MOON_ICON_SCREEN_PX);
       moonGlyph.__isMoonIcon = true;
       glyph.addChild(moonGlyph);
       c.__isMoonIcon = true;
       c.__moonBaseSizePx = moonGlyph.__baseSizePx || MOON_ICON_SCREEN_PX;
+    } else if (PLANET_GLYPH_MAP[lname]) {
+      const planetGlyph = PLANET_GLYPH_MAP[lname]();
+      glyph.addChild(planetGlyph);
+      c.__isPlanetIcon = true;
+      c.__planetBaseSizePx = planetGlyph.__baseSizePx || PLANET_ICON_SCREEN_PX;
+    } else if (BELT_GLYPH_MAP[lname]) {
+      const beltGlyph = BELT_GLYPH_MAP[lname]();
+      glyph.addChild(beltGlyph);
+      c.__isPlanetIcon = true;
+      c.__planetBaseSizePx = beltGlyph.__baseSizePx || BELT_ICON_SCREEN_PX;
     } else {
       const diamond = new PIXI.Graphics();
       diamond.lineStyle(1.2, 0xffffff, 0.72);
@@ -4132,6 +4859,7 @@
     pallasGfx = makePlanet("Pallas", 3.5, 0x7a6e62, 0x908478);
     hygieaGfx = makePlanet("Hygiea", 3.4, 0x5c5550, 0x706860);
     jupiterGfx = makePlanet("Jupiter", 5.2, 0xc88b3a, 0xd4a860);
+    saturnGfx = makePlanet("Saturn", 5.0, 0xe4c87a, 0xf0dca0);
 
     bindBodyHover(sunGfx, "grp_sun");
     bindBodyHover(mercuryGfx, "grp_mercury");
@@ -4144,9 +4872,10 @@
     bindBodyHover(pallasGfx, "grp_pallas");
     bindBodyHover(hygieaGfx, "grp_hygiea");
     bindBodyHover(jupiterGfx, "grp_jupiter");
+    bindBodyHover(saturnGfx, "grp_saturn");
 
-    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx);
-    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx);
+    mainPlanetGfx.push(sunGfx, mercuryGfx, venusGfx, earthGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx, saturnGfx);
+    planetLayer.addChild(sunGfx, mercuryGfx, venusGfx, earthGfx, moonGfx, marsGfx, ceresGfx, vestaGfx, pallasGfx, hygieaGfx, jupiterGfx, saturnGfx);
   }
 
   function updatePlanetVisualScale() {
@@ -4157,12 +4886,22 @@
     for (const planet of mainPlanetGfx) {
       if (!planet) continue;
       if (planet.__isSunIcon) continue;
+
       const isHovered = hoveredBodyId && planet.__bodyId === hoveredBodyId;
       const hoverMul = isHovered ? BODY_HOVER_SCALE_MULT : 1;
-      if (planet.__glyph) {
+
+      if (planet.__isPlanetIcon && planet.__glyph) {
+        // Screen-locked icon scaling (same approach as Sun / Moon icons)
+        const base = Math.max(8, Number(planet.__planetBaseSizePx) || PLANET_ICON_SCREEN_PX);
+        const targetPx = base;
+        const lockedScale = (targetPx / base) / zoom;
+        planet.__glyph.scale.set(lockedScale * hoverMul);
+        planet.__glyph.alpha = isHovered ? 1 : BODY_BASE_GLYPH_ALPHA;
+      } else if (planet.__glyph) {
         planet.__glyph.scale.set(iconLockedToScreen * hoverMul);
         planet.__glyph.alpha = isHovered ? 1 : BODY_BASE_GLYPH_ALPHA;
       }
+
       if (planet.__label) {
         planet.__label.scale.set(labelLockedToScreen * hoverMul);
         planet.__label.alpha = isHovered ? 1 : BODY_BASE_LABEL_ALPHA;
@@ -4212,6 +4951,7 @@
     const pallas = locationsById.get("grp_pallas");
     const hygiea = locationsById.get("grp_hygiea");
     const jupiter = locationsById.get("grp_jupiter");
+    const saturn = locationsById.get("grp_saturn");
     if (!sun || !mercury || !venus || !earth || !moon || !mars) return;
     if (!sunGfx || !mercuryGfx || !venusGfx || !earthGfx || !moonGfx || !marsGfx) return;
 
@@ -4226,6 +4966,7 @@
     if (pallas && pallasGfx) pallasGfx.position.set(pallas.rx, pallas.ry);
     if (hygiea && hygieaGfx) hygieaGfx.position.set(hygiea.rx, hygiea.ry);
     if (jupiter && jupiterGfx) jupiterGfx.position.set(jupiter.rx, jupiter.ry);
+    if (saturn && saturnGfx) saturnGfx.position.set(saturn.rx, saturn.ry);
   }
 
   // ---------- Orbit hover labels ----------
@@ -4279,19 +5020,49 @@
       { id: "PALLAS_HO", center: "grp_pallas", period_s: 450 },
       { id: "HYGIEA_LO", center: "grp_hygiea", period_s: 410 },
       { id: "HYGIEA_HO", center: "grp_hygiea", period_s: 470 },
+      { id: "PSYCHE_LO", center: "grp_psyche", period_s: 380 },
+      { id: "PSYCHE_HO", center: "grp_psyche", period_s: 440 },
+      { id: "LUTETIA_LO", center: "grp_lutetia", period_s: 370 },
+      { id: "LUTETIA_HO", center: "grp_lutetia", period_s: 430 },
+      { id: "KALLIOPE_LO", center: "grp_kalliope", period_s: 380 },
+      { id: "KALLIOPE_HO", center: "grp_kalliope", period_s: 440 },
+      { id: "HESPERIA_LO", center: "grp_hesperia", period_s: 390 },
+      { id: "HESPERIA_HO", center: "grp_hesperia", period_s: 450 },
+      { id: "UNDINA_LO", center: "grp_undina", period_s: 400 },
+      { id: "UNDINA_HO", center: "grp_undina", period_s: 460 },
+      { id: "ANTIGONE_LO", center: "grp_antigone", period_s: 380 },
+      { id: "ANTIGONE_HO", center: "grp_antigone", period_s: 440 },
+      { id: "KLEOPATRA_LO", center: "grp_kleopatra", period_s: 370 },
+      { id: "KLEOPATRA_HO", center: "grp_kleopatra", period_s: 430 },
       { id: "PHOBOS_LO", center: "PHOBOS", period_s: 120 },
       { id: "DEIMOS_LO", center: "DEIMOS", period_s: 140 },
       { id: "ZOOZVE_LO", center: "ZOOZVE", period_s: 100 },
       { id: "JUP_LO", center: "grp_jupiter", period_s: 500 },
       { id: "JUP_HO", center: "grp_jupiter", period_s: 600 },
-      { id: "IO_LO", center: "IO", period_s: 160 },
-      { id: "IO_HO", center: "IO", period_s: 200 },
-      { id: "EUROPA_LO", center: "EUROPA", period_s: 180 },
-      { id: "EUROPA_HO", center: "EUROPA", period_s: 220 },
-      { id: "GANYMEDE_LO", center: "GANYMEDE", period_s: 200 },
-      { id: "GANYMEDE_HO", center: "GANYMEDE", period_s: 240 },
-      { id: "CALLISTO_LO", center: "CALLISTO", period_s: 220 },
-      { id: "CALLISTO_HO", center: "CALLISTO", period_s: 260 },
+      { id: "IO_LO", center: "IO", period_s: 160, radius_km: 2000, scale: IO_ORBIT_SCALE },
+      { id: "IO_HO", center: "IO", period_s: 200, radius_km: 5000, scale: IO_ORBIT_SCALE },
+      { id: "EUROPA_LO", center: "EUROPA", period_s: 180, radius_km: 1700, scale: EUROPA_ORBIT_SCALE },
+      { id: "EUROPA_HO", center: "EUROPA", period_s: 220, radius_km: 5000, scale: EUROPA_ORBIT_SCALE },
+      { id: "GANYMEDE_LO", center: "GANYMEDE", period_s: 200, radius_km: 2800, scale: GANYMEDE_ORBIT_SCALE },
+      { id: "GANYMEDE_HO", center: "GANYMEDE", period_s: 240, radius_km: 8000, scale: GANYMEDE_ORBIT_SCALE },
+      { id: "CALLISTO_LO", center: "CALLISTO", period_s: 220, radius_km: 2600, scale: CALLISTO_ORBIT_SCALE },
+      { id: "CALLISTO_HO", center: "CALLISTO", period_s: 260, radius_km: 8000, scale: CALLISTO_ORBIT_SCALE },
+      { id: "SAT_LO", center: "grp_saturn", period_s: 540 },
+      { id: "SAT_HO", center: "grp_saturn", period_s: 640 },
+      { id: "MIMAS_LO", center: "MIMAS", period_s: 140, radius_km: 300, scale: MIMAS_ORBIT_SCALE },
+      { id: "MIMAS_HO", center: "MIMAS", period_s: 180, radius_km: 800, scale: MIMAS_ORBIT_SCALE },
+      { id: "ENCELADUS_LO", center: "ENCELADUS", period_s: 160, radius_km: 350, scale: ENCELADUS_ORBIT_SCALE },
+      { id: "ENCELADUS_HO", center: "ENCELADUS", period_s: 200, radius_km: 1000, scale: ENCELADUS_ORBIT_SCALE },
+      { id: "TETHYS_LO", center: "TETHYS", period_s: 180, radius_km: 650, scale: TETHYS_ORBIT_SCALE },
+      { id: "TETHYS_HO", center: "TETHYS", period_s: 220, radius_km: 2000, scale: TETHYS_ORBIT_SCALE },
+      { id: "DIONE_LO", center: "DIONE", period_s: 200, radius_km: 700, scale: DIONE_ORBIT_SCALE },
+      { id: "DIONE_HO", center: "DIONE", period_s: 240, radius_km: 2000, scale: DIONE_ORBIT_SCALE },
+      { id: "RHEA_LO", center: "RHEA", period_s: 220, radius_km: 900, scale: RHEA_ORBIT_SCALE },
+      { id: "RHEA_HO", center: "RHEA", period_s: 260, radius_km: 3000, scale: RHEA_ORBIT_SCALE },
+      { id: "TITAN_LO", center: "TITAN", period_s: 240, radius_km: 2800, scale: TITAN_ORBIT_SCALE },
+      { id: "TITAN_HO", center: "TITAN", period_s: 280, radius_km: 8000, scale: TITAN_ORBIT_SCALE },
+      { id: "IAPETUS_LO", center: "IAPETUS", period_s: 260, radius_km: 900, scale: IAPETUS_ORBIT_SCALE },
+      { id: "IAPETUS_HO", center: "IAPETUS", period_s: 300, radius_km: 3000, scale: IAPETUS_ORBIT_SCALE },
       { id: "HEKTOR_LO", center: "HEKTOR", period_s: 120 },
       { id: "AGAMEMNON_LO", center: "AGAMEMNON", period_s: 120 },
       { id: "ACHILLES_LO", center: "ACHILLES", period_s: 120 },
@@ -4309,10 +5080,24 @@
       const ctr = locationsById.get(od.center);
       if (!loc || !ctr) continue;
 
-      const dx = loc.rx - ctr.rx;
-      const dy = loc.ry - ctr.ry;
-      const r = Math.hypot(dx, dy);
-      const baseAngle = Math.atan2(dy, dx);
+      // Use fixed radius from config (radius_km * scale) when available.
+      // This prevents orbit rings from wobbling when their center body
+      // is itself in motion (e.g. moon orbits around moons of Saturn/Jupiter).
+      // For orbits without fixed radii, compute from the lerp TARGET positions
+      // so the radius matches where things will be, not where they start.
+      let r;
+      if (od.radius_km != null && od.scale != null) {
+        r = od.radius_km * od.scale;
+      } else {
+        const locTarget = locLerp.get(od.id);
+        const ctrTarget = locLerp.get(od.center);
+        const lx = locTarget ? locTarget.toRx : loc.rx;
+        const ly = locTarget ? locTarget.toRy : loc.ry;
+        const cx = ctrTarget ? ctrTarget.toRx : ctr.rx;
+        const cy = ctrTarget ? ctrTarget.toRy : ctr.ry;
+        r = Math.hypot(lx - cx, ly - cy);
+      }
+      const baseAngle = Math.atan2(loc.ry - ctr.ry, loc.rx - ctr.rx);
 
       orbitInfo.set(od.id, {
         cx: ctr.rx,
@@ -4327,7 +5112,7 @@
   }
 
   // Orbit IDs that should remain visible at solar-system zoom levels
-  const SOLAR_SCALE_ORBIT_IDS = new Set(["JUP_HO"]);
+  const SOLAR_SCALE_ORBIT_IDS = new Set(["JUP_HO", "SAT_HO"]);
 
   function renderOrbitRings() {
     // Detect zoom changes and mark dirty
@@ -4342,6 +5127,91 @@
     orbitLayer.clear();
     if (orbitDetailAlpha <= 0.001 && mainOrbitDetailAlpha <= 0.001) return;
 
+    // High-quality circle: PixiJS drawCircle uses adaptive segments which
+    // can produce visible polygons for small world-unit radii. This helper
+    // draws circles as 128-segment polygons for guaranteed smoothness.
+    const CIRCLE_SEGS = 128;
+    const CIRCLE_STEP = (Math.PI * 2) / CIRCLE_SEGS;
+    function smoothCircle(cx, cy, radius) {
+      orbitLayer.moveTo(cx + radius, cy);
+      for (let i = 1; i <= CIRCLE_SEGS; i++) {
+        const a = i * CIRCLE_STEP;
+        orbitLayer.lineTo(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+      }
+      orbitLayer.closePath();
+    }
+
+    // Elliptical orbit ring: draws an ellipse centered at (cx, cy) with
+    // semi-major axis a, semi-minor axis b, rotated by angle (radians).
+    // The center of the ellipse is NOT the focus (Sun/planet); the caller
+    // must offset cx/cy from the focus by a*e along the apoapsis direction.
+    function smoothEllipse(cx, cy, a, b, rotation) {
+      const cosR = Math.cos(rotation);
+      const sinR = Math.sin(rotation);
+      orbitLayer.moveTo(cx + cosR * a, cy + sinR * a);
+      for (let i = 1; i <= CIRCLE_SEGS; i++) {
+        const theta = i * CIRCLE_STEP;
+        const ex = a * Math.cos(theta);
+        const ey = b * Math.sin(theta);
+        orbitLayer.lineTo(
+          cx + cosR * ex - sinR * ey,
+          cy + sinR * ex + cosR * ey
+        );
+      }
+      orbitLayer.closePath();
+    }
+
+    /**
+     * Draw an orbit ring for a body, using an ellipse if orbital elements are
+     * available, otherwise falling back to a circle at the current distance.
+     *
+     * @param {string} groupId    - body group id (e.g. "grp_mercury")
+     * @param {number} focusX     - world x of the parent body (focus of ellipse)
+     * @param {number} focusY     - world y of the parent body
+     * @param {number} worldScale - km-to-world conversion factor
+     */
+    function drawBodyOrbitRing(groupId, focusX, focusY, worldScale) {
+      const orb = bodyOrbits[groupId];
+      if (orb && orb.e >= 0.005) {
+        const aWorld = orb.a_km * worldScale;
+        const bWorld = orb.b_km * worldScale;
+        const angle = orb.periapsis_angle_rad;
+        // Ellipse center is offset from focus (Sun/planet) AWAY from periapsis
+        // by c = a*e along the major axis.
+        const cWorld = aWorld * orb.e;
+        const ecx = focusX - Math.cos(angle) * cWorld;
+        const ecy = focusY - Math.sin(angle) * cWorld;
+        smoothEllipse(ecx, ecy, aWorld, bWorld, angle);
+      } else {
+        // Fallback: circular ring at current distance
+        const body = locationsById.get(groupId);
+        if (!body) return;
+        const rr = Math.hypot(body.rx - focusX, body.ry - focusY);
+        if (rr > 1e-6) smoothCircle(focusX, focusY, rr);
+      }
+    }
+
+    /**
+     * Draw a moon's orbital path ring around its parent planet.
+     * Uses elliptical rendering when orbital elements are available;
+     * falls back to a circle at the given fixed SMA.
+     */
+    function drawMoonOrbitRing(moonGroupId, parentX, parentY, sma_km, localScale) {
+      const orb = bodyOrbits[moonGroupId];
+      if (orb && orb.e >= 0.005) {
+        const aWorld = orb.a_km * localScale;
+        const bWorld = orb.b_km * localScale;
+        const angle = orb.periapsis_angle_rad;
+        const cWorld = aWorld * orb.e;
+        const ecx = parentX - Math.cos(angle) * cWorld;
+        const ecy = parentY - Math.sin(angle) * cWorld;
+        smoothEllipse(ecx, ecy, aWorld, bWorld, angle);
+      } else {
+        const rr = sma_km * localScale;
+        if (rr > 1e-6) smoothCircle(parentX, parentY, rr);
+      }
+    }
+
     const zoom = Math.max(0.0001, Number(world.scale.x) || 1);
     const deepOrbitShrink = deepZoomShrink(zoom, DEEP_ZOOM_SHRINK_START, 0.45, ORBIT_RING_MIN_PX / ORBIT_RING_BASE_PX);
     const ringScreenPx = Math.max(ORBIT_RING_MIN_PX, ORBIT_RING_BASE_PX * deepOrbitShrink);
@@ -4349,27 +5219,18 @@
 
     const sun = locationsById.get("grp_sun");
     if (sun) {
-      const solarIds = ["grp_mercury", "grp_venus", "grp_earth", "grp_mars", "grp_jupiter"];
+      const solarIds = ["grp_mercury", "grp_venus", "grp_earth", "grp_mars", "grp_jupiter", "grp_saturn"];
       orbitLayer.lineStyle((ringScreenPx * SOLAR_RING_MULT) / zoom, 0xf3d9a6, 0.18 * mainOrbitDetailAlpha);
       for (const pid of solarIds) {
-        const body = locationsById.get(pid);
-        if (!body) continue;
-        const rr = Math.hypot(body.rx - sun.rx, body.ry - sun.ry);
-        if (rr > 1e-6) orbitLayer.drawCircle(sun.rx, sun.ry, rr);
+        drawBodyOrbitRing(pid, sun.rx, sun.ry, HELIO_LINEAR_WORLD_PER_KM);
       }
 
       // Zoozve quasi-satellite orbit ring around the Sun
-      const zoozveBody = locationsById.get("ZOOZVE") || locationsById.get("grp_zoozve");
-      if (zoozveBody) {
-        const rrZ = Math.hypot(zoozveBody.rx - sun.rx, zoozveBody.ry - sun.ry);
-        if (rrZ > 1e-6) {
-          orbitLayer.lineStyle((ringScreenPx * SOLAR_RING_MULT) / zoom, 0xa0a0a0, 0.10 * mainOrbitDetailAlpha);
-          orbitLayer.drawCircle(sun.rx, sun.ry, rrZ);
-        }
-      }
+      orbitLayer.lineStyle((ringScreenPx * SOLAR_RING_MULT) / zoom, 0xa0a0a0, 0.10 * mainOrbitDetailAlpha);
+      drawBodyOrbitRing("grp_zoozve", sun.rx, sun.ry, HELIO_LINEAR_WORLD_PER_KM);
 
       // Asteroid belt dust cloud — wide overlapping bands for a smooth diffuse look
-      const beltBodies = ["grp_vesta", "grp_ceres", "grp_pallas", "grp_hygiea"];
+      const beltBodies = ["grp_vesta", "grp_ceres", "grp_pallas", "grp_hygiea", "grp_psyche", "grp_lutetia", "grp_kalliope", "grp_hesperia", "grp_undina", "grp_antigone", "grp_kleopatra"];
       const beltRadii = beltBodies.map(id => {
         const b = locationsById.get(id);
         return b ? Math.hypot(b.rx - sun.rx, b.ry - sun.ry) : 0;
@@ -4387,7 +5248,7 @@
           const edgeFade = 1 - Math.pow(2 * t - 1, 2);
           const a = beltAlpha * (0.25 + 0.75 * edgeFade);
           orbitLayer.lineStyle(bandWidth, 0x8b4513, a);
-          orbitLayer.drawCircle(sun.rx, sun.ry, r);
+          smoothCircle(sun.rx, sun.ry, r);
         }
         // scatter particles — deterministic positions so they don't flicker
         const scatterCount = 32;
@@ -4417,7 +5278,7 @@
       const a = (isHover ? 0.26 : 0.10) * alpha;
 
       orbitLayer.lineStyle(lw, 0xffffff, a);
-      orbitLayer.drawCircle(oi.cx, oi.cy, oi.radius);
+      smoothCircle(oi.cx, oi.cy, oi.radius);
     }
 
     [
@@ -4436,32 +5297,109 @@
       "EUROPA_LO", "EUROPA_HO",
       "GANYMEDE_LO", "GANYMEDE_HO",
       "CALLISTO_LO", "CALLISTO_HO",
+      "SAT_LO", "SAT_HO",
+      "MIMAS_LO", "MIMAS_HO",
+      "ENCELADUS_LO", "ENCELADUS_HO",
+      "TETHYS_LO", "TETHYS_HO",
+      "DIONE_LO", "DIONE_HO",
+      "RHEA_LO", "RHEA_HO",
+      "TITAN_LO", "TITAN_HO",
+      "IAPETUS_LO", "IAPETUS_HO",
     ].forEach(drawRing);
 
     // Phobos and Deimos orbital path rings around Mars
     const marsGrp = locationsById.get("grp_mars");
     if (marsGrp) {
-      const moonletOrbitIds = ["PHOBOS", "DEIMOS"];
+      const marsMoonSMA_km = { phobos: 9376, deimos: 23463.2 };
+      const msc = MARS_ORBIT_SCALE;
       orbitLayer.lineStyle(baseLW, 0xaaaaaa, 0.12 * orbitDetailAlpha);
-      for (const mid of moonletOrbitIds) {
-        const marker = locationsById.get(mid);
-        if (!marker) continue;
-        const rr = Math.hypot(marker.rx - marsGrp.rx, marker.ry - marsGrp.ry);
-        if (rr > 1e-6) orbitLayer.drawCircle(marsGrp.rx, marsGrp.ry, rr);
+      for (const [mid, sma] of Object.entries(marsMoonSMA_km)) {
+        drawMoonOrbitRing("grp_" + mid, marsGrp.rx, marsGrp.ry, sma, msc);
       }
     }
 
     // Jupiter's Galilean moon orbital path rings
+    // Use fixed semi-major axes (km) so rings don't wobble with orbital motion
     const jupGrp = locationsById.get("grp_jupiter");
     if (jupGrp) {
-      const jupMoonIds = ["IO", "EUROPA", "GANYMEDE", "CALLISTO"];
+      const jupMoonSMA_km = {
+        io:        421_800,
+        europa:    671_100,
+        ganymede: 1_070_400,
+        callisto: 1_882_700,
+      };
+      const jsc = JUPITER_ORBIT_SCALE;
       orbitLayer.lineStyle(baseLW, 0xaaaaaa, 0.12 * orbitDetailAlpha);
-      for (const mid of jupMoonIds) {
-        const marker = locationsById.get(mid);
-        if (!marker) continue;
-        const rr = Math.hypot(marker.rx - jupGrp.rx, marker.ry - jupGrp.ry);
-        if (rr > 1e-6) orbitLayer.drawCircle(jupGrp.rx, jupGrp.ry, rr);
+      for (const [mid, sma] of Object.entries(jupMoonSMA_km)) {
+        drawMoonOrbitRing("grp_" + mid, jupGrp.rx, jupGrp.ry, sma, jsc);
       }
+    }
+
+    // Saturn's major moon orbital path rings
+    // Use fixed semi-major axes (km) so rings don't wobble with orbital motion
+    const satGrp = locationsById.get("grp_saturn");
+    if (satGrp) {
+      const satMoonSMA_km = {
+        mimas:      185_539,
+        enceladus:  238_042,
+        tethys:     294_619,
+        dione:      377_396,
+        rhea:       527_108,
+        titan:    1_221_870,
+        iapetus:  3_560_820,
+      };
+      const ssc = SATURN_ORBIT_SCALE;
+      orbitLayer.lineStyle(baseLW, 0xaaaaaa, 0.12 * orbitDetailAlpha);
+      for (const [mid, sma] of Object.entries(satMoonSMA_km)) {
+        drawMoonOrbitRing("grp_" + mid, satGrp.rx, satGrp.ry, sma, ssc);
+      }
+
+      // --- Saturn's physical ring system (accurate distances in km) ---
+      // Distances from Saturn's center, per NASA/JPL ring dimensions:
+      //   D Ring:  66,900 –  74,510 km   (innermost, extremely faint)
+      //   C Ring:  74,658 –  92,000 km   (dim, translucent)
+      //   B Ring:  92,000 – 117,580 km   (brightest, widest)
+      //   Cassini Division: 117,580 – 122,170 km  (gap — drawn as space between B & A)
+      //   A Ring: 122,170 – 136,775 km   (medium bright)
+      //   Encke Gap: ~133,589 km         (325 km — sub-pixel, omitted)
+      //   F Ring: ~140,180 km            (thin, bright)
+      const sx = satGrp.rx;
+      const sy = satGrp.ry;
+      const sc = SATURN_ORBIT_SCALE;
+
+      // D Ring — barely visible
+      const dInner = 66900, dOuter = 74510;
+      const dMidR = ((dInner + dOuter) / 2) * sc;
+      const dW = (dOuter - dInner) * sc;
+      orbitLayer.lineStyle(dW, 0x887860, 0.06 * orbitDetailAlpha);
+      smoothCircle(sx, sy, dMidR);
+
+      // C Ring — dim translucent
+      const cInner = 74658, cOuter = 92000;
+      const cMidR = ((cInner + cOuter) / 2) * sc;
+      const cW = (cOuter - cInner) * sc;
+      orbitLayer.lineStyle(cW, 0xa89870, 0.12 * orbitDetailAlpha);
+      smoothCircle(sx, sy, cMidR);
+
+      // B Ring — brightest, widest
+      const bInner = 92000, bOuter = 117580;
+      const bMidR = ((bInner + bOuter) / 2) * sc;
+      const bW = (bOuter - bInner) * sc;
+      orbitLayer.lineStyle(bW, 0xe8d8a8, 0.24 * orbitDetailAlpha);
+      smoothCircle(sx, sy, bMidR);
+
+      // Cassini Division: 117,580 – 122,170 km  (natural gap between B and A)
+
+      // A Ring — medium bright
+      const aInner = 122170, aOuter = 136775;
+      const aMidR = ((aInner + aOuter) / 2) * sc;
+      const aW = (aOuter - aInner) * sc;
+      orbitLayer.lineStyle(aW, 0xd8c490, 0.20 * orbitDetailAlpha);
+      smoothCircle(sx, sy, aMidR);
+
+      // F Ring — thin bright line
+      orbitLayer.lineStyle(Math.max(0.5, 1.0 * baseLW), 0xe0c880, 0.18 * orbitDetailAlpha);
+      smoothCircle(sx, sy, 140180 * sc);
     }
   }
 
@@ -4518,10 +5456,12 @@
     function makeMoonMarker(moonId = "") {
       const id = String(moonId || "").toUpperCase();
       const isJovianMoon = id === "IO" || id === "EUROPA" || id === "GANYMEDE" || id === "CALLISTO";
-      const targetScreenPx = isJovianMoon ? JOVIAN_MOON_ICON_SCREEN_PX : MOON_ICON_SCREEN_PX;
+      const isSaturnianMoon = id === "MIMAS" || id === "ENCELADUS" || id === "TETHYS" || id === "DIONE" || id === "RHEA" || id === "TITAN" || id === "IAPETUS";
+      const targetScreenPx = isJovianMoon ? JOVIAN_MOON_ICON_SCREEN_PX : (isSaturnianMoon ? SATURNIAN_MOON_ICON_SCREEN_PX : MOON_ICON_SCREEN_PX);
       const marker = isJovianMoon
         ? makeJovianMoonIconGlyph(id, targetScreenPx)
-        : makeMoonIconGlyph(targetScreenPx);
+        : (isSaturnianMoon ? makeSaturnianMoonIconGlyph(id, targetScreenPx)
+        : makeMoonIconGlyph(targetScreenPx));
       marker.__isMoonIcon = true;
       marker.__moonBaseSizePx = marker.__baseSizePx || MOON_ICON_SCREEN_PX;
       marker.__targetScreenPx = targetScreenPx;
@@ -4547,7 +5487,7 @@
       const inEarthLocal = hasAncestor(loc.id, "grp_earth_orbits", locationParentById);
       const inMoonLocal = hasAncestor(loc.id, "grp_moon_orbits", locationParentById);
       const isLPoint = LPOINT_IDS.has(loc.id);
-      const isMoonlet = loc.id === "PHOBOS" || loc.id === "DEIMOS" || loc.id === "IO" || loc.id === "EUROPA" || loc.id === "GANYMEDE" || loc.id === "CALLISTO";
+      const isMoonlet = loc.id === "PHOBOS" || loc.id === "DEIMOS" || loc.id === "IO" || loc.id === "EUROPA" || loc.id === "GANYMEDE" || loc.id === "CALLISTO" || loc.id === "MIMAS" || loc.id === "ENCELADUS" || loc.id === "TETHYS" || loc.id === "DIONE" || loc.id === "RHEA" || loc.id === "TITAN" || loc.id === "IAPETUS";
       const isAsteroid = isAsteroidLocation(loc);
 
       let kind = "deep-node";
@@ -4598,6 +5538,8 @@
       } else if (loc.id === "DEIMOS") {
         dot = makeMoonMarker("DEIMOS");
       } else if (loc.id === "IO" || loc.id === "EUROPA" || loc.id === "GANYMEDE" || loc.id === "CALLISTO") {
+        dot = makeMoonMarker(loc.id);
+      } else if (loc.id === "MIMAS" || loc.id === "ENCELADUS" || loc.id === "TETHYS" || loc.id === "DIONE" || loc.id === "RHEA" || loc.id === "TITAN" || loc.id === "IAPETUS") {
         dot = makeMoonMarker(loc.id);
       } else if (isAsteroid) {
         dot = makeAsteroidMarker();
@@ -5638,6 +6580,7 @@
     const pallas = projectedLocations.find((l) => l.id === "grp_pallas");
     const hygiea = projectedLocations.find((l) => l.id === "grp_hygiea");
     const jupiter = projectedLocations.find((l) => l.id === "grp_jupiter");
+    const saturn = projectedLocations.find((l) => l.id === "grp_saturn");
 
     const sunX = sun ? Number(sun.x) : 0;
     const sunY = sun ? Number(sun.y) : 0;
@@ -5673,6 +6616,7 @@
     const pallasProjected = pallas ? projectDeepPosition(pallas.x, pallas.y) : { rx: 0, ry: 0 };
     const hygieaProjected = hygiea ? projectDeepPosition(hygiea.x, hygiea.y) : { rx: 0, ry: 0 };
     const jupiterProjected = jupiter ? projectDeepPosition(jupiter.x, jupiter.y) : { rx: 0, ry: 0 };
+    const saturnProjected = saturn ? projectDeepPosition(saturn.x, saturn.y) : { rx: 0, ry: 0 };
     const mercuryRx = mercuryProjected.rx;
     const mercuryRy = mercuryProjected.ry;
     const venusRx = venusProjected.rx;
@@ -5693,6 +6637,8 @@
     const hygieaRy = hygieaProjected.ry;
     const jupiterRx = jupiterProjected.rx;
     const jupiterRy = jupiterProjected.ry;
+    const saturnRx = saturnProjected.rx;
+    const saturnRy = saturnProjected.ry;
 
     // Resolve Phobos, Deimos, Zoozve marker positions (they are projected as mars_moons / zoozve group descendants)
     const phobosLoc = projectedLocations.find((l) => l.id === "PHOBOS");
@@ -5744,6 +6690,57 @@
     const ganymRy = ganymProjected.ry;
     const callistoRx = callistoProjected.rx;
     const callistoRy = callistoProjected.ry;
+
+    // Resolve Saturn's major moon marker positions
+    const mimasLoc = projectedLocations.find((l) => l.id === "MIMAS");
+    const enceladusLoc = projectedLocations.find((l) => l.id === "ENCELADUS");
+    const tethysLoc = projectedLocations.find((l) => l.id === "TETHYS");
+    const dioneLoc = projectedLocations.find((l) => l.id === "DIONE");
+    const rheaLoc = projectedLocations.find((l) => l.id === "RHEA");
+    const titanLoc = projectedLocations.find((l) => l.id === "TITAN");
+    const iapetusLoc = projectedLocations.find((l) => l.id === "IAPETUS");
+    const mimasProjected = mimasLoc && saturn
+      ? { rx: saturnRx + (Number(mimasLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(mimasLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const enceladusProjected = enceladusLoc && saturn
+      ? { rx: saturnRx + (Number(enceladusLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(enceladusLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const tethysProjected = tethysLoc && saturn
+      ? { rx: saturnRx + (Number(tethysLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(tethysLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const dioneProjected = dioneLoc && saturn
+      ? { rx: saturnRx + (Number(dioneLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(dioneLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const rheaProjected = rheaLoc && saturn
+      ? { rx: saturnRx + (Number(rheaLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(rheaLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const titanProjected = titanLoc && saturn
+      ? { rx: saturnRx + (Number(titanLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(titanLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const iapetusProjected = iapetusLoc && saturn
+      ? { rx: saturnRx + (Number(iapetusLoc.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE,
+          ry: saturnRy + (Number(iapetusLoc.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE }
+      : { rx: saturnRx, ry: saturnRy };
+    const mimasRx = mimasProjected.rx;
+    const mimasRy = mimasProjected.ry;
+    const enceladusRx = enceladusProjected.rx;
+    const enceladusRy = enceladusProjected.ry;
+    const tethysRx = tethysProjected.rx;
+    const tethysRy = tethysProjected.ry;
+    const dioneRx = dioneProjected.rx;
+    const dioneRy = dioneProjected.ry;
+    const rheaRx = rheaProjected.rx;
+    const rheaRy = rheaProjected.ry;
+    const titanRx = titanProjected.rx;
+    const titanRy = titanProjected.ry;
+    const iapetusRx = iapetusProjected.rx;
+    const iapetusRy = iapetusProjected.ry;
 
     for (const l of projectedLocations) {
       l.is_group = !!Number(l.is_group);
@@ -5823,6 +6820,33 @@
       } else if (!l.is_group && (hasAncestor(l.id, "grp_callisto_orbits", parentById) || hasAncestor(l.id, "grp_callisto_sites", parentById)) && callistoLoc) {
         rx = callistoRx + (Number(l.x) - Number(callistoLoc.x)) * CALLISTO_ORBIT_SCALE;
         ry = callistoRy + (Number(l.y) - Number(callistoLoc.y)) * CALLISTO_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_saturn_orbits", parentById) && saturn) {
+        rx = saturnRx + (Number(l.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE;
+        ry = saturnRy + (Number(l.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE;
+      } else if (!l.is_group && hasAncestor(l.id, "grp_saturn_moons", parentById) && saturn) {
+        rx = saturnRx + (Number(l.x) - Number(saturn.x)) * SATURN_ORBIT_SCALE;
+        ry = saturnRy + (Number(l.y) - Number(saturn.y)) * SATURN_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_mimas_orbits", parentById) || hasAncestor(l.id, "grp_mimas_sites", parentById)) && mimasLoc) {
+        rx = mimasRx + (Number(l.x) - Number(mimasLoc.x)) * MIMAS_ORBIT_SCALE;
+        ry = mimasRy + (Number(l.y) - Number(mimasLoc.y)) * MIMAS_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_enceladus_orbits", parentById) || hasAncestor(l.id, "grp_enceladus_sites", parentById)) && enceladusLoc) {
+        rx = enceladusRx + (Number(l.x) - Number(enceladusLoc.x)) * ENCELADUS_ORBIT_SCALE;
+        ry = enceladusRy + (Number(l.y) - Number(enceladusLoc.y)) * ENCELADUS_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_tethys_orbits", parentById) || hasAncestor(l.id, "grp_tethys_sites", parentById)) && tethysLoc) {
+        rx = tethysRx + (Number(l.x) - Number(tethysLoc.x)) * TETHYS_ORBIT_SCALE;
+        ry = tethysRy + (Number(l.y) - Number(tethysLoc.y)) * TETHYS_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_dione_orbits", parentById) || hasAncestor(l.id, "grp_dione_sites", parentById)) && dioneLoc) {
+        rx = dioneRx + (Number(l.x) - Number(dioneLoc.x)) * DIONE_ORBIT_SCALE;
+        ry = dioneRy + (Number(l.y) - Number(dioneLoc.y)) * DIONE_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_rhea_orbits", parentById) || hasAncestor(l.id, "grp_rhea_sites", parentById)) && rheaLoc) {
+        rx = rheaRx + (Number(l.x) - Number(rheaLoc.x)) * RHEA_ORBIT_SCALE;
+        ry = rheaRy + (Number(l.y) - Number(rheaLoc.y)) * RHEA_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_titan_orbits", parentById) || hasAncestor(l.id, "grp_titan_sites", parentById)) && titanLoc) {
+        rx = titanRx + (Number(l.x) - Number(titanLoc.x)) * TITAN_ORBIT_SCALE;
+        ry = titanRy + (Number(l.y) - Number(titanLoc.y)) * TITAN_ORBIT_SCALE;
+      } else if (!l.is_group && (hasAncestor(l.id, "grp_iapetus_orbits", parentById) || hasAncestor(l.id, "grp_iapetus_sites", parentById)) && iapetusLoc) {
+        rx = iapetusRx + (Number(l.x) - Number(iapetusLoc.x)) * IAPETUS_ORBIT_SCALE;
+        ry = iapetusRy + (Number(l.y) - Number(iapetusLoc.y)) * IAPETUS_ORBIT_SCALE;
       } else if (l.id === "grp_mercury") {
         rx = mercuryRx; ry = mercuryRy;
       } else if (l.id === "grp_venus") {
@@ -5843,6 +6867,8 @@
         rx = hygieaRx; ry = hygieaRy;
       } else if (l.id === "grp_jupiter") {
         rx = jupiterRx; ry = jupiterRy;
+      } else if (l.id === "grp_saturn") {
+        rx = saturnRx; ry = saturnRy;
       }
 
       l.rx = rx;
@@ -7377,6 +8403,7 @@
     // Store orbit physics data from the API
     bodyPhysics = data.body_physics || {};
     orbitNodeMeta = data.orbit_nodes || {};
+    bodyOrbits = data.body_orbits || {};
 
     // --- Capture previous positions for smooth interpolation ---
     const prevById = locationsById;          // old map (empty on first call)
@@ -7485,6 +8512,14 @@
     ["EUROPA_LO","EUROPA"],["EUROPA_HO","EUROPA"],
     ["GANYMEDE_LO","GANYMEDE"],["GANYMEDE_HO","GANYMEDE"],
     ["CALLISTO_LO","CALLISTO"],["CALLISTO_HO","CALLISTO"],
+    ["SAT_LO","grp_saturn"],["SAT_HO","grp_saturn"],
+    ["MIMAS_LO","MIMAS"],["MIMAS_HO","MIMAS"],
+    ["ENCELADUS_LO","ENCELADUS"],["ENCELADUS_HO","ENCELADUS"],
+    ["TETHYS_LO","TETHYS"],["TETHYS_HO","TETHYS"],
+    ["DIONE_LO","DIONE"],["DIONE_HO","DIONE"],
+    ["RHEA_LO","RHEA"],["RHEA_HO","RHEA"],
+    ["TITAN_LO","TITAN"],["TITAN_HO","TITAN"],
+    ["IAPETUS_LO","IAPETUS"],["IAPETUS_HO","IAPETUS"],
   ]);
 
   // --- Smooth celestial lerp (called every frame) ---
@@ -7493,9 +8528,10 @@
   function lerpCelestialPositions() {
     if (locLerp.size === 0) return;
     const elapsed = performance.now() - locLerpStartMs;
-    // Linear progress — intentionally NOT clamped to 1 so the bodies
-    // keep drifting at the same velocity until the next poll overwrites.
-    const t = elapsed / LOC_LERP_DURATION_MS;
+    // Clamp t to 1.0 to prevent linear extrapolation past the target.
+    // Extrapolation caused moons on curved orbital paths to drift tangentially
+    // off their circular orbit rings between poll intervals.
+    const t = Math.min(1.0, elapsed / LOC_LERP_DURATION_MS);
     for (const [id, lp] of locLerp) {
       const loc = locationsById.get(id);
       if (!loc) continue;

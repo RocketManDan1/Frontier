@@ -747,6 +747,74 @@ def load_location_metadata(path: Path = CONFIG_PATH) -> Dict[str, Dict[str, Any]
     return build_location_metadata(config)
 
 
+# ── Body orbit elements for frontend elliptical rendering ──────
+
+def build_body_orbits(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Extract Keplerian orbital elements for each body with non-negligible eccentricity.
+
+    Returns a dict keyed by the body's group_id (e.g. "grp_earth") containing:
+      a_km            - semi-major axis (km)
+      e               - eccentricity
+      b_km            - semi-minor axis (km), computed as a * sqrt(1 - e²)
+      periapsis_angle_rad - 2D-projected angle (radians) from center body to periapsis
+      center_group_id - group_id of the parent body (e.g. "grp_sun")
+    """
+    bodies = config.get("bodies", [])
+    result: Dict[str, Dict[str, Any]] = {}
+
+    for body in bodies:
+        if not isinstance(body, dict):
+            continue
+        pos = body.get("position", {})
+        if not isinstance(pos, dict) or pos.get("type") != "keplerian":
+            continue
+
+        e = float(pos.get("e", 0))
+        if e < 0.005:
+            # Nearly circular — no visual difference; skip to save bandwidth
+            continue
+
+        a_km = float(pos.get("a_km", 0))
+        if a_km <= 0:
+            continue
+
+        group_id = _optional_str(body, "group_id")
+        if not group_id:
+            continue
+
+        i_rad = math.radians(float(pos.get("i_deg", 0)))
+        omega_big_rad = math.radians(float(pos.get("Omega_deg", 0)))
+        omega_small_rad = math.radians(float(pos.get("omega_deg", 0)))
+
+        # Compute 2D periapsis direction from the rotation matrix.
+        # At periapsis (true anomaly = 0), the orbital-plane position is (r_per, 0).
+        # The first column of the 3D→2D rotation matrix gives the periapsis direction:
+        cos_O = math.cos(omega_big_rad)
+        sin_O = math.sin(omega_big_rad)
+        cos_w = math.cos(omega_small_rad)
+        sin_w = math.sin(omega_small_rad)
+        cos_i = math.cos(i_rad)
+
+        r11 = cos_O * cos_w - sin_O * sin_w * cos_i
+        r21 = sin_O * cos_w + cos_O * sin_w * cos_i
+        periapsis_angle_rad = math.atan2(r21, r11)
+
+        center_body_id = str(pos.get("center_body_id", "")).strip()
+        center_group_id = f"grp_{center_body_id}" if center_body_id else None
+
+        b_km = a_km * math.sqrt(max(0.0, 1.0 - e * e))
+
+        result[group_id] = {
+            "a_km": round(a_km, 1),
+            "e": round(e, 6),
+            "b_km": round(b_km, 1),
+            "periapsis_angle_rad": round(periapsis_angle_rad, 6),
+            "center_group_id": center_group_id,
+        }
+
+    return result
+
+
 # ── Body state vector API ──────────────────────────────────────
 
 def _build_bodies_by_id(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:

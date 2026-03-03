@@ -92,6 +92,9 @@ def api_admin_reset_game(request: Request, conn: sqlite3.Connection = Depends(ge
     cur = conn.execute("DELETE FROM location_inventory_stacks")
     deleted_inventory_stacks = int(cur.rowcount or 0)
 
+    cur = conn.execute("DELETE FROM contracts")
+    deleted_contracts = int(cur.rowcount or 0)
+
     user_rows = conn.execute("SELECT COUNT(*) AS c FROM users WHERE username <> 'admin'").fetchone()
     deleted_accounts = int(user_rows["c"] or 0)
     conn.execute("DELETE FROM sessions")
@@ -386,7 +389,12 @@ def api_admin_teleport_ship(
             transit_from_x = NULL,
             transit_from_y = NULL,
             transit_to_x = NULL,
-            transit_to_y = NULL
+            transit_to_y = NULL,
+            orbit_json = NULL,
+            maneuver_json = NULL,
+            orbit_body_id = NULL,
+            orbit_predictions_json = NULL,
+            trajectory_json = NULL
         WHERE id = ?
         """,
         (dest, sid),
@@ -403,3 +411,115 @@ def api_admin_teleport_ship(
             "location_name": loc["name"],
         },
     }
+
+
+# ── Admin Contract Debug Tools ─────────────────────────────────────────────────
+
+@router.get("/api/admin/contracts/all")
+def api_admin_contracts_all(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """List all contracts in the system with full details."""
+    require_admin(conn, request)
+    rows = conn.execute(
+        """
+        SELECT c.*,
+               oi.name AS issuer_name,
+               oa.name AS assignee_name,
+               COALESCE(l.name, c.location_id) AS location_name,
+               COALESCE(dl.name, c.destination_id) AS destination_name
+        FROM contracts c
+        LEFT JOIN organizations oi ON oi.id = c.issuer_org_id
+        LEFT JOIN organizations oa ON oa.id = c.assignee_org_id
+        LEFT JOIN locations l ON l.id = c.location_id
+        LEFT JOIN locations dl ON dl.id = c.destination_id
+        ORDER BY c.created_at DESC
+        """
+    ).fetchall()
+
+    from contract_router import _contract_to_dict
+    contracts = []
+    for r in rows:
+        d = _contract_to_dict(r)
+        d["destination_name"] = r["destination_name"] if "destination_name" in r.keys() else None
+        contracts.append(d)
+
+    return {"contracts": contracts, "total": len(contracts)}
+
+
+@router.delete("/api/admin/contracts/{contract_id}")
+def api_admin_delete_contract(
+    contract_id: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Delete a single contract by ID."""
+    require_admin(conn, request)
+    row = conn.execute("SELECT id, title FROM contracts WHERE id = ?", (contract_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    conn.execute("DELETE FROM contracts WHERE id = ?", (contract_id,))
+    conn.commit()
+    return {"ok": True, "deleted": contract_id, "title": row["title"]}
+
+
+@router.delete("/api/admin/contracts")
+def api_admin_delete_all_contracts(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Delete ALL contracts."""
+    require_admin(conn, request)
+    cur = conn.execute("DELETE FROM contracts")
+    conn.commit()
+    return {"ok": True, "deleted_count": int(cur.rowcount or 0)}
+
+
+@router.get("/api/admin/corps")
+def api_admin_list_corps(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """List all corporations and their org details."""
+    require_admin(conn, request)
+    rows = conn.execute(
+        """
+        SELECT c.id, c.name, c.color, c.org_id, c.created_at,
+               o.balance_usd, o.research_points
+        FROM corporations c
+        LEFT JOIN organizations o ON o.id = c.org_id
+        ORDER BY c.name
+        """
+    ).fetchall()
+    corps = []
+    for r in rows:
+        corps.append({
+            "id": r["id"],
+            "name": r["name"],
+            "color": r["color"],
+            "org_id": r["org_id"],
+            "balance_usd": r["balance_usd"],
+            "research_points": r["research_points"],
+            "created_at": r["created_at"],
+        })
+    return {"corps": corps, "total": len(corps)}
+
+
+@router.get("/api/admin/orgs")
+def api_admin_list_orgs(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """List all organizations."""
+    require_admin(conn, request)
+    rows = conn.execute(
+        """
+        SELECT o.*, COUNT(c2.id) AS contract_count
+        FROM organizations o
+        LEFT JOIN contracts c2 ON c2.issuer_org_id = o.id
+        GROUP BY o.id
+        ORDER BY o.name
+        """
+    ).fetchall()
+    orgs = []
+    for r in rows:
+        orgs.append({
+            "id": r["id"],
+            "name": r["name"],
+            "balance_usd": r["balance_usd"],
+            "research_points": r["research_points"],
+            "contract_count": r["contract_count"],
+        })
+    return {"orgs": orgs, "total": len(orgs)}

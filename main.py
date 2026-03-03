@@ -18,6 +18,7 @@ from auth_router import router as auth_router
 from auth_service import ensure_default_admin_account, get_current_user
 from catalog_router import router as catalog_router
 import catalog_service
+from contract_router import router as contract_router
 from industry_router import router as industry_router
 from inventory_router import router as inventory_router
 from location_router import router as location_router
@@ -58,6 +59,7 @@ def _serve_authenticated_page(request: Request, filename: str):
 app.include_router(admin_game_router)
 app.include_router(auth_router)
 app.include_router(catalog_router)
+app.include_router(contract_router)
 app.include_router(fleet_router)
 app.include_router(industry_router)
 app.include_router(inventory_router)
@@ -3129,6 +3131,16 @@ def sites(request: Request):
 @app.get("/organization")
 def organization(request: Request):
     return _serve_authenticated_page(request, "organization.html")
+
+
+@app.get("/contracts")
+def contracts(request: Request):
+    return _serve_authenticated_page(request, "contracts.html")
+
+
+@app.get("/contracts/create")
+def contracts_create(request: Request):
+    return _serve_authenticated_page(request, "contract_create.html")
 
 
 @app.get("/profile")

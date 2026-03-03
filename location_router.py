@@ -106,9 +106,20 @@ def api_locations(
         if extra:
             item.update(extra)
         locations.append(item)
+
     response: Dict[str, Any] = {"locations": locations}
     if effective_game_time_s is not None:
         response["game_time_s"] = effective_game_time_s
+
+    # Include body orbital elements for elliptical orbit ring rendering
+    if dynamic:
+        try:
+            body_orbits = celestial_config.build_body_orbits(cfg)
+            if body_orbits:
+                response["body_orbits"] = body_orbits
+        except Exception:
+            pass  # Non-critical; frontend falls back to circular rings
+
     return response
 
 
