@@ -4,7 +4,7 @@
   "research_node": "advanced_ceramics_fabrication",
   "tech_level": 2,
   "branch": "lithic_processing",
-  "mass_t": 22,
+  "mass_t": 12,
   "power_requirements": {
     "electric_mw": 1.4
   },

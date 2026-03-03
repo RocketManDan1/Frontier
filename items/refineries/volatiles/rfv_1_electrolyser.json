@@ -4,7 +4,7 @@
   "research_node": "basic_chemical_processing",
   "tech_level": 1,
   "branch": "volatiles_cryogenics",
-  "mass_t": 6,
+  "mass_t": 8,
   "power_requirements": {
     "electric_mw": 0.25
   },

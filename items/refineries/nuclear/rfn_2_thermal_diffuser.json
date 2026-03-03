@@ -4,7 +4,7 @@
   "research_node": "isotope_separation",
   "tech_level": 2,
   "branch": "nuclear_exotic",
-  "mass_t": 35,
+  "mass_t": 20,
   "power_requirements": {
     "electric_mw": 6.0
   },
