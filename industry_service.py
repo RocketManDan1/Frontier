@@ -26,6 +26,7 @@ _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY = {
     "radiator": "radiators",
     "robonaut": "robonauts",
     "constructor": "constructors",
+    "isru": "isru",
     "refinery": "refineries",
 }
 
@@ -36,6 +37,18 @@ _REFINERY_CATEGORY_TO_RESEARCH_PREFIX = {
     "metallurgy": "refineries_metallurgy",
     "nuclear_exotic": "refineries_nuclear",
     "volatiles_cryogenics": "refineries_volatiles",
+}
+
+# ISRU modules use subtree-specific research nodes (isru_sifting_lvl_1, isru_heat_drill_lvl_1)
+_ISRU_BRANCH_TO_RESEARCH_PREFIX = {
+    "centrifugal_sifting": "isru_sifting",
+    "electrostatic_centrifugal": "isru_sifting",
+    "magnetic_resonance_separation": "isru_sifting",
+    "plasma_assisted_separation": "isru_sifting",
+    "resistive_thermal_drill": "isru_heat_drill",
+    "microwave_thermal_drill": "isru_heat_drill",
+    "plasma_thermal_drill": "isru_heat_drill",
+    "fusion_thermal_drill": "isru_heat_drill",
 }
 
 
@@ -63,36 +76,40 @@ def _is_recipe_compatible_with_refinery_specialization(recipe_category: str, spe
 # ── Settle Jobs (on-access pattern) ───────────────────────────────────────────
 
 
-def settle_industry(conn: sqlite3.Connection, location_id: Optional[str] = None) -> None:
+def settle_industry(conn: sqlite3.Connection, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """
     Settle all industry systems:
       1. Complete finished production jobs (legacy refinery + refinery-slot jobs)
       2. Settle continuous mining from constructors in 'mine' mode
       3. Auto-start refinery slots with queued recipes
       4. Settle & auto-advance the construction queue
+    If facility_id is given, only settle for that facility (preferred).
     If location_id is given, only settle for that location (performance).
     """
     now = game_now_s()
-    _settle_production_jobs(conn, now, location_id)
-    _settle_mining_v2(conn, now, location_id)
-    _settle_refinery_slots(conn, now, location_id)
-    _settle_construction_queue(conn, now, location_id)
+    _settle_production_jobs(conn, now, location_id, facility_id=facility_id)
+    _settle_mining_v2(conn, now, location_id, facility_id=facility_id)
+    _settle_refinery_slots(conn, now, location_id, facility_id=facility_id)
+    _settle_construction_queue(conn, now, location_id, facility_id=facility_id)
 
 
-def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None) -> None:
+def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """Complete production jobs whose completes_at <= now.
     Skips jobs owned by refinery slots or the construction queue — those are
     settled by their own dedicated functions."""
     where = "WHERE pj.status = 'active' AND pj.completes_at <= ?"
     params: list = [now]
-    if location_id:
+    if facility_id:
+        where += " AND pj.facility_id = ?"
+        params.append(facility_id)
+    elif location_id:
         where += " AND pj.location_id = ?"
         params.append(location_id)
 
     rows = conn.execute(
         f"""
         SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
-               pj.recipe_id, pj.outputs_json, pj.completes_at, pj.corp_id
+               pj.recipe_id, pj.outputs_json, pj.completes_at, pj.corp_id, pj.facility_id
         FROM production_jobs pj
         {where}
           AND pj.id NOT IN (SELECT current_job_id FROM refinery_slots WHERE current_job_id IS NOT NULL)
@@ -117,6 +134,7 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
         catalog_service.load_generator_catalog,
         catalog_service.load_radiator_catalog,
         catalog_service.load_robonaut_catalog,
+        catalog_service.load_isru_catalog,
         catalog_service.load_storage_catalog,
     ):
         part_catalogs.update(loader())
@@ -128,8 +146,9 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
         loc_id = row["location_id"]
         equip_id = row["equipment_id"]
         job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
+        job_fid = str(row["facility_id"] or "") if "facility_id" in row.keys() else ""
 
-        # Deliver outputs to location inventory
+        # Deliver outputs to facility inventory
         outputs = json.loads(row["outputs_json"] or "[]")
         for out in outputs:
             item_id = str(out.get("item_id") or "").strip()
@@ -138,11 +157,9 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
                 continue
 
             if item_id in part_catalogs:
-                # It's an equipment part — add with proper name, mass, and type
                 part_entry = dict(part_catalogs[item_id])
                 _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty, corp_id=job_corp_id)
             else:
-                # It's a resource or refined material
                 _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty, corp_id=job_corp_id)
 
         # Mark job completed, free equipment
@@ -158,22 +175,25 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
     conn.commit()
 
 
-def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None) -> None:
+def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """
     Mining v2: constructors in 'mine' mode automatically mine at their full rate.
     Output is split proportionally among all site resource distributions.
     Uses deployed_equipment.mode = 'mine' instead of production_jobs.
     Tracks last_settled in config_json of the equipment.
     """
-    where = "WHERE de.category IN ('constructor', 'robonaut') AND de.mode = 'mine'"
+    where = "WHERE de.category IN ('constructor', 'robonaut', 'isru') AND de.mode = 'mine'"
     params: list = []
-    if location_id:
+    if facility_id:
+        where += " AND de.facility_id = ?"
+        params.append(facility_id)
+    elif location_id:
         where += " AND de.location_id = ?"
         params.append(location_id)
 
     miners = conn.execute(
         f"""
-        SELECT de.id, de.location_id, de.config_json, de.corp_id, de.category
+        SELECT de.id, de.location_id, de.config_json, de.corp_id, de.category, de.facility_id
         FROM deployed_equipment de
         {where}
         """,
@@ -207,6 +227,7 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
                 continue
 
             corp_id = str(miner["corp_id"] or "")
+            miner_fid = str(miner["facility_id"] or "") if "facility_id" in miner.keys() else ""
             last_settled = float(config.get("mining_last_settled") or now)
             elapsed_s = max(0.0, now - last_settled)
             elapsed_hr = elapsed_s / 3600.0
@@ -227,6 +248,28 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
                 mined_kg = total_mined_kg * ice_fraction
                 if mined_kg > 0.01:
                     _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, mined_kg, corp_id=corp_id)
+            elif miner["category"] == "isru":
+                # ISRU: flat-rate water extraction — rate is NOT multiplied by ice fraction.
+                # The ice fraction only gates deployment eligibility; output is the rated water_extraction_kg_per_hr.
+                water_rate = float(config.get("water_extraction_kg_per_hr") or 0.0)
+                if water_rate <= 0:
+                    continue
+                last_settled_isru = float(config.get("mining_last_settled") or now)
+                elapsed_s_isru = max(0.0, now - last_settled_isru)
+                elapsed_hr_isru = elapsed_s_isru / 3600.0
+                water_kg = water_rate * elapsed_hr_isru
+                if water_kg > 0.01:
+                    output_resource_id = str(config.get("mining_output_resource_id") or "water")
+                    _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, water_kg, corp_id=corp_id)
+                # Update tracking (use water_kg as total_mined for ISRU)
+                prev_total = float(config.get("mining_total_mined_kg") or 0.0)
+                config["mining_last_settled"] = now
+                config["mining_total_mined_kg"] = prev_total + water_kg
+                conn.execute(
+                    "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
+                    (_json_dumps(config), miner["id"]),
+                )
+                continue
             else:
                 # Split output by resource mass fractions
                 for sr in site_resources:
@@ -248,7 +291,7 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
     conn.commit()
 
 
-def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None) -> None:
+def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """
     Refinery slot settle logic:
     1. Complete any finished refinery-slot jobs → deliver outputs, mark slot idle.
@@ -258,9 +301,18 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     import main as _main
 
     # Step 0: Recover stuck slots (active but no job reference)
-    where_loc_bare = "AND location_id = ?" if location_id else ""
-    where_loc = "AND rs.location_id = ?" if location_id else ""
-    params_loc: list = [location_id] if location_id else []
+    if facility_id:
+        where_loc_bare = "AND facility_id = ?"
+        where_loc = "AND rs.facility_id = ?"
+        params_loc: list = [facility_id]
+    elif location_id:
+        where_loc_bare = "AND location_id = ?"
+        where_loc = "AND rs.location_id = ?"
+        params_loc: list = [location_id]
+    else:
+        where_loc_bare = ""
+        where_loc = ""
+        params_loc: list = []
 
     conn.execute(
         f"""
@@ -277,7 +329,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     active_slots = conn.execute(
         f"""
         SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id,
-               rs.current_job_id, rs.corp_id,
+               rs.current_job_id, rs.corp_id, rs.facility_id,
                pj.id AS job_id, pj.completes_at, pj.outputs_json
         FROM refinery_slots rs
         JOIN production_jobs pj ON pj.id = rs.current_job_id
@@ -299,6 +351,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
             catalog_service.load_generator_catalog,
             catalog_service.load_radiator_catalog,
             catalog_service.load_robonaut_catalog,
+            catalog_service.load_isru_catalog,
             catalog_service.load_storage_catalog,
         ):
             part_catalogs.update(loader())
@@ -307,6 +360,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
         # Deliver outputs
         outputs = json.loads(slot["outputs_json"] or "[]")
         slot_corp_id = str(slot["corp_id"] or "")
+        slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
         loc = slot["location_id"]
         for out in outputs:
             item_id = str(out.get("item_id") or "").strip()
@@ -335,7 +389,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     # Step 2: Auto-start idle slots with recipes (in priority order)
     idle_slots = conn.execute(
         f"""
-        SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id, rs.corp_id
+        SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id, rs.corp_id, rs.facility_id
         FROM refinery_slots rs
         WHERE rs.status = 'idle' AND rs.recipe_id IS NOT NULL AND rs.recipe_id != ''
         {where_loc}
@@ -354,6 +408,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
         loc = slot["location_id"]
         equip_id = slot["equipment_id"]
         corp_id = str(slot["corp_id"] or "")
+        slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
 
         # Get equipment config for throughput
         equip = conn.execute(
@@ -364,7 +419,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
             continue
         config = json.loads(equip["config_json"] or "{}")
 
-        # Check if inputs are available
+        # Check if inputs are available (location-scoped)
         inputs = recipe.get("inputs") or []
         can_start = True
         for inp in inputs:
@@ -425,12 +480,12 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
             """
             INSERT INTO production_jobs
               (id, location_id, equipment_id, job_type, recipe_id, status,
-               started_at, completes_at, inputs_json, outputs_json, created_by, corp_id)
-            VALUES (?, ?, ?, 'refine', ?, 'active', ?, ?, ?, ?, 'system', ?)
+               started_at, completes_at, inputs_json, outputs_json, created_by, corp_id, facility_id)
+            VALUES (?, ?, ?, 'refine', ?, 'active', ?, ?, ?, ?, 'system', ?, ?)
             """,
             (job_id, loc, equip_id, slot["recipe_id"], now, completes_at,
              _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0)} for inp in inputs if inp.get("item_id")]),
-             _json_dumps(outputs_list), corp_id),
+             _json_dumps(outputs_list), corp_id, slot_fid),
         )
 
         # Mark slot active
@@ -439,7 +494,7 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     conn.commit()
 
 
-def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None) -> None:
+def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """
     Construction queue settle logic:
     1. Complete any finished construction queue items → deliver outputs.
@@ -447,13 +502,20 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
     """
     import main as _main
 
-    where_loc = "AND cq.location_id = ?" if location_id else ""
-    params_loc: list = [location_id] if location_id else []
+    if facility_id:
+        where_loc = "AND cq.facility_id = ?"
+        params_loc: list = [facility_id]
+    elif location_id:
+        where_loc = "AND cq.location_id = ?"
+        params_loc: list = [location_id]
+    else:
+        where_loc = ""
+        params_loc: list = []
 
     # Step 1: Complete finished active items
     finished = conn.execute(
         f"""
-        SELECT cq.id, cq.location_id, cq.recipe_id, cq.outputs_json, cq.corp_id
+        SELECT cq.id, cq.location_id, cq.recipe_id, cq.outputs_json, cq.corp_id, cq.facility_id
         FROM construction_queue cq
         WHERE cq.status = 'active' AND cq.completes_at <= ?
         {where_loc}
@@ -471,6 +533,7 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
             catalog_service.load_generator_catalog,
             catalog_service.load_radiator_catalog,
             catalog_service.load_robonaut_catalog,
+            catalog_service.load_isru_catalog,
             catalog_service.load_storage_catalog,
         ):
             part_catalogs.update(loader())
@@ -478,6 +541,7 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
     for item in finished:
         outputs = json.loads(item["outputs_json"] or "[]")
         item_corp_id = str(item["corp_id"] or "")
+        item_fid = str(item["facility_id"] or "") if "facility_id" in item.keys() else ""
         loc = item["location_id"]
         for out in outputs:
             out_id = str(out.get("item_id") or "").strip()
@@ -491,11 +555,11 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
 
         conn.execute("UPDATE construction_queue SET status = 'completed', completed_at = ? WHERE id = ?", (now, item["id"]))
 
-    # Step 2: Auto-start next queued items (one per location at a time)
-    # Get locations with queued items
-    locations_with_queue = conn.execute(
+    # Step 2: Auto-start next queued items (one per facility at a time)
+    # Get facilities (or locations) with queued items
+    facilities_with_queue = conn.execute(
         f"""
-        SELECT DISTINCT cq.location_id
+        SELECT DISTINCT cq.facility_id, cq.location_id
         FROM construction_queue cq
         WHERE cq.status = 'queued'
         {where_loc}
@@ -505,27 +569,40 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
 
     all_recipes = catalog_service.load_recipe_catalog()
 
-    for loc_row in locations_with_queue:
-        loc = loc_row["location_id"]
+    for fq_row in facilities_with_queue:
+        fq_fid = str(fq_row["facility_id"] or "") if "facility_id" in fq_row.keys() else ""
+        loc = fq_row["location_id"]
 
-        # Check if there's already an active job at this location
-        active = conn.execute(
-            "SELECT COUNT(*) as cnt FROM construction_queue WHERE location_id = ? AND status = 'active'",
-            (loc,),
-        ).fetchone()
+        # Check if there's already an active job at this facility
+        if fq_fid:
+            active = conn.execute(
+                "SELECT COUNT(*) as cnt FROM construction_queue WHERE facility_id = ? AND status = 'active'",
+                (fq_fid,),
+            ).fetchone()
+        else:
+            active = conn.execute(
+                "SELECT COUNT(*) as cnt FROM construction_queue WHERE location_id = ? AND status = 'active'",
+                (loc,),
+            ).fetchone()
         if active and active["cnt"] > 0:
             continue
 
-        # Get pooled construction speed
-        pool_speed = _get_construction_pool_speed(conn, loc)
+        # Get pooled construction speed (facility-scoped)
+        pool_speed = _get_construction_pool_speed(conn, loc, facility_id=fq_fid)
         if pool_speed <= 0:
             continue
 
         # Get next queued item
-        next_item = conn.execute(
-            "SELECT * FROM construction_queue WHERE location_id = ? AND status = 'queued' ORDER BY queue_order ASC LIMIT 1",
-            (loc,),
-        ).fetchone()
+        if fq_fid:
+            next_item = conn.execute(
+                "SELECT * FROM construction_queue WHERE facility_id = ? AND status = 'queued' ORDER BY queue_order ASC LIMIT 1",
+                (fq_fid,),
+            ).fetchone()
+        else:
+            next_item = conn.execute(
+                "SELECT * FROM construction_queue WHERE location_id = ? AND status = 'queued' ORDER BY queue_order ASC LIMIT 1",
+                (loc,),
+            ).fetchone()
         if not next_item:
             continue
 
@@ -535,8 +612,9 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
             continue
 
         corp_id = str(next_item["corp_id"] or "")
+        next_fid = str(next_item["facility_id"] or "") if "facility_id" in next_item.keys() else fq_fid
 
-        # Check inputs
+        # Check inputs (facility-scoped)
         inputs = recipe.get("inputs") or []
         can_start = True
         for inp in inputs:
@@ -607,12 +685,18 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
     conn.commit()
 
 
-def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str) -> float:
-    """Sum of construction_rate_kg_per_hr from all constructors in 'construct' mode at a location."""
-    rows = conn.execute(
-        "SELECT config_json FROM deployed_equipment WHERE location_id = ? AND category = 'constructor' AND mode = 'construct'",
-        (location_id,),
-    ).fetchall()
+def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> float:
+    """Sum of construction_rate_kg_per_hr from all constructors in 'construct' mode at a facility (or location)."""
+    if facility_id:
+        rows = conn.execute(
+            "SELECT config_json FROM deployed_equipment WHERE facility_id = ? AND category = 'constructor' AND mode = 'construct'",
+            (facility_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT config_json FROM deployed_equipment WHERE location_id = ? AND category = 'constructor' AND mode = 'construct'",
+            (location_id,),
+        ).fetchall()
     total = 0.0
     for r in rows:
         config = json.loads(r["config_json"] or "{}")
@@ -625,7 +709,7 @@ def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str) -> 
 # ── Deploy / Undeploy ──────────────────────────────────────────────────────────
 
 
-DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "robonaut", "reactor", "generator", "radiator")
+DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "robonaut", "isru", "reactor", "generator", "radiator")
 
 
 def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
@@ -634,6 +718,7 @@ def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
         catalog_service.load_refinery_catalog,
         catalog_service.load_constructor_catalog,
         catalog_service.load_robonaut_catalog,
+        catalog_service.load_isru_catalog,
         catalog_service.load_reactor_catalog,
         catalog_service.load_generator_catalog,
         catalog_service.load_radiator_catalog,
@@ -650,6 +735,7 @@ def deploy_equipment(
     item_id: str,
     username: str,
     corp_id: str = "",
+    facility_id: str = "",
 ) -> Dict[str, Any]:
     """
     Deploy equipment from location inventory to the site.
@@ -669,8 +755,8 @@ def deploy_equipment(
     if category not in DEPLOYABLE_CATEGORIES:
         raise ValueError(f"Item '{item_id}' is not deployable (category: {category})")
 
-    # Constructors and robonauts require surface deployment.
-    if category in ("constructor", "robonaut"):
+    # Constructors, robonauts, and ISRU require surface deployment.
+    if category in ("constructor", "robonaut", "isru"):
         site = conn.execute(
             "SELECT gravity_m_s2 FROM surface_sites WHERE location_id = ?",
             (location_id,),
@@ -678,6 +764,8 @@ def deploy_equipment(
         if not site:
             if category == "constructor":
                 raise ValueError("Constructors can only be deployed at surface sites")
+            elif category == "isru":
+                raise ValueError("ISRU modules can only be deployed at surface sites")
             raise ValueError("Robonauts can only be deployed at surface sites")
         if category == "constructor":
             min_grav = float(catalog_entry.get("min_surface_gravity_ms2") or 0.0)
@@ -685,6 +773,23 @@ def deploy_equipment(
             if site_grav < min_grav:
                 raise ValueError(
                     f"Surface gravity {site_grav:.2f} m/s² is below minimum {min_grav:.2f} m/s²"
+                )
+        if category == "isru":
+            # Validate water ice fraction is within the ISRU module's operating range
+            ice_row = conn.execute(
+                "SELECT mass_fraction FROM surface_site_resources WHERE site_location_id = ? AND resource_id = 'water_ice'",
+                (location_id,),
+            ).fetchone()
+            site_ice = float(ice_row["mass_fraction"]) if ice_row else 0.0
+            min_ice = float(catalog_entry.get("min_water_ice_fraction") or 0.0)
+            max_ice = float(catalog_entry.get("max_water_ice_fraction") or 1.0)
+            if site_ice < min_ice:
+                raise ValueError(
+                    f"Site water ice fraction {site_ice:.1%} is below minimum {min_ice:.1%} for this ISRU module"
+                )
+            if site_ice > max_ice:
+                raise ValueError(
+                    f"Site water ice fraction {site_ice:.1%} is above maximum {max_ice:.1%} for this ISRU module"
                 )
 
     # Consume part from location inventory
@@ -719,6 +824,14 @@ def deploy_equipment(
             "allowed_mining_resources": ["water_ice"],
             "mining_output_resource_id": "water",
         })
+    elif category == "isru":
+        config.update({
+            "water_extraction_kg_per_hr": catalog_entry.get("water_extraction_kg_per_hr", 0),
+            "extraction_method": catalog_entry.get("extraction_method", ""),
+            "min_water_ice_fraction": catalog_entry.get("min_water_ice_fraction", 0.0),
+            "max_water_ice_fraction": catalog_entry.get("max_water_ice_fraction", 1.0),
+            "mining_output_resource_id": "water",
+        })
     elif category == "reactor":
         config.update({
             "thermal_mw": catalog_entry.get("thermal_mw", 0),
@@ -742,27 +855,33 @@ def deploy_equipment(
     conn.execute(
         """
         INSERT INTO deployed_equipment
-          (id, location_id, item_id, name, category, deployed_at, deployed_by, status, config_json, corp_id, mode)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 'idle')
+          (id, location_id, item_id, name, category, deployed_at, deployed_by, status, config_json, corp_id, mode, facility_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 'idle', ?)
         """,
         (equip_id, location_id, item_id, catalog_entry.get("name", item_id),
-         category, now, username, _json_dumps(config), corp_id),
+         category, now, username, _json_dumps(config), corp_id, facility_id),
     )
 
     # Create refinery slots if this is a refinery
     if category == "refinery":
         max_slots = int(config.get("max_concurrent_recipes") or 1)
-        # Get current max priority at this location for ordering
-        max_pri = conn.execute(
-            "SELECT COALESCE(MAX(priority), -1) as mp FROM refinery_slots WHERE location_id = ?",
-            (location_id,),
-        ).fetchone()
+        # Get current max priority at this facility for ordering
+        if facility_id:
+            max_pri = conn.execute(
+                "SELECT COALESCE(MAX(priority), -1) as mp FROM refinery_slots WHERE facility_id = ?",
+                (facility_id,),
+            ).fetchone()
+        else:
+            max_pri = conn.execute(
+                "SELECT COALESCE(MAX(priority), -1) as mp FROM refinery_slots WHERE location_id = ?",
+                (location_id,),
+            ).fetchone()
         base_priority = (max_pri["mp"] if max_pri else -1) + 1
         for i in range(max_slots):
             slot_id = str(uuid.uuid4())
             conn.execute(
-                "INSERT INTO refinery_slots (id, equipment_id, location_id, slot_index, priority, corp_id) VALUES (?,?,?,?,?,?)",
-                (slot_id, equip_id, location_id, i, base_priority + i, corp_id),
+                "INSERT INTO refinery_slots (id, equipment_id, location_id, slot_index, priority, corp_id, facility_id) VALUES (?,?,?,?,?,?,?)",
+                (slot_id, equip_id, location_id, i, base_priority + i, corp_id, facility_id),
             )
 
     conn.commit()
@@ -770,6 +889,7 @@ def deploy_equipment(
     return {
         "id": equip_id,
         "location_id": location_id,
+        "facility_id": facility_id,
         "item_id": item_id,
         "name": catalog_entry.get("name", item_id),
         "category": category,
@@ -826,6 +946,7 @@ def undeploy_equipment(
     item_id = equip["item_id"]
     category = equip["category"]
     equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
+    equip_fid = str(equip["facility_id"] or "") if "facility_id" in equip.keys() else ""
 
     # Look up the catalog entry to restore the part
     catalog_entry = _resolve_deployable_catalog_entry(item_id) or {}
@@ -992,6 +1113,7 @@ def start_production_job(
 
     config = json.loads(equip["config_json"] or "{}")
     location_id = equip["location_id"]
+    equip_fid = str(equip["facility_id"] or "") if "facility_id" in equip.keys() else ""
 
     # Check concurrent limit
     active_count = conn.execute(
@@ -1044,7 +1166,7 @@ def start_production_job(
         if not inp_id or inp_qty <= 0:
             continue
 
-        # Check availability
+        # Check availability (location-scoped)
         row = conn.execute(
             """
             SELECT quantity FROM location_inventory_stacks
@@ -1115,12 +1237,12 @@ def start_production_job(
         """
         INSERT INTO production_jobs
           (id, location_id, equipment_id, job_type, recipe_id, status,
-           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id)
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
+           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id, facility_id)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
         """,
         (job_id, location_id, equipment_id, job_type, recipe_id, now, completes_at,
          _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0) * batch_count} for inp in inputs if inp.get("item_id")]),
-         _json_dumps(outputs), username, corp_id),
+         _json_dumps(outputs), username, corp_id, equip_fid),
     )
 
     # Mark equipment active
@@ -1175,6 +1297,7 @@ def cancel_production_job(
     equipment_id = job["equipment_id"]
     inputs = json.loads(job["inputs_json"] or "[]")
     job_corp_id = str(job["corp_id"] or "") if "corp_id" in job.keys() else ""
+    job_fid = str(job["facility_id"] or "") if "facility_id" in job.keys() else ""
 
     import main as _main
 
@@ -1238,6 +1361,7 @@ def start_mining_job(
 
     location_id = equip["location_id"]
     config = json.loads(equip["config_json"] or "{}")
+    equip_fid = str(equip["facility_id"] or "") if "facility_id" in equip.keys() else ""
 
     # Verify this is a surface site
     site = conn.execute(
@@ -1296,8 +1420,8 @@ def start_mining_job(
         """
         INSERT INTO production_jobs
           (id, location_id, equipment_id, job_type, resource_id, status,
-           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id)
-        VALUES (?, ?, ?, 'mine', ?, 'active', ?, ?, ?, ?, ?, ?)
+           started_at, completes_at, inputs_json, outputs_json, created_by, corp_id, facility_id)
+        VALUES (?, ?, ?, 'mine', ?, 'active', ?, ?, ?, ?, ?, ?, ?)
         """,
         (job_id, location_id, equipment_id, resource_id, now, far_future,
          _json_dumps({"last_settled": now, "total_mined_kg": 0}),
@@ -1306,7 +1430,7 @@ def start_mining_job(
              "source_resource_id": resource_id,
              "rate_kg_per_hr": effective_rate,
          }]),
-         username, corp_id),
+         username, corp_id, equip_fid),
     )
 
     conn.execute("UPDATE deployed_equipment SET status = 'active' WHERE id = ?", (equipment_id,))
@@ -1371,18 +1495,30 @@ def stop_mining_job(
 # ── Query Helpers ──────────────────────────────────────────────────────────────
 
 
-def get_deployed_equipment(conn: sqlite3.Connection, location_id: str) -> List[Dict[str, Any]]:
-    """List all deployed equipment at a location."""
-    rows = conn.execute(
-        """
-        SELECT id, location_id, item_id, name, category, deployed_at,
-               deployed_by, status, config_json, corp_id, mode
-        FROM deployed_equipment
-        WHERE location_id = ?
-        ORDER BY category, name
-        """,
-        (location_id,),
-    ).fetchall()
+def get_deployed_equipment(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> List[Dict[str, Any]]:
+    """List all deployed equipment at a location (optionally filtered by facility)."""
+    if facility_id:
+        rows = conn.execute(
+            """
+            SELECT id, location_id, item_id, name, category, deployed_at,
+                   deployed_by, status, config_json, corp_id, mode, facility_id
+            FROM deployed_equipment
+            WHERE facility_id = ?
+            ORDER BY category, name
+            """,
+            (facility_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, location_id, item_id, name, category, deployed_at,
+                   deployed_by, status, config_json, corp_id, mode, facility_id
+            FROM deployed_equipment
+            WHERE location_id = ?
+            ORDER BY category, name
+            """,
+            (location_id,),
+        ).fetchall()
 
     result = []
     for r in rows:
@@ -1400,6 +1536,7 @@ def get_deployed_equipment(conn: sqlite3.Connection, location_id: str) -> List[D
             "mode": mode,
             "config": config,
             "corp_id": str(r["corp_id"] or ""),
+            "facility_id": str(r["facility_id"] or "") if "facility_id" in r.keys() else "",
         }
         # For constructors in mine mode, add mining stats
         if mode == "mine" and r["category"] in ("constructor", "robonaut"):
@@ -1409,23 +1546,39 @@ def get_deployed_equipment(conn: sqlite3.Connection, location_id: str) -> List[D
     return result
 
 
-def get_active_jobs(conn: sqlite3.Connection, location_id: str) -> List[Dict[str, Any]]:
-    """List all active jobs at a location."""
+def get_active_jobs(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> List[Dict[str, Any]]:
+    """List all active jobs at a location (optionally filtered by facility)."""
     now = game_now_s()
-    rows = conn.execute(
-        """
-        SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
-               pj.recipe_id, pj.resource_id, pj.status,
-               pj.started_at, pj.completes_at, pj.inputs_json, pj.outputs_json,
-               pj.created_by,
-               de.name AS equipment_name, de.item_id AS equipment_item_id
-        FROM production_jobs pj
-        JOIN deployed_equipment de ON de.id = pj.equipment_id
-        WHERE pj.location_id = ? AND pj.status = 'active'
-        ORDER BY pj.started_at
-        """,
-        (location_id,),
-    ).fetchall()
+    if facility_id:
+        rows = conn.execute(
+            """
+            SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
+                   pj.recipe_id, pj.resource_id, pj.status,
+                   pj.started_at, pj.completes_at, pj.inputs_json, pj.outputs_json,
+                   pj.created_by, pj.facility_id,
+                   de.name AS equipment_name, de.item_id AS equipment_item_id
+            FROM production_jobs pj
+            JOIN deployed_equipment de ON de.id = pj.equipment_id
+            WHERE pj.facility_id = ? AND pj.status = 'active'
+            ORDER BY pj.started_at
+            """,
+            (facility_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
+                   pj.recipe_id, pj.resource_id, pj.status,
+                   pj.started_at, pj.completes_at, pj.inputs_json, pj.outputs_json,
+                   pj.created_by, pj.facility_id,
+                   de.name AS equipment_name, de.item_id AS equipment_item_id
+            FROM production_jobs pj
+            JOIN deployed_equipment de ON de.id = pj.equipment_id
+            WHERE pj.location_id = ? AND pj.status = 'active'
+            ORDER BY pj.started_at
+            """,
+            (location_id,),
+        ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
     result = []
@@ -1474,22 +1627,44 @@ def get_active_jobs(conn: sqlite3.Connection, location_id: str) -> List[Dict[str
     return result
 
 
-def get_job_history(conn: sqlite3.Connection, location_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+def get_job_history(
+    conn: sqlite3.Connection,
+    location_id: str,
+    limit: int = 20,
+    *,
+    facility_id: str = "",
+) -> List[Dict[str, Any]]:
     """List recent completed/cancelled jobs at a location."""
-    rows = conn.execute(
-        """
-        SELECT pj.id, pj.job_type, pj.recipe_id, pj.resource_id,
-               pj.status, pj.started_at, pj.completed_at,
-               pj.outputs_json, pj.inputs_json,
-               de.name AS equipment_name
-        FROM production_jobs pj
-        JOIN deployed_equipment de ON de.id = pj.equipment_id
-        WHERE pj.location_id = ? AND pj.status IN ('completed', 'cancelled')
-        ORDER BY pj.completed_at DESC
-        LIMIT ?
-        """,
-        (location_id, limit),
-    ).fetchall()
+    if facility_id:
+        rows = conn.execute(
+            """
+            SELECT pj.id, pj.job_type, pj.recipe_id, pj.resource_id,
+                   pj.status, pj.started_at, pj.completed_at,
+                   pj.outputs_json, pj.inputs_json,
+                   de.name AS equipment_name
+            FROM production_jobs pj
+            JOIN deployed_equipment de ON de.id = pj.equipment_id
+            WHERE pj.facility_id = ? AND pj.status IN ('completed', 'cancelled')
+            ORDER BY pj.completed_at DESC
+            LIMIT ?
+            """,
+            (facility_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT pj.id, pj.job_type, pj.recipe_id, pj.resource_id,
+                   pj.status, pj.started_at, pj.completed_at,
+                   pj.outputs_json, pj.inputs_json,
+                   de.name AS equipment_name
+            FROM production_jobs pj
+            JOIN deployed_equipment de ON de.id = pj.equipment_id
+            WHERE pj.location_id = ? AND pj.status IN ('completed', 'cancelled')
+            ORDER BY pj.completed_at DESC
+            LIMIT ?
+            """,
+            (location_id, limit),
+        ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
     result = []
@@ -1514,6 +1689,7 @@ def get_available_recipes_for_location(
     location_id: str,
     corp_id: str = "",
     unlocked_tech_ids: Optional[set[str]] = None,
+    facility_id: str = "",
 ) -> List[Dict[str, Any]]:
     """
     Get all recipes that could be run at a location, based on deployed equipment.
@@ -1521,14 +1697,14 @@ def get_available_recipes_for_location(
     - Shipyard recipes matched to deployed constructors (any constructor can build any).
     Also annotates each recipe with whether the location has sufficient inputs.
     """
-    equipment = get_deployed_equipment(conn, location_id)
+    equipment = get_deployed_equipment(conn, location_id, facility_id=facility_id)
     refineries = [e for e in equipment if e["category"] == "refinery"]
     constructors = [e for e in equipment if e["category"] == "constructor"]
 
     if not refineries and not constructors:
         return []
 
-    # Gather location inventory for availability checks
+    # Gather inventory for availability checks (location-scoped)
     import main as _main
     inv = _main.get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
     resource_stock: Dict[str, float] = {}
@@ -1548,6 +1724,7 @@ def get_available_recipes_for_location(
         (catalog_service.load_radiator_catalog, "radiator"),
         (catalog_service.load_robonaut_catalog, "robonaut"),
         (catalog_service.load_constructor_catalog, "constructor"),
+        (catalog_service.load_isru_catalog, "isru"),
         (catalog_service.load_refinery_catalog, "refinery"),
     ]:
         try:
@@ -1590,6 +1767,17 @@ def get_available_recipes_for_location(
                     if output_category == "refinery":
                         ref_cat = str(recipe.get("refinery_category") or "")
                         subtree_prefix = _REFINERY_CATEGORY_TO_RESEARCH_PREFIX.get(ref_cat)
+                        if subtree_prefix:
+                            required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
+                        else:
+                            required_node_id = f"{research_category}_lvl_{required_tier}"
+                    elif output_category == "isru":
+                        # ISRU has per-branch subtrees (sifting / heat_drill)
+                        out_id_isru = str(recipe.get("output_item_id") or "")
+                        isru_catalog = catalog_service.load_isru_catalog()
+                        isru_entry = isru_catalog.get(out_id_isru, {})
+                        isru_branch = str(isru_entry.get("branch") or "")
+                        subtree_prefix = _ISRU_BRANCH_TO_RESEARCH_PREFIX.get(isru_branch)
                         if subtree_prefix:
                             required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
                         else:
@@ -1665,23 +1853,38 @@ def get_available_recipes_for_location(
     return result
 
 
-def get_location_industry_summary(conn: sqlite3.Connection, location_id: str) -> Dict[str, Any]:
-    """Get a summary of industrial activity at a location."""
-    equip_counts = conn.execute(
-        """
-        SELECT category, COUNT(*) as cnt,
-               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_cnt
-        FROM deployed_equipment
-        WHERE location_id = ?
-        GROUP BY category
-        """,
-        (location_id,),
-    ).fetchall()
-
-    job_count = conn.execute(
-        "SELECT COUNT(*) as cnt FROM production_jobs WHERE location_id = ? AND status = 'active'",
-        (location_id,),
-    ).fetchone()
+def get_location_industry_summary(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> Dict[str, Any]:
+    """Get a summary of industrial activity at a location (optionally scoped to facility)."""
+    if facility_id:
+        equip_counts = conn.execute(
+            """
+            SELECT category, COUNT(*) as cnt,
+                   SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_cnt
+            FROM deployed_equipment
+            WHERE facility_id = ?
+            GROUP BY category
+            """,
+            (facility_id,),
+        ).fetchall()
+        job_count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM production_jobs WHERE facility_id = ? AND status = 'active'",
+            (facility_id,),
+        ).fetchone()
+    else:
+        equip_counts = conn.execute(
+            """
+            SELECT category, COUNT(*) as cnt,
+                   SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_cnt
+            FROM deployed_equipment
+            WHERE location_id = ?
+            GROUP BY category
+            """,
+            (location_id,),
+        ).fetchall()
+        job_count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM production_jobs WHERE location_id = ? AND status = 'active'",
+            (location_id,),
+        ).fetchone()
 
     equipment_summary: Dict[str, Any] = {}
     for row in equip_counts:
@@ -1802,21 +2005,36 @@ def set_constructor_mode(
 # ── Refinery Slot Management ──────────────────────────────────────────────────
 
 
-def get_refinery_slots(conn: sqlite3.Connection, location_id: str) -> List[Dict[str, Any]]:
-    """Get all refinery slots at a location, ordered by priority."""
-    rows = conn.execute(
-        """
-        SELECT rs.id, rs.equipment_id, rs.location_id, rs.slot_index,
-               rs.recipe_id, rs.priority, rs.status, rs.current_job_id, rs.corp_id,
-               rs.cumulative_output_qty,
-               de.name AS equipment_name, de.config_json
-        FROM refinery_slots rs
-        JOIN deployed_equipment de ON de.id = rs.equipment_id
-        WHERE rs.location_id = ?
-        ORDER BY rs.priority ASC, rs.slot_index ASC
-        """,
-        (location_id,),
-    ).fetchall()
+def get_refinery_slots(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> List[Dict[str, Any]]:
+    """Get all refinery slots at a location (optionally filtered by facility)."""
+    if facility_id:
+        rows = conn.execute(
+            """
+            SELECT rs.id, rs.equipment_id, rs.location_id, rs.slot_index,
+                   rs.recipe_id, rs.priority, rs.status, rs.current_job_id, rs.corp_id,
+                   rs.cumulative_output_qty, rs.facility_id,
+                   de.name AS equipment_name, de.config_json
+            FROM refinery_slots rs
+            JOIN deployed_equipment de ON de.id = rs.equipment_id
+            WHERE rs.facility_id = ?
+            ORDER BY rs.priority ASC, rs.slot_index ASC
+            """,
+            (facility_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT rs.id, rs.equipment_id, rs.location_id, rs.slot_index,
+                   rs.recipe_id, rs.priority, rs.status, rs.current_job_id, rs.corp_id,
+                   rs.cumulative_output_qty, rs.facility_id,
+                   de.name AS equipment_name, de.config_json
+            FROM refinery_slots rs
+            JOIN deployed_equipment de ON de.id = rs.equipment_id
+            WHERE rs.location_id = ?
+            ORDER BY rs.priority ASC, rs.slot_index ASC
+            """,
+            (location_id,),
+        ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
     result = []
@@ -1917,13 +2135,52 @@ def reorder_refinery_slots(
     location_id: str,
     slot_ids: List[str],
     corp_id: str = "",
+    facility_id: str = "",
 ) -> Dict[str, Any]:
     """Reorder refinery slot priorities. slot_ids should be in desired priority order."""
+    if not slot_ids:
+        return {"reordered": True, "count": 0}
+
+    placeholders = ",".join("?" for _ in slot_ids)
+    if facility_id:
+        rows = conn.execute(
+            f"""
+            SELECT id, corp_id FROM refinery_slots
+            WHERE facility_id = ? AND id IN ({placeholders})
+            """,
+            [facility_id] + slot_ids,
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"""
+            SELECT id, corp_id FROM refinery_slots
+            WHERE location_id = ? AND id IN ({placeholders})
+            """,
+            [location_id] + slot_ids,
+        ).fetchall()
+
+    found_ids = {str(r["id"]) for r in rows}
+    missing = [sid for sid in slot_ids if sid not in found_ids]
+    if missing:
+        raise ValueError("Some refinery slots are invalid for this scope")
+
+    if corp_id:
+        for r in rows:
+            row_corp_id = str(r["corp_id"] or "")
+            if row_corp_id and row_corp_id != corp_id:
+                raise ValueError("You do not own one or more refinery slots")
+
     for i, sid in enumerate(slot_ids):
-        conn.execute(
-            "UPDATE refinery_slots SET priority = ? WHERE id = ? AND location_id = ?",
-            (i, sid, location_id),
-        )
+        if facility_id:
+            conn.execute(
+                "UPDATE refinery_slots SET priority = ? WHERE id = ? AND facility_id = ?",
+                (i, sid, facility_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE refinery_slots SET priority = ? WHERE id = ? AND location_id = ?",
+                (i, sid, location_id),
+            )
     conn.commit()
     return {"reordered": True, "count": len(slot_ids)}
 
@@ -1931,20 +2188,34 @@ def reorder_refinery_slots(
 # ── Construction Queue ─────────────────────────────────────────────────────────
 
 
-def get_construction_queue(conn: sqlite3.Connection, location_id: str) -> Dict[str, Any]:
-    """Get the construction queue and pool stats for a location."""
-    rows = conn.execute(
-        """
-        SELECT id, recipe_id, queue_order, status, started_at, completes_at,
-               inputs_json, outputs_json, created_by, corp_id
-        FROM construction_queue
-        WHERE location_id = ? AND status IN ('queued', 'active')
-        ORDER BY
-            CASE WHEN status = 'active' THEN 0 ELSE 1 END,
-            queue_order ASC
-        """,
-        (location_id,),
-    ).fetchall()
+def get_construction_queue(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> Dict[str, Any]:
+    """Get the construction queue and pool stats for a location (optionally filtered by facility)."""
+    if facility_id:
+        rows = conn.execute(
+            """
+            SELECT id, recipe_id, queue_order, status, started_at, completes_at,
+                   inputs_json, outputs_json, created_by, corp_id, facility_id
+            FROM construction_queue
+            WHERE facility_id = ? AND status IN ('queued', 'active')
+            ORDER BY
+                CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+                queue_order ASC
+            """,
+            (facility_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, recipe_id, queue_order, status, started_at, completes_at,
+                   inputs_json, outputs_json, created_by, corp_id, facility_id
+            FROM construction_queue
+            WHERE location_id = ? AND status IN ('queued', 'active')
+            ORDER BY
+                CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+                queue_order ASC
+            """,
+            (location_id,),
+        ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
     now = game_now_s()
@@ -1978,7 +2249,7 @@ def get_construction_queue(conn: sqlite3.Connection, location_id: str) -> Dict[s
             entry["output_qty"] = recipe.get("output_qty", 0)
         queue.append(entry)
 
-    pool_speed = _get_construction_pool_speed(conn, location_id)
+    pool_speed = _get_construction_pool_speed(conn, location_id, facility_id=facility_id)
 
     return {
         "queue": queue,
@@ -1993,6 +2264,7 @@ def queue_construction(
     recipe_id: str,
     username: str,
     corp_id: str = "",
+    facility_id: str = "",
 ) -> Dict[str, Any]:
     """Add a recipe to the construction queue."""
     recipes = catalog_service.load_recipe_catalog()
@@ -2003,19 +2275,25 @@ def queue_construction(
         raise ValueError("Only construction (shipyard) recipes can be queued")
 
     # Get next queue order
-    max_order = conn.execute(
-        "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE location_id = ? AND status IN ('queued', 'active')",
-        (location_id,),
-    ).fetchone()
+    if facility_id:
+        max_order = conn.execute(
+            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE facility_id = ? AND status IN ('queued', 'active')",
+            (facility_id,),
+        ).fetchone()
+    else:
+        max_order = conn.execute(
+            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE location_id = ? AND status IN ('queued', 'active')",
+            (location_id,),
+        ).fetchone()
     next_order = (max_order["mo"] if max_order else -1) + 1
 
     queue_id = str(uuid.uuid4())
     conn.execute(
         """
-        INSERT INTO construction_queue (id, location_id, recipe_id, queue_order, status, created_by, corp_id)
-        VALUES (?, ?, ?, ?, 'queued', ?, ?)
+        INSERT INTO construction_queue (id, location_id, recipe_id, queue_order, status, created_by, corp_id, facility_id)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
         """,
-        (queue_id, location_id, recipe_id, next_order, username, corp_id),
+        (queue_id, location_id, recipe_id, next_order, username, corp_id, facility_id),
     )
     conn.commit()
 
@@ -2058,6 +2336,7 @@ def dequeue_construction(
         if refund_fraction > 0.01:
             import main as _main
             inputs = json.loads(item["inputs_json"] or "[]")
+            item_fid = str(item["facility_id"] or "") if "facility_id" in item.keys() else ""
             for inp in inputs:
                 inp_id = str(inp.get("item_id") or "").strip()
                 inp_qty = float(inp.get("qty") or 0.0)
@@ -2081,13 +2360,52 @@ def reorder_construction_queue(
     location_id: str,
     queue_ids: List[str],
     corp_id: str = "",
+    facility_id: str = "",
 ) -> Dict[str, Any]:
     """Reorder construction queue items. queue_ids in desired order."""
+    if not queue_ids:
+        return {"reordered": True, "count": 0}
+
+    placeholders = ",".join("?" for _ in queue_ids)
+    if facility_id:
+        rows = conn.execute(
+            f"""
+            SELECT id, corp_id FROM construction_queue
+            WHERE facility_id = ? AND id IN ({placeholders})
+            """,
+            [facility_id] + queue_ids,
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"""
+            SELECT id, corp_id FROM construction_queue
+            WHERE location_id = ? AND id IN ({placeholders})
+            """,
+            [location_id] + queue_ids,
+        ).fetchall()
+
+    found_ids = {str(r["id"]) for r in rows}
+    missing = [qid for qid in queue_ids if qid not in found_ids]
+    if missing:
+        raise ValueError("Some construction queue items are invalid for this scope")
+
+    if corp_id:
+        for r in rows:
+            row_corp_id = str(r["corp_id"] or "")
+            if row_corp_id and row_corp_id != corp_id:
+                raise ValueError("You do not own one or more queue items")
+
     for i, qid in enumerate(queue_ids):
-        conn.execute(
-            "UPDATE construction_queue SET queue_order = ? WHERE id = ? AND location_id = ?",
-            (i, qid, location_id),
-        )
+        if facility_id:
+            conn.execute(
+                "UPDATE construction_queue SET queue_order = ? WHERE id = ? AND facility_id = ?",
+                (i, qid, facility_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE construction_queue SET queue_order = ? WHERE id = ? AND location_id = ?",
+                (i, qid, location_id),
+            )
     conn.commit()
     return {"reordered": True, "count": len(queue_ids)}
 

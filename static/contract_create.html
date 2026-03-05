@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Create Contract — Frontier: Sol 2000</title>
-    <link rel="stylesheet" href="/static/styles.css?v=contracts3" />
+    <link rel="stylesheet" href="/static/styles.css?v=contracts4" />
     <style>
       .ccCreatePage .ccWizard {
         display: flex;
@@ -47,6 +47,7 @@
             <a class="tab" href="/research">Research</a>
             <a class="tab" href="/organization">Organization</a>
             <a class="tab active" href="/contracts">Contracts</a>
+            <a class="tab" href="/missions">Missions</a>
             <a class="tab authAdminTab" href="/admin">Admin</a>
           </nav>
         </div>
@@ -190,11 +191,11 @@
               <div id="ccOpts_auction" class="ccOptsBlock">
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Starting Bid</label>
-                  <input id="ccStartingBid" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                  <input id="ccStartingBid" type="text" inputmode="decimal" class="ccInput ccInputNum" value="0" />
                 </div>
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Buyout Price (optional)</label>
-                  <input id="ccBuyoutPrice" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                  <input id="ccBuyoutPrice" type="text" inputmode="decimal" class="ccInput ccInputNum" value="0" />
                 </div>
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Auction Duration</label>
@@ -220,11 +221,11 @@
                 </div>
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Reward (payment to courier)</label>
-                  <input id="ccCourierReward" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                  <input id="ccCourierReward" type="text" inputmode="decimal" class="ccInput ccInputNum" value="0" />
                 </div>
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Collateral</label>
-                  <input id="ccCourierCollateral" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                  <input id="ccCourierCollateral" type="text" inputmode="decimal" class="ccInput ccInputNum" value="0" />
                 </div>
                 <div class="ccFieldRow">
                   <label class="ccLabel ccLabelInline">Days to Complete</label>
@@ -253,7 +254,7 @@
                 <div id="ccExchangePriceFields">
                   <div class="ccFieldRow">
                     <label class="ccLabel ccLabelInline" id="ccExPriceLabel">Price</label>
-                    <input id="ccExchangePrice" type="number" class="ccInput ccInputNum" value="0.00" min="0" step="0.01" />
+                    <input id="ccExchangePrice" type="text" inputmode="decimal" class="ccInput ccInputNum" value="0" />
                   </div>
                 </div>
 
@@ -345,6 +346,6 @@
 
     <script src="/static/js/clock.js?v=ck1"></script>
     <script src="/static/js/auth.js?v=au2"></script>
-    <script src="/static/js/contract_create.js?v=cc3"></script>
+    <script src="/static/js/contract_create.js?v=cc4"></script>
   </body>
 </html>

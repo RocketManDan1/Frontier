@@ -1,0 +1,21 @@
+{
+  "id": "des_2a_sandstorm",
+  "name": "DES-2A \"Sandstorm\"",
+  "research_node": "electrostatic_regolith_processing",
+  "tech_level": 2,
+  "branch": "electrostatic_centrifugal",
+  "mass_t": 25.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 1.1
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 313,
+    "extraction_method": "electrostatic_centrifugal_separation",
+    "regolith_throughput_t_per_hr": 12.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The Sandstorm introduces electrostatic pre-separation into the sifting pipeline. Incoming regolith passes through a triboelectric charging tunnel where particle-particle collisions impart differential surface charges to ice-bearing grains versus dry silicates. Charged particles are then deflected by high-voltage plate arrays into separate streams before reaching the mechanical centrifugal drums, dramatically improving ice recovery even from sub-5% concentration regolith. The electrostatic stage adds minimal mass but requires 1.1 MW to maintain the charging fields and plate voltages. Total throughput climbs to 12 t/hr of raw regolith with 313 kg/hr water output. At 25 tonnes, the Sandstorm requires a medium-lift lander or dedicated cargo delivery to deploy.",
+  "ui_tags": ["electrostatic_centrifugal", "tier_2", "heavy", "low_power"]
+}

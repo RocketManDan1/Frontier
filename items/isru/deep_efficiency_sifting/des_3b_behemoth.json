@@ -1,0 +1,21 @@
+{
+  "id": "des_3b_behemoth",
+  "name": "DES-3B \"Behemoth\"",
+  "research_node": "magnetic_resonance_sifting",
+  "tech_level": 3.5,
+  "branch": "magnetic_resonance_separation",
+  "mass_t": 105.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 6.5
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 1042,
+    "extraction_method": "dual_bore_magnetic_resonance_separation",
+    "regolith_throughput_t_per_hr": 42.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The Behemoth doubles the Leviathan's throughput by running dual superconducting bore tubes in parallel, sharing a common cryogenic bus and intake distribution system. Each bore is independently tunable — one can be optimized for coarse-grained regolith while the other handles fine dust fractions, improving recovery across the full particle size distribution. An integrated microwave pre-heater warms incoming regolith to 250 K, loosening adsorbed water molecules from grain surfaces and making them more responsive to the magnetic separation field. At 105 tonnes, the Behemoth is a major infrastructure investment requiring dedicated heavy-lift delivery, but its 1,042 kg/hr water output can sustain large permanent bases even at marginal dry sites. Power draw remains controlled at 6.5 MW thanks to improved high-temperature superconductor coils that operate at 40 K rather than the Leviathan's 4 K, drastically reducing cryocooler parasitic load.",
+  "ui_tags": ["magnetic_resonance", "dual_bore", "tier_3", "heavy", "low_power"]
+}

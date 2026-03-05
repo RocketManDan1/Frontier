@@ -69,6 +69,7 @@ def api_catalog_browse(request: Request, conn: sqlite3.Connection = Depends(get_
         ("storage", catalog_service.load_storage_catalog),
         ("robonaut", catalog_service.load_robonaut_catalog),
         ("constructor", catalog_service.load_constructor_catalog),
+        ("isru", catalog_service.load_isru_catalog),
         ("refinery", catalog_service.load_refinery_catalog),
     ]
     for cat_name, loader in module_loaders:

@@ -1,0 +1,22 @@
+{
+  "recipe_id": "hdc_4a_hellfrost",
+  "name": "Assemble HDC-4A \"Hellfrost\"",
+  "output_item_id": "hdc_4a_hellfrost",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "semiconductor_materials", "qty": 15000.0 },
+    { "item_id": "superconductors", "qty": 10000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 9500.0 },
+    { "item_id": "structural_alloys", "qty": 6000.0 },
+    { "item_id": "advanced_ceramics", "qty": 4500.0 },
+    { "item_id": "radiation_composite_armor", "qty": 3500.0 },
+    { "item_id": "carbon_composites", "qty": 2500.0 },
+    { "item_id": "strategic_elements", "qty": 1500.0 }
+  ],
+  "build_time_s": 17100,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 2500,
+  "byproducts": []
+}

@@ -44,11 +44,42 @@ def _check_ship_ownership(conn, user, ship_id: str):
         raise HTTPException(status_code=403, detail="This ship belongs to another corporation")
 
 
+def _resolve_body_name(conn: sqlite3.Connection, location_id: str) -> str:
+    loc = conn.execute("SELECT parent_id FROM locations WHERE id = ?", (location_id,)).fetchone()
+    if not loc:
+        return ""
+    parent_id = str(loc["parent_id"] or "")
+    if not parent_id:
+        return ""
+
+    groups = conn.execute("SELECT id, name, parent_id, is_group FROM locations").fetchall()
+    group_map: Dict[str, Dict[str, Any]] = {}
+    for g in groups:
+        if int(g["is_group"] or 0):
+            group_map[str(g["id"])] = {
+                "name": str(g["name"] or ""),
+                "parent_id": str(g["parent_id"] or ""),
+            }
+
+    if parent_id not in group_map:
+        return ""
+
+    group = group_map[parent_id]
+    group_name = group.get("name") or ""
+    group_parent = group.get("parent_id") or ""
+    leaf_names = {"orbits", "surface sites", "moons", "asteroids"}
+    if group_name.lower() in leaf_names or "lagrange" in group_name.lower():
+        if group_parent and group_parent in group_map:
+            return group_map[group_parent].get("name") or ""
+    return group_name
+
+
 @router.get("/api/inventory/location/{location_id}")
-def api_location_inventory(location_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+def api_location_inventory(location_id: str, request: Request, facility_id: str = "", conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     loc_id = (location_id or "").strip()
     if not loc_id:
         raise HTTPException(status_code=400, detail="location_id is required")
+    fid = str(facility_id or "").strip()
 
     user = require_login(conn, request)
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
@@ -276,6 +307,7 @@ class InventoryTransferReq(BaseModel):
     target_key: Optional[str] = None
     amount: Optional[float] = None
     resource_id: Optional[str] = None
+    facility_id: Optional[str] = None
 
 
 class StackTransferReq(BaseModel):
@@ -284,6 +316,7 @@ class StackTransferReq(BaseModel):
     source_key: str
     target_kind: Literal["ship", "location"]
     target_id: str
+    facility_id: Optional[str] = None
 
 
 @router.post("/api/inventory/transfer")
@@ -405,7 +438,12 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     else:
         source_location_id = source_id
         _main()._get_location_row(conn, source_location_id)
-        source_resource_row = _main()._resource_stack_row(conn, source_location_id, source_key, corp_id=corp_id or "")
+        source_resource_row = _main()._resource_stack_row(
+            conn,
+            source_location_id,
+            source_key,
+            corp_id=corp_id or "",
+        )
         payload = json.loads(source_resource_row["payload_json"] or "{}")
         move_resource_id = str(payload.get("resource_id") or source_resource_row["item_id"] or "").strip()
         available_mass = max(0.0, float(source_resource_row["mass_kg"] or 0.0))
@@ -553,7 +591,7 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     density = max(0.0, float((resources.get(move_resource_id) or {}).get("mass_per_m3_kg") or 0.0))
 
     if target_kind == "location":
-        # Add the resource to the location's inventory
+        # Add the resource to the location's inventory (location-scoped cargo)
         _main().add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg, corp_id=corp_id or "")
         destroyed_mass_kg = 0.0
     else:
@@ -805,7 +843,12 @@ def api_stack_transfer(req: StackTransferReq, request: Request, conn: sqlite3.Co
         moved_part = dict(source_parts[source_part_index]) if isinstance(source_parts[source_part_index], dict) else {"item_id": "part"}
     else:
         source_location_id = str(_main()._get_location_row(conn, source_id)["id"])
-        source_part_row = _main()._part_stack_row(conn, source_location_id, source_key, corp_id=corp_id)
+        source_part_row = _main()._part_stack_row(
+            conn,
+            source_location_id,
+            source_key,
+            corp_id=corp_id,
+        )
         moved_part = _main()._consume_location_part_unit(conn, source_part_row)
 
     if target_kind == "ship":
@@ -1015,15 +1058,17 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
 # ──────────────────────────────────────────────────────────────
 
 @router.get("/api/cargo/context/{location_id}")
-def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+def api_cargo_context(location_id: str, request: Request, facility_id: str = "", conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     """
     Location-centric cargo context. Returns site inventory and every
     docked ship's containers/cargo at this location — everything the
     Sites cargo-transfer tab needs.
+    If facility_id is provided, the site inventory is scoped to that facility.
     """
     lid = str(location_id or "").strip()
     if not lid:
         raise HTTPException(status_code=400, detail="location_id is required")
+    fid = str(facility_id or "").strip()
 
     user = require_login(conn, request)
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
@@ -1033,19 +1078,45 @@ def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connecti
 
     loc_row = m._get_location_row(conn, lid)
     location_name = str(loc_row["name"])
+    body_name = _resolve_body_name(conn, lid)
+
+    my_facilities: List[Dict[str, Any]] = []
+    selected_facility_name = ""
+    corp_id_str = str(corp_id or "")
+    if corp_id_str:
+        import facility_service
+        all_facilities = facility_service.list_facilities_at_location(
+            conn,
+            lid,
+            viewer_corp_id=corp_id_str,
+        )
+        my_facilities = [f for f in all_facilities if f.get("is_mine")]
+        if fid:
+            selected = next((f for f in my_facilities if str(f.get("id") or "") == fid), None)
+            if selected is None:
+                raise HTTPException(status_code=403, detail="You do not own this facility")
+            selected_facility_name = str(selected.get("name") or "")
 
     # ── Build entity list ──
     entities: List[Dict[str, Any]] = []
 
-    # 1. Location entity
+    # 1. Location / facility entity
     location_payload = m.get_location_inventory_payload(conn, lid, corp_id=corp_id)
     loc_inv_items = m._inventory_items_for_location(location_payload)
     loc_stack_items = m._stack_items_for_location(location_payload)
+    # Resolve facility name for display
+    facility_name = selected_facility_name
+    if fid and not facility_name:
+        fac_row = conn.execute("SELECT name FROM facilities WHERE id = ?", (fid,)).fetchone()
+        facility_name = str(fac_row["name"]) if fac_row else fid
+    entity_label = f"{facility_name} Inventory" if facility_name else f"{location_name} Site Inventory"
+
     entities.append({
         "entity_kind": "location",
         "id": lid,
-        "name": f"{location_name} Site Inventory",
+        "name": entity_label,
         "location_id": lid,
+        "facility_id": fid,
         "parts": [],
         "stats": None,
         "power_balance": None,
@@ -1110,6 +1181,12 @@ def api_cargo_context(location_id: str, request: Request, conn: sqlite3.Connecti
         })
 
     return {
+        "facility_id": fid,
+        "facility_name": facility_name,
+        "location_id": lid,
+        "location_name": location_name,
+        "body_name": body_name,
+        "my_facilities": my_facilities,
         "location": {
             "id": lid,
             "name": location_name,

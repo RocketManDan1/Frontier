@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "isru_deep_efficiency_sifting",
+  "display_name": "Deep Efficiency Sifting ISRU",
+  "notes": [
+    "Massive mechanical regolith processing plants purpose-built for water extraction at dry sites (0–15% water ice).",
+    "Intake hoppers collect bulk regolith; counter-rotating centrifugal drums separate fine ice grains from silicate waste.",
+    "Low-temperature bake-out chambers (~400 K) sublimate trapped volatiles; cryocondensers recover water.",
+    "Output is a flat rated water production regardless of ice concentration — ice fraction gates deployment only.",
+    "Very heavy equipment (10–270 t) but modest power draw — most work is mechanical and low-grade thermal.",
+    "Multiple units at the same facility sum their extraction rates.",
+    "Suited for lunar highlands, Mercury equatorial sites, and other low-ice locations where Heat Drill systems cannot operate."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "site_requirements": {
+    "max_water_ice_fraction": 0.15,
+    "min_water_ice_fraction": 0.0
+  },
+  "mainline_files": [
+    "des_1a_dustwalker.json",
+    "des_1b_grainmill.json",
+    "des_2a_sandstorm.json",
+    "des_2b_dervish.json",
+    "des_3a_leviathan.json",
+    "des_3b_behemoth.json",
+    "des_4a_colossus.json",
+    "des_4b_worldeater.json"
+  ]
+}

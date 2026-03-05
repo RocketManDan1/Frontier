@@ -1,0 +1,21 @@
+{
+  "id": "hdc_4b_absolutezero",
+  "name": "HDC-4B \"Absolute Zero\"",
+  "research_node": "fusion_thermal_extraction",
+  "tech_level": 4.5,
+  "branch": "fusion_thermal_drill",
+  "mass_t": 68.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 105.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 2347,
+    "extraction_method": "dual_fusion_thermal_bore_system",
+    "max_drill_depth_m": 75.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The paradoxically named Absolute Zero — referencing the temperature of the ice it consumes, not the heat it generates — is the apex of heat drill capture technology. Dual fusion micro-pulse bore heads operate from a common surface platform, each capable of independent 75-metre penetration and lateral boring through any ice-bearing substrate. An integrated isotope separation stage in the condenser array can extract deuterium from the water stream in-line, partially fueling the fusion drivers from their own output and reducing external fuel logistics. The vapor recovery system operates at pressures high enough to drive water directly into pipeline distribution without pumping, enabling the Absolute Zero to feed multiple downstream consumers simultaneously. At 68 tonnes it remains lighter than a T2 sifting plant, but the 105 MW power requirement demands a dedicated high-output reactor and generator constellation — often the single largest power consumer at any facility where it operates. Its 2,347 kg/hr output — 1,690 tonnes per game month — can feed propellant production, colony life support, and industrial processes for an entire regional settlement network.",
+  "ui_tags": ["fusion_thermal", "dual_bore", "tier_4", "light", "high_power"]
+}

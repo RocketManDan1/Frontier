@@ -465,6 +465,7 @@ def _migration_0011_rekey_inventory_stacks(conn: sqlite3.Connection) -> None:
         catalog_service.load_constructor_catalog,
         catalog_service.load_refinery_catalog,
         catalog_service.load_robonaut_catalog,
+        catalog_service.load_isru_catalog,
         catalog_service.load_storage_catalog,
     ):
         part_catalogs.update(loader())
@@ -757,6 +758,286 @@ def _migration_0022_courier_container(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migration_0023_missions(conn: sqlite3.Connection) -> None:
+    """Create missions table for government-issued interplanetary objectives."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS missions (
+            id                   TEXT PRIMARY KEY,
+            tier                 TEXT NOT NULL CHECK (tier IN ('easy', 'medium', 'hard')),
+            title                TEXT NOT NULL,
+            description          TEXT NOT NULL DEFAULT '',
+            destination_id       TEXT NOT NULL,
+            destination_name     TEXT NOT NULL,
+            status               TEXT NOT NULL DEFAULT 'available'
+                                 CHECK (status IN ('available','accepted','delivered','powered','completed','failed','abandoned')),
+            payout_total         REAL NOT NULL,
+            payout_upfront       REAL NOT NULL,
+            payout_completion    REAL NOT NULL,
+            org_id               TEXT,
+            accepted_at          REAL,
+            expires_at           REAL,
+            delivered_at         REAL,
+            power_started_at     REAL,
+            power_required_s     REAL NOT NULL DEFAULT 0,
+            completed_at         REAL,
+            created_at           REAL NOT NULL,
+            available_expires_at REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
+        CREATE INDEX IF NOT EXISTS idx_missions_org_id ON missions(org_id);
+    """)
+    conn.commit()
+
+
+def _migration_0024_facilities(conn: sqlite3.Connection) -> None:
+    """Introduce the Facility layer between locations and player equipment/cargo/jobs.
+
+    A corp can create one or more named facilities at any location.  Each facility
+    has its own independent power grid, equipment, inventory, and production queues.
+
+    Steps:
+      1. Create the ``facilities`` table.
+      2. Add ``facility_id`` to deployed_equipment, location_inventory_stacks,
+         production_jobs, refinery_slots, and construction_queue.
+      3. Auto-create one facility per distinct (location_id, corp_id) that already
+         exists in deployed_equipment or location_inventory_stacks.
+      4. Backfill ``facility_id`` on all affected rows.
+      5. Recreate location_inventory_stacks with facility_id in the PK (needed to
+         support multiple facilities per corp at one location without stack collision).
+    """
+    import uuid as _uuid
+
+    # 1. Create the facilities table ─────────────────────────────────────────────
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS facilities (
+            id              TEXT PRIMARY KEY,
+            location_id     TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+            corp_id         TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            created_at      REAL NOT NULL,
+            created_by      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_facilities_location ON facilities(location_id);
+        CREATE INDEX IF NOT EXISTS idx_facilities_corp ON facilities(corp_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_facilities_loc_corp_name ON facilities(location_id, corp_id, name);
+    """)
+
+    # 2. Add facility_id columns ────────────────────────────────────────────────
+    _safe_add_column(conn, "deployed_equipment", "facility_id", "TEXT")
+    _safe_add_column(conn, "production_jobs", "facility_id", "TEXT")
+    _safe_add_column(conn, "refinery_slots", "facility_id", "TEXT")
+    _safe_add_column(conn, "construction_queue", "facility_id", "TEXT")
+    # location_inventory_stacks will be recreated below (PK change needed)
+
+    # 3. Discover distinct (location_id, corp_id) pairs and auto-create facilities
+    pairs = conn.execute("""
+        SELECT DISTINCT location_id, corp_id FROM deployed_equipment
+        WHERE corp_id IS NOT NULL AND corp_id != ''
+        UNION
+        SELECT DISTINCT location_id, corp_id FROM location_inventory_stacks
+        WHERE corp_id IS NOT NULL AND corp_id != ''
+    """).fetchall()
+
+    facility_lookup: dict = {}  # (location_id, corp_id) → facility_id
+    now = time.time()
+    for row in pairs:
+        loc_id = str(row["location_id"])
+        cid = str(row["corp_id"])
+        fid = str(_uuid.uuid4())
+        facility_lookup[(loc_id, cid)] = fid
+        conn.execute(
+            """INSERT INTO facilities (id, location_id, corp_id, name, created_at, created_by)
+               VALUES (?, ?, ?, 'Facility', ?, 'migration')""",
+            (fid, loc_id, cid, now),
+        )
+
+    # 4. Backfill facility_id on existing tables ────────────────────────────────
+    for loc_id, cid in facility_lookup:
+        fid = facility_lookup[(loc_id, cid)]
+        for tbl in ("deployed_equipment", "production_jobs", "refinery_slots", "construction_queue"):
+            conn.execute(
+                f"UPDATE {tbl} SET facility_id = ? WHERE location_id = ? AND corp_id = ?",
+                (fid, loc_id, cid),
+            )
+
+    # 5. Recreate location_inventory_stacks with facility_id in PK ──────────────
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        # Stash existing data
+        conn.execute("ALTER TABLE location_inventory_stacks RENAME TO _lis_old")
+
+        conn.executescript("""
+            CREATE TABLE location_inventory_stacks (
+              location_id  TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+              corp_id      TEXT NOT NULL DEFAULT '',
+              facility_id  TEXT DEFAULT '',
+              stack_type   TEXT NOT NULL,
+              stack_key    TEXT NOT NULL,
+              item_id      TEXT NOT NULL,
+              name         TEXT NOT NULL,
+              quantity     REAL NOT NULL DEFAULT 0,
+              mass_kg      REAL NOT NULL DEFAULT 0,
+              volume_m3    REAL NOT NULL DEFAULT 0,
+              payload_json TEXT NOT NULL DEFAULT '{}',
+              updated_at   REAL NOT NULL,
+              PRIMARY KEY (facility_id, stack_type, stack_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_lis_location_corp
+              ON location_inventory_stacks(location_id, corp_id);
+            CREATE INDEX IF NOT EXISTS idx_lis_facility_type_item
+              ON location_inventory_stacks(facility_id, stack_type, item_id);
+        """)
+
+        # Copy old rows, filling in facility_id from lookup
+        old_rows = conn.execute(
+            "SELECT * FROM _lis_old"
+        ).fetchall()
+        for r in old_rows:
+            loc_id = str(r["location_id"])
+            cid = str(r["corp_id"] or "")
+            fid = facility_lookup.get((loc_id, cid), "")
+            conn.execute(
+                """INSERT OR IGNORE INTO location_inventory_stacks
+                   (location_id, corp_id, facility_id, stack_type, stack_key,
+                    item_id, name, quantity, mass_kg, volume_m3, payload_json, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (loc_id, cid, fid, r["stack_type"], r["stack_key"],
+                 r["item_id"], r["name"], r["quantity"], r["mass_kg"],
+                 r["volume_m3"], r["payload_json"], r["updated_at"]),
+            )
+
+        conn.execute("DROP TABLE _lis_old")
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+    # Add index on deployed_equipment.facility_id for fast lookups
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_deployed_equip_facility ON deployed_equipment(facility_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_production_jobs_facility ON production_jobs(facility_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_refinery_slots_facility ON refinery_slots(facility_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_construction_queue_facility ON construction_queue(facility_id)")
+
+    conn.commit()
+
+
+def _migration_0025_mission_guardrails(conn: sqlite3.Connection) -> None:
+    """Add mission integrity guardrails and hard-power reset tracking."""
+    # Persist hard-mission power reset events across restarts.
+    _safe_add_column(conn, "missions", "power_reset_count", "INTEGER NOT NULL DEFAULT 0")
+    _safe_add_column(conn, "missions", "last_power_reset_at", "REAL")
+
+    conn.executescript("""
+        -- One active mission per org at DB level (accepted / delivered / powered).
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_missions_one_active_per_org
+          ON missions(org_id)
+          WHERE org_id IS NOT NULL AND status IN ('accepted','delivered','powered');
+
+        -- Keep payout split invariant at DB level on INSERT.
+        CREATE TRIGGER IF NOT EXISTS trg_missions_payout_invariant_insert
+        BEFORE INSERT ON missions
+        FOR EACH ROW
+        WHEN ABS(COALESCE(NEW.payout_total, 0) - (COALESCE(NEW.payout_upfront, 0) + COALESCE(NEW.payout_completion, 0))) > 0.0001
+        BEGIN
+          SELECT RAISE(ABORT, 'missions payout invariant violated');
+        END;
+
+        -- Keep payout split invariant at DB level on UPDATE.
+        CREATE TRIGGER IF NOT EXISTS trg_missions_payout_invariant_update
+        BEFORE UPDATE OF payout_total, payout_upfront, payout_completion ON missions
+        FOR EACH ROW
+        WHEN ABS(COALESCE(NEW.payout_total, 0) - (COALESCE(NEW.payout_upfront, 0) + COALESCE(NEW.payout_completion, 0))) > 0.0001
+        BEGIN
+          SELECT RAISE(ABORT, 'missions payout invariant violated');
+        END;
+    """)
+    conn.commit()
+
+
+def _migration_0026_location_scoped_cargo(conn: sqlite3.Connection) -> None:
+    """Re-key location_inventory_stacks so cargo is location-scoped.
+
+    Old PK:  (facility_id, stack_type, stack_key)
+    New PK:  (location_id, corp_id, stack_type, stack_key)
+
+    All rows are merged into facility_id='' by summing quantity/mass/volume
+    for each (location_id, corp_id, stack_type, stack_key) group.
+    """
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("ALTER TABLE location_inventory_stacks RENAME TO _lis_old_0026")
+
+        conn.executescript("""
+            CREATE TABLE location_inventory_stacks (
+              location_id  TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+              corp_id      TEXT NOT NULL DEFAULT '',
+              facility_id  TEXT NOT NULL DEFAULT '',
+              stack_type   TEXT NOT NULL,
+              stack_key    TEXT NOT NULL,
+              item_id      TEXT NOT NULL,
+              name         TEXT NOT NULL,
+              quantity     REAL NOT NULL DEFAULT 0,
+              mass_kg      REAL NOT NULL DEFAULT 0,
+              volume_m3    REAL NOT NULL DEFAULT 0,
+              payload_json TEXT NOT NULL DEFAULT '{}',
+              updated_at   REAL NOT NULL,
+              PRIMARY KEY (location_id, corp_id, stack_type, stack_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_lis_location_corp_0026
+              ON location_inventory_stacks(location_id, corp_id);
+            CREATE INDEX IF NOT EXISTS idx_lis_type_item_0026
+              ON location_inventory_stacks(stack_type, item_id);
+        """)
+
+        # Aggregate old rows by (location_id, corp_id, stack_type, stack_key),
+        # summing quantities/masses/volumes, taking the latest updated_at, and
+        # keeping item_id/name/payload_json from the row with the highest quantity.
+        conn.execute("""
+            INSERT INTO location_inventory_stacks
+              (location_id, corp_id, facility_id, stack_type, stack_key,
+               item_id, name, quantity, mass_kg, volume_m3, payload_json, updated_at)
+            SELECT
+              o.location_id,
+              COALESCE(o.corp_id, ''),
+              '',
+              o.stack_type,
+              o.stack_key,
+              o.item_id,
+              o.name,
+              agg.total_qty,
+              agg.total_mass,
+              agg.total_vol,
+              o.payload_json,
+              agg.max_updated
+            FROM (
+              SELECT location_id, corp_id, stack_type, stack_key,
+                     SUM(quantity) AS total_qty,
+                     SUM(mass_kg) AS total_mass,
+                     SUM(volume_m3) AS total_vol,
+                     MAX(updated_at) AS max_updated
+              FROM _lis_old_0026
+              GROUP BY location_id, corp_id, stack_type, stack_key
+            ) agg
+            JOIN _lis_old_0026 o
+              ON o.location_id = agg.location_id
+             AND COALESCE(o.corp_id, '') = COALESCE(agg.corp_id, '')
+             AND o.stack_type = agg.stack_type
+             AND o.stack_key = agg.stack_key
+             AND o.quantity = (
+               SELECT MAX(i.quantity) FROM _lis_old_0026 i
+               WHERE i.location_id = agg.location_id
+                 AND COALESCE(i.corp_id, '') = COALESCE(agg.corp_id, '')
+                 AND i.stack_type = agg.stack_type
+                 AND i.stack_key = agg.stack_key
+             )
+            GROUP BY agg.location_id, agg.corp_id, agg.stack_type, agg.stack_key
+        """)
+
+        conn.execute("DROP TABLE _lis_old_0026")
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+    conn.commit()
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -781,6 +1062,10 @@ def _migrations() -> List[Migration]:
     Migration("0020_auction_bids", "Add auction bid tracking columns to contracts", _migration_0020_auction_bids),
     Migration("0021_contract_escrow", "Add escrow_usd column to contracts", _migration_0021_contract_escrow),
     Migration("0022_courier_container", "Add courier_container_id column to contracts", _migration_0022_courier_container),
+    Migration("0023_missions", "Create missions table for government objectives", _migration_0023_missions),
+    Migration("0024_facilities", "Facility layer: named multi-tenant sites with per-facility industry", _migration_0024_facilities),
+    Migration("0025_mission_guardrails", "Mission guardrails: active uniqueness, payout invariant, power reset metadata", _migration_0025_mission_guardrails),
+    Migration("0026_location_scoped_cargo", "Re-key inventory stacks to (location_id, corp_id, stack_type, stack_key); cargo is location-scoped", _migration_0026_location_scoped_cargo),
     ]
 
 

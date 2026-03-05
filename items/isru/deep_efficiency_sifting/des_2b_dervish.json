@@ -1,0 +1,21 @@
+{
+  "id": "des_2b_dervish",
+  "name": "DES-2B \"Dervish\"",
+  "research_node": "electrostatic_regolith_processing",
+  "tech_level": 2.5,
+  "branch": "electrostatic_centrifugal",
+  "mass_t": 40.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 2.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 472,
+    "extraction_method": "resonant_electrostatic_centrifugal",
+    "regolith_throughput_t_per_hr": 18.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The Dervish refines the Sandstorm's electrostatic separation with resonant frequency tuning — the triboelectric charging tunnel oscillates at frequencies matched to the crystallographic structure of common ice polymorphs, preferentially charging ice-bearing grains ten times more efficiently than random-collision charging. Four centrifugal drums operate in a two-stage parallel-series configuration: two coarse drums feed two fine-recovery drums, and each pair shares a common vibro-fluidized bed pre-stage. The resonant charging system enables reliable extraction even from sites below 3% water ice where earlier sifting designs plateaued. At 40 tonnes and 2.0 MW, the Dervish is a substantial facility component, but its 472 kg/hr water output makes it the backbone of mid-game dry-site operations.",
+  "ui_tags": ["electrostatic_centrifugal", "tier_2", "heavy", "low_power"]
+}

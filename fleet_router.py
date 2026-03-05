@@ -859,6 +859,14 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     # Determine the requesting corp (None for admin)
     my_corp_id = user.get("corp_id") if hasattr(user, "get") else None
 
+    # Pre-fetch org names for corp_name display on all ships
+    _org_name_map: Dict[str, str] = {}
+    try:
+        for org_row in conn.execute("SELECT id, name FROM organizations").fetchall():
+            _org_name_map[org_row["id"]] = org_row["name"]
+    except Exception:
+        pass  # table may not exist yet
+
     rows = conn.execute(
         """
         SELECT id,name,shape,color,size_px,notes_json,
@@ -908,6 +916,18 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "status": _ship_status(r),
             "corp_id": ship_corp_id,
             "is_own": is_own,
+            "corp_name": _org_name_map.get(ship_corp_id, "") if ship_corp_id else "",
+            # Basic stats exposed for all ships (tooltip, Δv bar, mass display)
+            "dry_mass_kg": stats["dry_mass_kg"],
+            "fuel_kg": stats["fuel_kg"],
+            "fuel_capacity_kg": stats["fuel_capacity_kg"],
+            "total_mass_kg": stats["dry_mass_kg"] + stats["fuel_kg"],
+            "thrust_kn": stats["thrust_kn"],
+            "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(
+                stats["dry_mass_kg"],
+                stats["fuel_kg"],
+                stats["isp_s"],
+            ),
         }
 
         # Attach snapshot coordinates for in-transit ships
@@ -988,16 +1008,7 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
                 "inventory_containers": inventory_containers,
                 "inventory_items": inventory_items,
                 "inventory_capacity_summary": inventory_capacity_summary,
-                "fuel_kg": stats["fuel_kg"],
-                "fuel_capacity_kg": stats["fuel_capacity_kg"],
-                "dry_mass_kg": stats["dry_mass_kg"],
                 "isp_s": stats["isp_s"],
-                "thrust_kn": stats["thrust_kn"],
-                "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(
-                    stats["dry_mass_kg"],
-                    stats["fuel_kg"],
-                    stats["isp_s"],
-                ),
                 "power_balance": catalog_service.compute_power_balance(parts),
             })
 

@@ -20,6 +20,9 @@
   let cargoGroupByBody = false;
   let cargoOnlyWithCargo = false;
   let industryLocationId = null;
+  let industryFacilityId = null;
+  let industryFacilityName = "";
+  let industryFacilities = [];       // facilities at current location
   let industryData = null;
   let pollTimer = null;
 
@@ -96,7 +99,10 @@
         document.getElementById("tabOverview").style.display = currentTab === "overview" ? "" : "none";
         document.getElementById("tabIndustrial").style.display = currentTab === "industrial" ? "" : "none";
         document.getElementById("tabCargo").style.display = currentTab === "cargo" ? "" : "none";
-        if (currentTab === "industrial") loadIndustryContent();
+        if (currentTab === "industrial") {
+          if (industryLocationId && industryFacilityId) loadIndustryContent();
+          else if (industryLocationId) loadFacilityGrid();
+        }
         if (currentTab === "cargo") renderCargoSitesTable();
       });
     });
@@ -291,25 +297,23 @@
       invGrid.innerHTML = "";
     }
 
-    // Equipment
-    const eqGrid = document.getElementById("siteEquipmentGrid");
-    const eqEmpty = document.getElementById("siteEquipmentEmpty");
-    const equipment = site.equipment || [];
-    if (equipment.length) {
-      eqEmpty.style.display = "none";
-      eqGrid.innerHTML = "";
-      equipment.forEach(eq => {
-        const cell = itemDisplay.createGridCell({
-          label: eq.name, iconSeed: eq.item_id, itemId: eq.item_id,
-          category: eq.category,
-          subtitle: eq.status === "active" ? "⚡ Active" : "Idle",
-          className: eq.status === "active" ? "eqActive" : "",
-        });
-        eqGrid.appendChild(cell);
-      });
+    // Facilities
+    const facilitiesList = document.getElementById("siteFacilitiesList");
+    const facilitiesEmpty = document.getElementById("siteFacilitiesEmpty");
+    const facilities = site.facilities || [];
+    if (facilities.length) {
+      facilitiesEmpty.style.display = "none";
+      facilitiesList.innerHTML = facilities.map(f => {
+        const st = f.stats || {};
+        const owner = f.is_mine ? "Mine" : esc(f.corp_name || f.corp_id || "Unknown Corp");
+        return `<div class="siteShipRow">
+          <span>${esc(f.name)}</span>
+          <span class="muted">${owner} · ⚡ ${Number(st.power_mwe || 0).toFixed(1)} MWe · 🏭 ${st.equipment_count || 0} · ⚙ ${st.active_jobs || 0}</span>
+        </div>`;
+      }).join("");
     } else {
-      eqEmpty.style.display = "";
-      eqGrid.innerHTML = "";
+      facilitiesEmpty.style.display = "";
+      facilitiesList.innerHTML = "";
     }
 
     // Ships
@@ -389,23 +393,174 @@
   function initIndustryLocationSelect() {
     document.getElementById("industryLocationSelect").addEventListener("change", e => {
       industryLocationId = e.target.value || null;
+      industryFacilityId = null;
+      industryFacilityName = "";
       if (industryLocationId) {
-        loadIndustryContent();
+        loadFacilityGrid();
       } else {
         document.getElementById("industryContent").style.display = "none";
       }
     });
+
+    // Back button from facility industry view → facility grid
+    document.getElementById("btnBackToFacilities").addEventListener("click", () => {
+      industryFacilityId = null;
+      industryFacilityName = "";
+      showFacilityGrid();
+    });
+
+    // Facility creation modal
+    document.getElementById("facilityCreateModalClose").addEventListener("click", closeFacilityCreateModal);
+    document.getElementById("facilityCreateCancel").addEventListener("click", closeFacilityCreateModal);
+    document.getElementById("facilityCreateConfirm").addEventListener("click", submitFacilityCreate);
+    document.getElementById("facilityCreateNameInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") submitFacilityCreate();
+    });
+  }
+
+  /* ── Facility Grid ─────────────────────────────────────── */
+
+  async function loadFacilityGrid() {
+    if (!industryLocationId) return;
+    document.getElementById("industryContent").style.display = "";
+    try {
+      const data = await fetchJSON(`/api/facilities/${encodeURIComponent(industryLocationId)}`);
+      industryFacilities = data.facilities || [];
+      showFacilityGrid();
+    } catch (e) {
+      console.error("Failed to load facilities:", e);
+      // Fallback: show empty grid
+      industryFacilities = [];
+      showFacilityGrid();
+    }
+  }
+
+  function showFacilityGrid() {
+    document.getElementById("facilityGridView").style.display = "";
+    document.getElementById("facilityIndustryView").style.display = "none";
+    document.getElementById("facilityBreadcrumb").style.display = "none";
+    renderFacilityGrid();
+  }
+
+  function renderFacilityGrid() {
+    const container = document.getElementById("facilityGridCards");
+    let html = "";
+
+    // Own facilities (clickable)
+    const own = industryFacilities.filter(f => f.is_mine);
+    const others = industryFacilities.filter(f => !f.is_mine);
+
+    for (const f of own) {
+      const stats = f.stats || {};
+      html += `<div class="facilityCard facilityOwn" data-facility-id="${esc(f.id)}" data-facility-name="${esc(f.name)}">
+        <div class="facilityCardName">${esc(f.name)}</div>
+        <div class="facilityCardStats">
+          <span>⚡ ${Number(stats.power_mwe || 0).toFixed(1)} MWe</span>
+          <span>🏭 ${stats.equipment_count || 0} equipment</span>
+          <span>⚙ ${stats.active_jobs || 0} active</span>
+        </div>
+        <div class="facilityCardEnter">ENTER ▸</div>
+      </div>`;
+    }
+
+    // Create card
+    html += `<div class="facilityCard facilityCreate" id="facilityCreateCard">
+      <div class="facilityCreatePlus">+</div>
+      <div class="facilityCreateLabel">Create New Facility</div>
+    </div>`;
+
+    // Other corps' facilities (not clickable)
+    for (const f of others) {
+      const stats = f.stats || {};
+      html += `<div class="facilityCard facilityOther">
+        <div class="facilityCardName">${esc(f.name)}</div>
+        <div class="facilityCardCorp">${esc(f.corp_name || "Unknown")}</div>
+        <div class="facilityCardStats">
+          <span>🏭 ${stats.equipment_count || 0} equipment</span>
+          <span>⚡ ${Number(stats.power_mwe || 0).toFixed(1)} MWe</span>
+        </div>
+      </div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Click handlers
+    container.querySelectorAll(".facilityOwn").forEach(card => {
+      card.addEventListener("click", () => {
+        enterFacility(card.dataset.facilityId, card.dataset.facilityName);
+      });
+    });
+
+    document.getElementById("facilityCreateCard").addEventListener("click", openFacilityCreateModal);
+  }
+
+  function enterFacility(facilityId, facilityName) {
+    industryFacilityId = facilityId;
+    industryFacilityName = facilityName || "Facility";
+    document.getElementById("facilityGridView").style.display = "none";
+    document.getElementById("facilityIndustryView").style.display = "";
+
+    // Show breadcrumb
+    const bc = document.getElementById("facilityBreadcrumb");
+    bc.style.display = "";
+    const siteName = document.getElementById("industryLocationSelect").selectedOptions[0]?.text || industryLocationId;
+    document.getElementById("facilityBreadcrumbText").textContent =
+      `${siteName}  ▸  ${industryFacilityName}`;
+
+    loadIndustryContent();
   }
 
   async function loadIndustryContent() {
-    if (!industryLocationId) return;
-    document.getElementById("industryContent").style.display = "";
+    if (!industryFacilityId) return;
+    document.getElementById("facilityIndustryView").style.display = "";
 
     try {
-      industryData = await fetchJSON(`/api/industry/${encodeURIComponent(industryLocationId)}`);
+      industryData = await fetchJSON(`/api/industry/facility/${encodeURIComponent(industryFacilityId)}`);
       renderIndustry();
     } catch (e) {
       console.error("Failed to load industry data:", e);
+    }
+  }
+
+  /* ── Facility Creation Modal ─────────────────────────── */
+
+  function openFacilityCreateModal() {
+    const siteName = document.getElementById("industryLocationSelect").selectedOptions[0]?.text || industryLocationId;
+    document.getElementById("facilityCreateLocationLabel").textContent = `Location: ${siteName}`;
+    document.getElementById("facilityCreateNameInput").value = "";
+    document.getElementById("facilityCreateError").style.display = "none";
+    document.getElementById("facilityCreateModal").style.display = "";
+    document.getElementById("facilityCreateNameInput").focus();
+  }
+
+  function closeFacilityCreateModal() {
+    document.getElementById("facilityCreateModal").style.display = "none";
+  }
+
+  async function submitFacilityCreate() {
+    const name = (document.getElementById("facilityCreateNameInput").value || "").trim();
+    if (!name) {
+      const errEl = document.getElementById("facilityCreateError");
+      errEl.textContent = "Name is required";
+      errEl.style.display = "";
+      return;
+    }
+    try {
+      const result = await postJSON("/api/facilities/create", {
+        location_id: industryLocationId,
+        name: name,
+      });
+      closeFacilityCreateModal();
+      // Enter the newly created facility
+      if (result.facility_id) {
+        enterFacility(result.facility_id, name);
+      } else {
+        loadFacilityGrid();
+      }
+    } catch (e) {
+      const errEl = document.getElementById("facilityCreateError");
+      errEl.textContent = e.message || "Failed to create facility";
+      errEl.style.display = "";
     }
   }
 
@@ -710,6 +865,7 @@
           await postJSON("/api/industry/refinery/reorder", {
             location_id: industryLocationId,
             slot_ids: ids,
+            facility_id: industryFacilityId || "",
           });
           loadIndustryContent();
         } catch (e) {
@@ -816,6 +972,7 @@
           await postJSON("/api/industry/construction/reorder", {
             location_id: industryLocationId,
             queue_ids: ids,
+            facility_id: industryFacilityId || "",
           });
           loadIndustryContent();
         } catch (e) {
@@ -934,6 +1091,7 @@
             await postJSON("/api/industry/construction/queue", {
               location_id: industryLocationId,
               recipe_id: btn.dataset.recipeId,
+              facility_id: industryFacilityId || "",
             });
             modal.style.display = "none";
             loadIndustryContent();
@@ -1384,6 +1542,7 @@
               await postJSON("/api/industry/deploy", {
                 location_id: industryLocationId,
                 item_id: item.itemId,
+                facility_id: industryFacilityId || "",
               });
               document.getElementById("deployModal").style.display = "none";
               loadIndustryContent();
@@ -1431,6 +1590,8 @@
      ══════════════════════════════════════════════════════════ */
 
   let cargoLocationId = null;
+  let cargoFacilityId = null;
+  let cargoFacilitiesByLocation = Object.create(null);
   let cargoContext = null;      // latest /api/cargo/context response
   let cargoSourceKey = null;    // "location:<id>" or "ship:<id>"
   let cargoDestKey = null;
@@ -1459,7 +1620,18 @@
       const shipCount = Number(s.ship_count || s.ships_docked || 0);
       const invCount = Number(s.inventory?.stack_count || 0) + Number(s.inventory?.resource_count || 0);
       const sel = cargoLocationId === s.id ? ' class="selected"' : '';
-      return `<tr${sel} data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td>${shipCount}</td><td>${invCount}</td></tr>`;
+      let html = `<tr${sel} data-id="${esc(s.id)}"><td>${esc(s.name)}</td><td>${shipCount}</td><td>${invCount}</td></tr>`;
+      if (cargoLocationId === s.id) {
+        const facilities = cargoFacilitiesByLocation[s.id] || [];
+        html += facilities.map(f => {
+          const st = f.stats || {};
+          const selectedClass = cargoFacilityId === f.id ? " selected" : "";
+          return `<tr class="cargoFacilityRow${selectedClass}" data-location-id="${esc(s.id)}" data-facility-id="${esc(f.id)}">
+            <td colspan="3">└─ ${esc(f.name)} · ⚡ ${Number(st.power_mwe || 0).toFixed(1)} MWe · 📦 ${Number(st.inventory_stack_count || 0)} stacks</td>
+          </tr>`;
+        }).join("");
+      }
+      return html;
     }
 
     if (cargoGroupByBody) {
@@ -1482,10 +1654,56 @@
       row.style.cursor = "pointer";
       row.addEventListener("click", () => selectCargoLocation(row.dataset.id));
     });
+    tbody.querySelectorAll("tr[data-facility-id]").forEach(row => {
+      row.style.cursor = "pointer";
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectCargoFacility(row.dataset.locationId, row.dataset.facilityId);
+      });
+    });
   }
 
   async function selectCargoLocation(locationId) {
     cargoLocationId = locationId;
+    await loadCargoFacilities(locationId);
+    renderCargoSitesTable();
+
+    const mine = cargoFacilitiesByLocation[locationId] || [];
+    if (!mine.length) {
+      cargoFacilityId = null;
+      await loadCargoContext();
+      return;
+    }
+
+    if (cargoFacilityId && mine.some(f => f.id === cargoFacilityId)) {
+      await loadCargoContext();
+      return;
+    }
+
+    cargoFacilityId = null;
+    const placeholder = document.getElementById("cargoPlaceholder");
+    const workspace = document.getElementById("cargoWorkspace");
+    if (workspace) workspace.style.display = "none";
+    if (placeholder) {
+      placeholder.style.display = "";
+      placeholder.innerHTML = `<div class="muted">Select a facility under ${esc(locationId)} to manage cargo</div>`;
+    }
+  }
+
+  async function loadCargoFacilities(locationId) {
+    if (!locationId) return;
+    try {
+      const data = await fetchJSON(`/api/facilities/${encodeURIComponent(locationId)}`);
+      const mine = (data.facilities || []).filter(f => f.is_mine);
+      cargoFacilitiesByLocation[locationId] = mine;
+    } catch (_) {
+      cargoFacilitiesByLocation[locationId] = [];
+    }
+  }
+
+  async function selectCargoFacility(locationId, facilityId) {
+    cargoLocationId = locationId;
+    cargoFacilityId = facilityId;
     renderCargoSitesTable();
     await loadCargoContext();
   }
@@ -1495,7 +1713,9 @@
     const placeholder = document.getElementById("cargoPlaceholder");
     const workspace = document.getElementById("cargoWorkspace");
     try {
-      cargoContext = await fetchJSON(`/api/cargo/context/${encodeURIComponent(cargoLocationId)}`);
+      let url = `/api/cargo/context/${encodeURIComponent(cargoLocationId)}`;
+      if (cargoFacilityId) url += `?facility_id=${encodeURIComponent(cargoFacilityId)}`;
+      cargoContext = await fetchJSON(url);
       if (placeholder) placeholder.style.display = "none";
       if (workspace) workspace.style.display = "";
       renderCargoWorkspace();
@@ -1511,7 +1731,14 @@
 
     // Update header
     const nameEl = document.getElementById("cargoLocationName");
-    if (nameEl) nameEl.textContent = cargoContext.location?.name || cargoLocationId;
+    if (nameEl) nameEl.textContent = cargoContext.location_name || cargoContext.location?.name || cargoLocationId;
+    const bc = document.getElementById("cargoContextBreadcrumb");
+    if (bc) {
+      const body = cargoContext.body_name || "—";
+      const site = cargoContext.location_name || cargoContext.location?.name || cargoLocationId || "—";
+      const facility = cargoContext.facility_name || "—";
+      bc.textContent = `Body: ${body}  →  Site: ${site}  →  Facility: ${facility}`;
+    }
 
     // Build entity options
     const entities = cargoContext.entities || [];
@@ -1863,13 +2090,15 @@
     for (const staged of cargoStaged) {
       try {
         if (staged.isStack) {
-          await postJSON("/api/stack/transfer", {
+          const stackBody = {
             source_kind: staged.sourceKind,
             source_id: staged.sourceId,
             source_key: staged.sourceKeyStr,
             target_kind: destKind,
             target_id: destId,
-          });
+          };
+          if (destKind === "location" && cargoFacilityId) stackBody.facility_id = cargoFacilityId;
+          await postJSON("/api/stack/transfer", stackBody);
         } else {
           const transferBody = {
             source_kind: staged.sourceKind,
@@ -1880,6 +2109,7 @@
             amount: staged.amount,
           };
           if (staged.resourceId) transferBody.resource_id = staged.resourceId;
+          if (destKind === "location" && cargoFacilityId) transferBody.facility_id = cargoFacilityId;
           await postJSON("/api/inventory/transfer", transferBody);
         }
       } catch (e) {
@@ -1985,7 +2215,7 @@
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => {
       loadSites();
-      if (currentTab === "industrial" && industryLocationId) loadIndustryContent();
+      if (currentTab === "industrial" && industryLocationId && industryFacilityId) loadIndustryContent();
       if (currentTab === "cargo" && cargoLocationId) loadCargoContext();
       if (selectedSiteId) selectSite(selectedSiteId);
     }, 10000);

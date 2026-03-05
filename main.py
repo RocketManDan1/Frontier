@@ -19,9 +19,11 @@ from auth_service import ensure_default_admin_account, get_current_user
 from catalog_router import router as catalog_router
 import catalog_service
 from contract_router import router as contract_router
+from facility_router import router as facility_router
 from industry_router import router as industry_router
 from inventory_router import router as inventory_router
 from location_router import router as location_router
+from mission_router import router as mission_router
 from org_router import router as org_router
 from shipyard_router import router as shipyard_router
 import celestial_config
@@ -60,10 +62,12 @@ app.include_router(admin_game_router)
 app.include_router(auth_router)
 app.include_router(catalog_router)
 app.include_router(contract_router)
+app.include_router(facility_router)
 app.include_router(fleet_router)
 app.include_router(industry_router)
 app.include_router(inventory_router)
 app.include_router(location_router)
+app.include_router(mission_router)
 app.include_router(org_router)
 app.include_router(shipyard_router)
 
@@ -1728,14 +1732,17 @@ def _upsert_inventory_stack(
     volume_delta_m3: float,
     payload_json: str,
     corp_id: str = "",
+    facility_id: str = "",  # kept for caller compat, always ignored
 ) -> None:
+    # PK is (location_id, corp_id, stack_type, stack_key) — cargo is location-scoped
+    cid = corp_id or ""
     row = conn.execute(
         """
         SELECT quantity,mass_kg,volume_m3
         FROM location_inventory_stacks
         WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
         """,
-        (location_id, corp_id, stack_type, stack_key),
+        (location_id, cid, stack_type, stack_key),
     ).fetchone()
 
     now = game_now_s()
@@ -1748,10 +1755,10 @@ def _upsert_inventory_stack(
         conn.execute(
             """
             INSERT INTO location_inventory_stacks (
-              location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+              location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (location_id, corp_id, stack_type, stack_key, item_id, name, qty, mass, vol, payload_json, now),
+            (location_id, cid, "", stack_type, stack_key, item_id, name, qty, mass, vol, payload_json, now),
         )
         return
 
@@ -1762,7 +1769,7 @@ def _upsert_inventory_stack(
     if qty <= 1e-9 and mass <= 1e-9 and vol <= 1e-9:
         conn.execute(
             "DELETE FROM location_inventory_stacks WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?",
-            (location_id, corp_id, stack_type, stack_key),
+            (location_id, cid, stack_type, stack_key),
         )
         return
 
@@ -1772,11 +1779,11 @@ def _upsert_inventory_stack(
         SET item_id=?, name=?, quantity=?, mass_kg=?, volume_m3=?, payload_json=?, updated_at=?
         WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
         """,
-        (item_id, name, qty, mass, vol, payload_json, now, location_id, corp_id, stack_type, stack_key),
+        (item_id, name, qty, mass, vol, payload_json, now, location_id, cid, stack_type, stack_key),
     )
 
 
-def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: str, resource_id: str, mass_kg: float, *, corp_id: str = "") -> None:
+def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: str, resource_id: str, mass_kg: float, *, corp_id: str = "", facility_id: str = "") -> None:
     rid = str(resource_id or "").strip()
     amount_kg = max(0.0, float(mass_kg or 0.0))
     if not rid or amount_kg <= 0.0:
@@ -1804,7 +1811,7 @@ def add_resource_to_location_inventory(conn: sqlite3.Connection, location_id: st
     )
 
 
-def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, part: Dict[str, Any], count: float = 1.0, *, corp_id: str = "") -> None:
+def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, part: Dict[str, Any], count: float = 1.0, *, corp_id: str = "", facility_id: str = "") -> None:
     if not isinstance(part, dict):
         return
     qty = max(0.0, float(count or 0.0))
@@ -1829,7 +1836,8 @@ def add_part_to_location_inventory(conn: sqlite3.Connection, location_id: str, p
     )
 
 
-def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *, corp_id: str = None) -> Dict[str, Any]:
+def get_location_inventory_payload(conn: sqlite3.Connection, location_id: str, *, corp_id: str = None, facility_id: str = "") -> Dict[str, Any]:
+    # facility_id param kept for caller compat but ignored — cargo is location-scoped
     if corp_id is not None:
         rows = conn.execute(
             """
@@ -1971,15 +1979,17 @@ def consume_parts_from_location_inventory(
     requested_item_ids: List[str],
     *,
     corp_id: str = "",
+    facility_id: str = "",  # kept for caller compat, ignored
 ) -> List[Dict[str, Any]]:
     requested = [str(x).strip() for x in (requested_item_ids or []) if str(x).strip()]
     if not requested:
         return []
 
+    # Cargo is location-scoped: query by (location_id, corp_id)
     if corp_id:
         available_rows = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND corp_id=?
             ORDER BY item_id, updated_at, stack_key
@@ -1989,7 +1999,7 @@ def consume_parts_from_location_inventory(
     else:
         available_rows = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=?
             ORDER BY item_id, updated_at, stack_key
@@ -2066,7 +2076,7 @@ def consume_parts_from_location_inventory(
 
         updated_row = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND corp_id=? AND stack_type=? AND stack_key=?
             """,
@@ -2239,11 +2249,19 @@ def _persist_ship_inventory_state(
     )
 
 
-def _resource_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str, *, corp_id: str = None) -> sqlite3.Row:
+def _resource_stack_row(
+    conn: sqlite3.Connection,
+    location_id: str,
+    stack_key: str,
+    *,
+    corp_id: str = None,
+    facility_id: str = "",  # kept for caller compat, ignored
+) -> sqlite3.Row:
+    # Cargo is location-scoped: query by (location_id, corp_id) only
     if corp_id is not None:
         row = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND corp_id=? AND stack_type='resource' AND stack_key=?
             """,
@@ -2252,7 +2270,7 @@ def _resource_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: s
     else:
         row = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND stack_type='resource' AND stack_key=?
             """,
@@ -2288,12 +2306,19 @@ def _consume_location_resource_mass(conn: sqlite3.Connection, row: sqlite3.Row, 
     )
     return amount
 
-
-def _part_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str, *, corp_id: str = None) -> sqlite3.Row:
+def _part_stack_row(
+    conn: sqlite3.Connection,
+    location_id: str,
+    stack_key: str,
+    *,
+    corp_id: str = None,
+    facility_id: str = "",  # kept for caller compat, ignored
+) -> sqlite3.Row:
+    # Cargo is location-scoped: query by (location_id, corp_id) only
     if corp_id is not None:
         row = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND corp_id=? AND stack_type='part' AND stack_key=?
             """,
@@ -2302,7 +2327,7 @@ def _part_stack_row(conn: sqlite3.Connection, location_id: str, stack_key: str, 
     else:
         row = conn.execute(
             """
-            SELECT location_id,corp_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
+            SELECT location_id,corp_id,facility_id,stack_type,stack_key,item_id,name,quantity,mass_kg,volume_m3,payload_json,updated_at
             FROM location_inventory_stacks
             WHERE location_id=? AND stack_type='part' AND stack_key=?
             """,
@@ -3136,6 +3161,11 @@ def organization(request: Request):
 @app.get("/contracts")
 def contracts(request: Request):
     return _serve_authenticated_page(request, "contracts.html")
+
+
+@app.get("/missions")
+def missions(request: Request):
+    return _serve_authenticated_page(request, "missions.html")
 
 
 @app.get("/contracts/create")

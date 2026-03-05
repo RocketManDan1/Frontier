@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Frontier: Sol 2000 — Missions</title>
+    <link rel="stylesheet" href="/static/styles.css?v=missions1" />
+  </head>
+
+  <body class="missionsPage">
+    <div class="app">
+      <div class="top panel">
+        <div class="topbar">
+          <div>
+            <div class="title">Missions</div>
+            <div class="subtitle" id="missionsSubtitle">Government-contracted interplanetary objectives</div>
+          </div>
+
+          <nav class="tabs">
+            <a class="tab" href="/">Map</a>
+            <a class="tab" href="/fleet">Fleet</a>
+            <a class="tab" href="/shipyard">Shipyard</a>
+            <a class="tab" href="/sites">Sites</a>
+            <a class="tab" href="/research">Research</a>
+            <a class="tab" href="/organization">Organization</a>
+            <a class="tab" href="/contracts">Contracts</a>
+            <a class="tab active" href="/missions">Missions</a>
+            <a class="tab authAdminTab" href="/admin">Admin</a>
+          </nav>
+        </div>
+      </div>
+
+      <!-- Sub-tabs -->
+      <div class="missionsSubTabs" role="tablist" aria-label="Mission sections">
+        <button id="missionsTabBtnAvailable" class="missionsSubTabBtn active" type="button" role="tab" aria-selected="true">Available</button>
+        <button id="missionsTabBtnHistory" class="missionsSubTabBtn" type="button" role="tab" aria-selected="false">History</button>
+      </div>
+
+      <!-- ═══════════════ TAB 1: Available Missions ═══════════════ -->
+      <div id="missionsTabAvailable" class="missionsTabPane">
+        <div class="missionsLayout">
+
+          <!-- Left: mission list -->
+          <div class="missionsList" id="missionsList">
+            <div class="missionsEmptyMsg" id="missionsEmpty">Loading missions…</div>
+          </div>
+
+          <!-- Right: mission detail -->
+          <div class="missionsDetail" id="missionsDetail">
+            <div class="missionsDetailEmpty">Select a mission to view details</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════ TAB 2: History ═══════════════ -->
+      <div id="missionsTabHistory" class="missionsTabPane" style="display:none;">
+        <div class="missionsHistoryList" id="missionsHistoryList">
+          <div class="missionsEmptyMsg">Loading history…</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ Active Mission Bar ═══════════════ -->
+      <div class="missionsActiveBar" id="missionsActiveBar" style="display:none;">
+        <div class="missionsActiveHeader">
+          <span class="missionsActiveLabel">Active Mission</span>
+          <span class="missionsActiveTier" id="activeTier"></span>
+        </div>
+        <div class="missionsActiveTitle" id="activeTitle"></div>
+        <div class="missionsActiveInfo">
+          <span class="missionsActiveStatus" id="activeStatus"></span>
+          <span class="missionsActiveModule" id="activeModule"></span>
+          <span class="missionsActiveExpiry" id="activeExpiry"></span>
+        </div>
+        <div class="missionsActiveActions">
+          <button id="btnCompleteMission" class="btnOutline missionsBtn missionsCompleteBtn" type="button">Complete</button>
+          <button id="btnAbandonMission" class="btnOutline missionsBtn missionsAbandonBtn" type="button">Abandon</button>
+        </div>
+      </div>
+
+    </div><!-- .app -->
+
+    <script src="/static/js/item_display.js"></script>
+    <script src="/static/js/clock.js"></script>
+    <script src="/static/js/env_banner.js"></script>
+    <script src="/static/js/missions.js"></script>
+  </body>
+</html>

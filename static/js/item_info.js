@@ -310,6 +310,15 @@ window.ItemInfo = (function () {
     if (capM3 > 0) rows.push(["Capacity", fmtNum(capM3, "m³")]);
     if (item.resource_id) rows.push(["Stores", itemLink(item.resource_id, titleCase(item.resource_id))]);
 
+    // ISRU-specific
+    const waterExtraction = Number(item.water_extraction_kg_per_hr) || 0;
+    if (waterExtraction > 0) rows.push(["Water Extraction", fmtNum(waterExtraction, "kg/hr")]);
+    if (item.extraction_method) rows.push(["Extraction Method", titleCase(item.extraction_method)]);
+    const minIce = Number(item.min_water_ice_fraction);
+    if (!isNaN(minIce) && minIce > 0) rows.push(["Min Ice Fraction", (minIce * 100).toFixed(1) + "%"]);
+    const maxIce = Number(item.max_water_ice_fraction);
+    if (!isNaN(maxIce) && maxIce > 0 && maxIce < 1) rows.push(["Max Ice Fraction", (maxIce * 100).toFixed(1) + "%"]);
+
     // Robonaut-specific
     const prospectRange = Number(item.prospect_range_km) || 0;
     if (prospectRange > 0) rows.push(["Prospect Range", fmtNum(prospectRange, "km")]);

@@ -1,0 +1,19 @@
+{
+  "recipe_id": "des_2b_dervish",
+  "name": "Assemble DES-2B \"Dervish\"",
+  "output_item_id": "des_2b_dervish",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys", "qty": 21000.0 },
+    { "item_id": "advanced_ceramics", "qty": 12000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 7000.0 },
+    { "item_id": "semiconductor_materials", "qty": 5500.0 },
+    { "item_id": "megastructure_mass", "qty": 4500.0 }
+  ],
+  "build_time_s": 2700,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 2,
+  "power_kw": 420,
+  "byproducts": []
+}

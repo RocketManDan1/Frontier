@@ -1,0 +1,21 @@
+{
+  "id": "hdc_3a_geysir",
+  "name": "HDC-3A \"Geysir\"",
+  "research_node": "plasma_thermal_drilling",
+  "tech_level": 3,
+  "branch": "plasma_thermal_drill",
+  "mass_t": 16.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 18.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 694,
+    "extraction_method": "plasma_torch_thermal_sublimation",
+    "max_drill_depth_m": 20.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The Geysir introduces plasma-torch thermal drilling — a confined argon plasma arc at the drill tip reaches 4,000 K, flash-sublimating ice-bearing regolith at contact rates far beyond what resistive or microwave heating can achieve. The extreme temperature differential creates a pressurized vapor column in the borehole that self-propels upward through the capture hood, eliminating the passive diffusion delay that limits extraction speed in lower-tier designs. A magnetic nozzle constrains the plasma arc to a narrow forward cone, preventing lateral borehole wall collapse. Drill depth extends to 20 metres, accessing deep ice deposits on Ceres-class bodies where surface desiccation layers can extend 10+ metres. At 16 tonnes the Geysir remains remarkably compact — the plasma source is essentially a modified electric arc thruster run in reverse — but the 18 MW power demand is substantial, requiring a high-output reactor-generator pair. Water output of 694 kg/hr approaches the throughput of equivalent-tier sifting plants at a fraction of the mass.",
+  "ui_tags": ["plasma_thermal", "tier_3", "light", "high_power"]
+}

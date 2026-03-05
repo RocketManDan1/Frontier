@@ -637,6 +637,10 @@ def build_location_metadata(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
             out["wikipedia_title"] = wikipedia_title
         if wikipedia_url:
             out["wikipedia_url"] = wikipedia_url
+        # Surface gravity for body tooltips
+        gravity = entry.get("gravity_m_s2")
+        if gravity is not None:
+            out["gravity_m_s2"] = float(gravity)
         return out
 
     for body in bodies:

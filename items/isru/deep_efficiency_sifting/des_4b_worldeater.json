@@ -1,0 +1,21 @@
+{
+  "id": "des_4b_worldeater",
+  "name": "DES-4B \"Worldeater\"",
+  "research_node": "plasma_sifting_extraction",
+  "tech_level": 4.5,
+  "branch": "plasma_assisted_separation",
+  "mass_t": 270.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 22.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 2347,
+    "extraction_method": "full_cycle_plasma_magnetic_separation",
+    "regolith_throughput_t_per_hr": 100.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The pinnacle of deep efficiency sifting technology, the Worldeater processes 100 tonnes of raw regolith per hour through a fully integrated plasma-magnetic extraction line. A high-density plasma pre-treatment stage operates at elevated power to decompose not just surface-adsorbed water but also hydroxyl groups chemically bound into mineral crystal lattices — liberating water that no purely mechanical or thermal process can reach. Four superconducting bores run in parallel with adaptive field shaping that continuously optimizes separation trajectories based on real-time particle composition feedback from embedded spectroscopic sensors. The cryocondenser array is sized for peak vapor loads and includes a fractional distillation column that can separate water isotopologues if required (HDO, D₂O) for deuterium recovery. At 270 tonnes and 22 MW, the Worldeater represents the upper limit of what can reasonably be called 'equipment' rather than 'infrastructure', and its deployment typically anchors a major permanent settlement. Water output of 2,347 kg/hr — nearly 1,700 tonnes per game month — can supply propellant depots, life support systems, and industrial feedstock for an entire regional base network.",
+  "ui_tags": ["plasma_assisted", "full_cycle", "tier_4", "heavy", "low_power"]
+}

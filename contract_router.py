@@ -478,6 +478,8 @@ def _contract_to_dict(row) -> dict:
         "time_left": time_left,
         "type": row["contract_type"],  # alias for frontend
         "courier_container_id": row["courier_container_id"] if "courier_container_id" in row.keys() else None,
+        "current_bid": row["current_bid"] if "current_bid" in row.keys() else 0,
+        "current_bidder_org_id": row["current_bidder_org_id"] if "current_bidder_org_id" in row.keys() else None,
     }
 
 

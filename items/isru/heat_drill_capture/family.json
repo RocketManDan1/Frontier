@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "isru_heat_drill_capture",
+  "display_name": "Heat Drill Capture ISRU",
+  "notes": [
+    "Compact thermal penetrator systems for direct in-situ water extraction at ice-rich sites (8%+ water ice).",
+    "A resistive or microwave-driven drill head sublimates subsurface ice deposits in place.",
+    "Evolved vapor rises through a sealed capture hood into a cryocondenser module for collection.",
+    "Output is a flat rated water production regardless of ice concentration — ice fraction gates deployment only.",
+    "Lightweight units (2.5–68 t) but very high power draw — converting electricity to thermal energy at scale.",
+    "Multiple units at the same facility sum their extraction rates.",
+    "Suited for permanently shadowed craters, Ceres, cometary bodies, and other ice-rich locations."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "site_requirements": {
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "mainline_files": [
+    "hdc_1a_frostbite.json",
+    "hdc_1b_permafrost.json",
+    "hdc_2a_borealis.json",
+    "hdc_2b_cryovein.json",
+    "hdc_3a_geysir.json",
+    "hdc_3b_magmaworm.json",
+    "hdc_4a_hellfrost.json",
+    "hdc_4b_absolutezero.json"
+  ]
+}

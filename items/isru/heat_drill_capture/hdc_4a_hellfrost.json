@@ -1,0 +1,21 @@
+{
+  "id": "hdc_4a_hellfrost",
+  "name": "HDC-4A \"Hellfrost\"",
+  "research_node": "fusion_thermal_extraction",
+  "tech_level": 4,
+  "branch": "fusion_thermal_drill",
+  "mass_t": 42.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 58.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 1563,
+    "extraction_method": "fusion_driven_thermal_bore",
+    "max_drill_depth_m": 50.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The Hellfrost harnesses excess thermal energy from a compact fusion driver to power its bore head, achieving temperatures and penetration rates impossible with purely electrical plasma systems. A deuterium-fueled inertial confinement micro-pulse unit generates repeated thermal shock waves at the bore face, shattering and sublimating ice-rich rock at up to 50-metre depth — deep enough to reach buried ice reservoirs on bodies where surface deposits have been exhausted by long-term solar gardening. The captured vapor is superheated by the bore process itself, arriving at the surface condenser at high velocity and pressure, which drives more efficient condensation recovery cycles. The fusion driver and its fuel handling system push mass to 42 tonnes — still lighter than a mid-tier sifting plant — but the combined electrical and thermal management systems draw 58 MW. Water output of 1,563 kg/hr establishes the Hellfrost as the premier high-output extraction system for ice-rich sites with sufficient power infrastructure.",
+  "ui_tags": ["fusion_thermal", "tier_4", "light", "high_power"]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "hdc_2a_borealis",
+  "name": "HDC-2A \"Borealis\"",
+  "research_node": "microwave_thermal_extraction",
+  "tech_level": 2,
+  "branch": "microwave_thermal_drill",
+  "mass_t": 6.5,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 5.5
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 313,
+    "extraction_method": "microwave_thermal_sublimation",
+    "max_drill_depth_m": 8.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The Borealis replaces resistive heating with a focused 2.45 GHz microwave emitter at the drill tip. Microwave energy couples directly to water molecules in the surrounding regolith — even ice intimately mixed with silicate grains absorbs preferentially, creating localized sublimation zones without requiring the drill to physically contact every ice pocket. This volumetric heating approach increases the effective extraction radius around each borehole from centimeters to nearly a metre, dramatically improving per-hole yield and reducing the frequency of drill repositioning. The magnetron source and waveguide assembly add 2 tonnes over the resistive baseline, but the real cost is power: 5.5 MW feeds the magnetron's continuous beam. Drill depth extends to 8 metres, accessing deeper ice sheets. At 313 kg/hr water output, the Borealis marks the transition from early exploration-scale extraction to sustained base supply operations.",
+  "ui_tags": ["microwave_thermal", "tier_2", "light", "high_power"]
+}

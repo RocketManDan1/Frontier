@@ -1,0 +1,21 @@
+{
+  "id": "hdc_3b_magmaworm",
+  "name": "HDC-3B \"Magmaworm\"",
+  "research_node": "plasma_thermal_drilling",
+  "tech_level": 3.5,
+  "branch": "plasma_thermal_drill",
+  "mass_t": 26.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 32.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 1042,
+    "extraction_method": "continuous_plasma_bore_extraction",
+    "max_drill_depth_m": 30.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The Magmaworm advances the Geysir's plasma thermal drilling into a continuous-bore extraction system. Rather than drilling discrete boreholes, a magnetically guided plasma head advances continuously through ice-rich substrate, melting and sublimating ice along a horizontal tunnel pattern that maximizes contact area with the deposit. Vapor recovery tubing follows the bore head, capturing sublimated water in real-time through a pressurized return line to the surface condenser. The horizontal boring pattern can follow an ice lens laterally for 30 metres or more, extracting from the richest strata without wasting energy on intervening dry layers. Twin plasma heads operate in parallel from diverging bore paths, sharing a surface-mounted cryocondenser rated for the combined vapor flow. At 26 tonnes and 32 MW, the Magmaworm demands serious power infrastructure, but its 1,042 kg/hr water output rivals heavy sifting plants while occupying a fraction of the surface footprint.",
+  "ui_tags": ["plasma_thermal", "continuous_bore", "tier_3", "light", "high_power"]
+}

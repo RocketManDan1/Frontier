@@ -1,0 +1,9 @@
+{
+  "id": "mission_materials_module",
+  "name": "Mission Materials Module",
+  "type": "mission_module",
+  "category_id": "mission",
+  "mass_kg": 25000,
+  "volume_m3": 40,
+  "description": "A sealed government-issued research and materials package. Must be delivered to the designated mission destination."
+}

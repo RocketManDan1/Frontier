@@ -106,6 +106,32 @@
     if (n >= 1e6) return (n / 1e6).toFixed(2) + " Million";
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  /* ── Comma-formatted number input helper ─────────────── */
+  function stripCommas(s) { return String(s).replace(/[,\s]/g, ""); }
+  function parseMoneyInput(el) { return el ? Number(stripCommas(el.value)) || 0 : 0; }
+  function addCommas(numStr) {
+    var parts = numStr.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+  function attachCommaFormat(el) {
+    if (!el) return;
+    el.addEventListener("input", function () {
+      var raw = stripCommas(el.value);
+      raw = raw.replace(/[^0-9.]/g, "");
+      var dotIdx = raw.indexOf(".");
+      if (dotIdx !== -1) raw = raw.substring(0, dotIdx + 1) + raw.substring(dotIdx + 1).replace(/\./g, "");
+      if (!raw || raw === ".") { el.value = ""; return; }
+      var cursorPos = el.selectionStart;
+      var oldLen = el.value.length;
+      el.value = addCommas(raw);
+      var newLen = el.value.length;
+      var newPos = cursorPos + (newLen - oldLen);
+      if (newPos < 0) newPos = 0;
+      el.setSelectionRange(newPos, newPos);
+    });
+  }
   function show(el)  { if (el) el.style.display = ""; }
   function hide(el)  { if (el) el.style.display = "none"; }
   function showId(id) { show($id(id)); }
@@ -116,6 +142,13 @@
    * ═══════════════════════════════════════════════════════════ */
   loadContractInfo();
   showStep(0);
+
+  /* Attach comma formatting to all money inputs */
+  attachCommaFormat($id("ccStartingBid"));
+  attachCommaFormat($id("ccBuyoutPrice"));
+  attachCommaFormat($id("ccCourierReward"));
+  attachCommaFormat($id("ccCourierCollateral"));
+  attachCommaFormat($id("ccExchangePrice"));
 
   async function loadContractInfo() {
     try {
@@ -342,7 +375,7 @@
       var per = e.item.quantity > 0 ? e.item.volume_m3 / e.item.quantity : 0;
       volume += per * e.qty;
     });
-    if (ccSelectedCount) ccSelectedCount.textContent = String(count);
+    if (ccSelectedCount) ccSelectedCount.textContent = count.toLocaleString();
     if (ccSelectedVolume) ccSelectedVolume.textContent = volume.toFixed(1);
   }
 
@@ -650,19 +683,19 @@
     [bidRow, buyoutRow, priceRow, rewardRow, collateralRow].forEach(function (r) { if (r) r.style.display = "none"; });
 
     if (ctype === "auction") {
-      var bid = parseFloat(($id("ccStartingBid") || {}).value) || 0;
-      var buyout = parseFloat(($id("ccBuyoutPrice") || {}).value) || 0;
+      var bid = parseMoneyInput($id("ccStartingBid"));
+      var buyout = parseMoneyInput($id("ccBuyoutPrice"));
       if (bidRow) { bidRow.style.display = ""; $id("ccConfBid").textContent = "$" + fmtMoney(bid); }
       if (buyoutRow) { buyoutRow.style.display = ""; $id("ccConfBuyout").textContent = buyout > 0 ? "$" + fmtMoney(buyout) : "(None)"; }
     } else if (ctype === "courier") {
-      var reward = parseFloat(($id("ccCourierReward") || {}).value) || 0;
-      var collateral = parseFloat(($id("ccCourierCollateral") || {}).value) || 0;
+      var reward = parseMoneyInput($id("ccCourierReward"));
+      var collateral = parseMoneyInput($id("ccCourierCollateral"));
       if (rewardRow) { rewardRow.style.display = ""; $id("ccConfReward").textContent = "$" + fmtMoney(reward); }
       if (collateralRow) { collateralRow.style.display = ""; $id("ccConfCollateral").textContent = "$" + fmtMoney(collateral); }
     } else {
       var method = getPriceMethod();
       if (method === "isk") {
-        var price = parseFloat(($id("ccExchangePrice") || {}).value) || 0;
+        var price = parseMoneyInput($id("ccExchangePrice"));
         if (priceRow) { priceRow.style.display = ""; $id("ccConfPrice").textContent = "$" + fmtMoney(price); }
       }
     }
@@ -723,9 +756,16 @@
       });
     } else {
       selected.forEach(function (e) {
+        var totalQty = Number(e.item.quantity) || 0;
+        var chosenQty = Number(e.qty) || 0;
+        var massPerUnit = totalQty > 0 ? (Number(e.item.mass_kg) || 0) / totalQty : 0;
+        var volumePerUnit = totalQty > 0 ? (Number(e.item.volume_m3) || 0) / totalQty : 0;
         itemsPayload.push({
           item_id: e.item.item_id, stack_key: e.item.stack_key, name: e.item.name,
-          quantity: e.qty, volume_m3: e.item.volume_m3, mass_kg: e.item.mass_kg,
+          quantity: e.qty,
+          type: e.item.type || "resource",
+          volume_m3: volumePerUnit * chosenQty,
+          mass_kg: massPerUnit * chosenQty,
         });
       });
     }
@@ -751,21 +791,21 @@
 
     // Type-specific fields
     if (ctype === "auction") {
-      body.price = parseFloat(($id("ccStartingBid") || {}).value) || 0;
-      body.buyout_price = parseFloat(($id("ccBuyoutPrice") || {}).value) || 0;
+      body.price = parseMoneyInput($id("ccStartingBid"));
+      body.buyout_price = parseMoneyInput($id("ccBuyoutPrice"));
       body.expiry_days = parseInt(($id("ccAuctionTime") || {}).value) || 180;
       body.description = (($id("ccDescAuction") || {}).value || "").trim();
     } else if (ctype === "courier") {
       body.destination_id = ccCourierDest ? ccCourierDest.value || null : null;
-      body.reward = parseFloat(($id("ccCourierReward") || {}).value) || 0;
-      body.price = parseFloat(($id("ccCourierCollateral") || {}).value) || 0; // collateral stored in price
+      body.reward = parseMoneyInput($id("ccCourierReward"));
+      body.price = parseMoneyInput($id("ccCourierCollateral")); // collateral stored in price
       body.expiry_days = parseInt(($id("ccCourierExpiry") || {}).value) || 30;
       body.description = (($id("ccDescCourier") || {}).value || "").trim();
     } else {
       // item_exchange
       var method = getPriceMethod();
       if (method === "isk") {
-        body.price = parseFloat(($id("ccExchangePrice") || {}).value) || 0;
+        body.price = parseMoneyInput($id("ccExchangePrice"));
       } else {
         // barter — pack wanted items into description or a special field
         var barterItems = [];

@@ -333,6 +333,7 @@
         if (item.thermal_mw) tooltipLines.push(["Thermal", fmtNum(item.thermal_mw, "MW")]);
         if (item.electric_mw) tooltipLines.push(["Electric", fmtNum(item.electric_mw, "MW")]);
         if (item.heat_rejection_mw) tooltipLines.push(["Heat Reject", fmtNum(item.heat_rejection_mw, "MW")]);
+        if (item.water_extraction_kg_per_hr) tooltipLines.push(["Water Extraction", fmtNum(item.water_extraction_kg_per_hr, "kg/hr")]);
 
         var cell = window.ItemDisplay.createGridCell({
           label: item.name,
@@ -371,6 +372,7 @@
         if (item.thermal_mw) stats.push(fmtNum(item.thermal_mw, "MWth"));
         if (item.electric_mw) stats.push(fmtNum(item.electric_mw, "MWe"));
         if (item.heat_rejection_mw) stats.push(fmtNum(item.heat_rejection_mw, "MW reject"));
+        if (item.water_extraction_kg_per_hr) stats.push(fmtNum(item.water_extraction_kg_per_hr, "kg/hr water"));
         statsSpan.textContent = stats.join(" \u00b7 ") || "\u2014";
         row.appendChild(statsSpan);
 

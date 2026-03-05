@@ -1,0 +1,21 @@
+{
+  "id": "des_4a_colossus",
+  "name": "DES-4A \"Colossus\"",
+  "research_node": "plasma_sifting_extraction",
+  "tech_level": 4,
+  "branch": "plasma_assisted_separation",
+  "mass_t": 170.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 12.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 1563,
+    "extraction_method": "plasma_assisted_magnetic_separation",
+    "regolith_throughput_t_per_hr": 65.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The Colossus combines magnetic resonance separation with a low-temperature plasma pre-treatment stage. Incoming regolith passes through a glow-discharge plasma chamber that selectively sputters volatile-bearing grain surfaces, liberating adsorbed water and hydroxyl groups as a vapor phase that is directly captured by the cryocondenser — bypassing the mechanical separation step entirely for surface-bound water. The remaining grains then enter a triple-bore superconducting magnetic separator for bulk ice crystal recovery. This dual-path architecture extracts water from both adsorbed and crystalline phases simultaneously, achieving near-total recovery even from regolith below 1% water ice. At 170 tonnes, the Colossus is effectively a small factory — the plasma chamber, triple-bore magnets, and industrial cryocondenser array occupy a footprint the size of a habitat module. The 12 MW power draw is the first significant increase in the sifting line, driven by the plasma generation system, but remains far below equivalent Heat Drill Capture systems.",
+  "ui_tags": ["plasma_assisted", "magnetic_resonance", "tier_4", "heavy", "low_power"]
+}

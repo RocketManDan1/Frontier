@@ -1,0 +1,21 @@
+{
+  "id": "des_3a_leviathan",
+  "name": "DES-3A \"Leviathan\"",
+  "research_node": "magnetic_resonance_sifting",
+  "tech_level": 3,
+  "branch": "magnetic_resonance_separation",
+  "mass_t": 65.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 3.5
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 694,
+    "extraction_method": "superconducting_magnetic_resonance_separation",
+    "regolith_throughput_t_per_hr": 28.0,
+    "min_water_ice_fraction": 0.0,
+    "max_water_ice_fraction": 0.15
+  },
+  "description": "The Leviathan represents a generational leap in dry-site water extraction. Superconducting magnetic coils generate a spatially varying field through a large-bore separation chamber, exploiting the diamagnetic susceptibility difference between water ice crystals and paramagnetic iron-bearing silicates. Regolith is fed as a fluidized stream through the bore; ice-rich particles follow one trajectory while silicate waste follows another, achieving primary separation without any mechanical contact surfaces — eliminating the abrasive wear that limits the service life of centrifugal drum systems. A secondary electrostatic polishing stage catches particles missed by the magnetic primary. At 65 tonnes, the superconducting magnets and their cryogenic cooling loop dominate the mass budget, but the 3.5 MW power requirement remains modest since the magnets are persistent-current superconductors drawing power only for the cryocooler and fluidizer fans.",
+  "ui_tags": ["magnetic_resonance", "superconducting", "tier_3", "heavy", "low_power"]
+}

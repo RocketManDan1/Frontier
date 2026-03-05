@@ -1,0 +1,18 @@
+{
+  "recipe_id": "des_1b_grainmill",
+  "name": "Assemble DES-1B \"Grainmill\"",
+  "output_item_id": "des_1b_grainmill",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys", "qty": 10400.0 },
+    { "item_id": "advanced_ceramics", "qty": 5600.0 },
+    { "item_id": "semiconductor_materials", "qty": 2400.0 },
+    { "item_id": "megastructure_mass", "qty": 1600.0 }
+  ],
+  "build_time_s": 900,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 1,
+  "power_kw": 150,
+  "byproducts": []
+}

@@ -1,0 +1,20 @@
+{
+  "recipe_id": "des_3b_behemoth",
+  "name": "Assemble DES-3B \"Behemoth\"",
+  "output_item_id": "des_3b_behemoth",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys", "qty": 36000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 28000.0 },
+    { "item_id": "advanced_ceramics", "qty": 22000.0 },
+    { "item_id": "superconductors", "qty": 19000.0 },
+    { "item_id": "semiconductor_materials", "qty": 13000.0 },
+    { "item_id": "carbon_composites", "qty": 12000.0 }
+  ],
+  "build_time_s": 8500,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 1300,
+  "byproducts": []
+}

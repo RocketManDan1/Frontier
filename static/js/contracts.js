@@ -281,6 +281,13 @@
   function fmtPrice(c) {
     var price = Number(c.price) || 0;
     var reward = Number(c.reward) || 0;
+    // For auctions, prefer current bid over starting bid
+    if (c.contract_type === "auction") {
+      var currentBid = Number(c.current_bid) || 0;
+      var val = currentBid > 0 ? currentBid : price;
+      if (!val) return "\u2014";
+      return fmtMoney(val);
+    }
     var val = price || reward;
     if (!val) return "\u2014";
     return fmtMoney(val);
@@ -410,6 +417,9 @@
   var cdCloseTop     = document.getElementById("cdCloseTop");
 
   var _activeContract = null;
+
+  /* Attach comma formatting to bid input */
+  attachCommaFormat(cdBidInput);
 
   function closeContractDetail() {
     if (cdOverlay) cdOverlay.style.display = "none";
@@ -560,18 +570,18 @@
         cdBidSection.style.display = "block";
         cdBtnBid.style.display = "inline-block";
         cdBtnAccept.style.display = "none";
-        var minBid = (Number(c.current_bid) || 0) > 0 ? Number(c.current_bid) : Number(c.price);
-        cdBidInput.value = minBid;
-        cdBidInput.min = minBid;
         if (cdBidBuyout) cdBidBuyout.checked = false;
+        if (cdBidInput) cdBidInput.disabled = false;
+        var minBid = (Number(c.current_bid) || 0) > 0 ? Number(c.current_bid) : Number(c.price);
+        cdBidInput.value = addCommas(String(minBid));
         // Wire buyout checkbox
         cdBidBuyout.onchange = function () {
           if (cdBidBuyout.checked && Number(c.buyout_price) > 0) {
-            cdBidInput.value = c.buyout_price;
+            cdBidInput.value = addCommas(String(c.buyout_price));
             cdBidInput.disabled = true;
           } else {
             cdBidInput.disabled = false;
-            cdBidInput.value = minBid;
+            cdBidInput.value = addCommas(String(minBid));
           }
         };
       } else {
@@ -639,7 +649,7 @@
   /* ── Bid handler ── */
   if (cdBtnBid) cdBtnBid.addEventListener("click", async function () {
     if (!_activeContract) return;
-    var bidVal = Number(cdBidInput.value);
+    var bidVal = parseMoneyInput(cdBidInput);
     if (!bidVal || bidVal <= 0) { alert("Enter a valid bid amount."); return; }
     try {
       var resp = await fetch("/api/contracts/" + _activeContract.id + "/bid", {
@@ -742,6 +752,45 @@
     if (n >= 1e9) return (n / 1e9).toFixed(2) + " Billion";
     if (n >= 1e6) return (n / 1e6).toFixed(2) + " Million";
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /* ── Comma-formatted number input helper ─────────────── */
+  /** Strip commas/spaces, return raw numeric string */
+  function stripCommas(s) {
+    return String(s).replace(/[,\s]/g, "");
+  }
+  /** Parse a comma-formatted input value to a number */
+  function parseMoneyInput(el) {
+    if (!el) return 0;
+    return Number(stripCommas(el.value)) || 0;
+  }
+  /** Format a number into a string with commas (no decimals for whole numbers) */
+  function addCommas(numStr) {
+    var parts = numStr.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+  }
+  /** Attach live comma formatting to a text input */
+  function attachCommaFormat(el) {
+    if (!el) return;
+    el.addEventListener("input", function () {
+      var raw = stripCommas(el.value);
+      // Keep only digits and at most one decimal point
+      raw = raw.replace(/[^0-9.]/g, "");
+      var dotIdx = raw.indexOf(".");
+      if (dotIdx !== -1) {
+        raw = raw.substring(0, dotIdx + 1) + raw.substring(dotIdx + 1).replace(/\./g, "");
+      }
+      if (!raw || raw === ".") { el.value = ""; return; }
+      var cursorPos = el.selectionStart;
+      var oldLen = el.value.length;
+      el.value = addCommas(raw);
+      // Adjust cursor position for added/removed commas
+      var newLen = el.value.length;
+      var newPos = cursorPos + (newLen - oldLen);
+      if (newPos < 0) newPos = 0;
+      el.setSelectionRange(newPos, newPos);
+    });
   }
 
   /* ── Populate org name ────────────────────────────────── */

@@ -13,12 +13,17 @@
 #
 # Options:
 #   --yes               Non-interactive; auto-confirm prompts.
+#   --patch             Low-impact promote mode for small code changes.
+#                       - Never teleports ships.
+#                       - Never allows migration-0015 job cancellation.
+#                       - Ignores in-transit ship blocking preflight.
 #   --allow-job-cancel  Permit promotion even if migration 0015 is pending
 #                       and active production jobs exist.
 #   --allow-teleport    Permit teleporting in-transit ships to destination.
 #
 # Examples:
 #   ./promote-to-test.sh
+#   ./promote-to-test.sh --patch --yes
 #   ./promote-to-test.sh --allow-job-cancel --yes
 #   ./promote-to-test.sh --allow-teleport --yes
 set -euo pipefail
@@ -29,6 +34,7 @@ TEST_DB="/home/user/docker/frontier-sol-2000-data/game.db"
 TEST_DB_BACKUP_DIR="/home/user/docker/frontier-sol-2000-data/backups"
 
 AUTO_YES=false
+PATCH_MODE=false
 ALLOW_JOB_CANCEL=false
 ALLOW_TELEPORT=false
 
@@ -36,6 +42,9 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --yes)
       AUTO_YES=true
+      ;;
+    --patch)
+      PATCH_MODE=true
       ;;
     --allow-job-cancel)
       ALLOW_JOB_CANCEL=true
@@ -55,6 +64,12 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+# --patch enforces low-impact behavior and bypasses only transit blocking.
+if [ "$PATCH_MODE" = true ]; then
+  ALLOW_JOB_CANCEL=false
+  ALLOW_TELEPORT=false
+fi
 
 confirm_or_abort() {
   local prompt="$1"
@@ -103,15 +118,20 @@ if [ "$PENDING_0015" = "1" ] && [ "$ACTIVE_JOBS" -gt 0 ] && [ "$ALLOW_JOB_CANCEL
   echo ""
   echo "✖ Promotion blocked to protect testers:"
   echo "  Migration 0015 will cancel active production jobs."
-  echo "  Re-run with --allow-job-cancel to proceed anyway."
+  if [ "$PATCH_MODE" = true ]; then
+    echo "  --patch mode is low-impact and cannot bypass this safety check."
+    echo "  Wait until jobs complete, or run without --patch and use --allow-job-cancel."
+  else
+    echo "  Re-run with --allow-job-cancel to proceed anyway."
+  fi
   exit 1
 fi
 
-if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" != true ]; then
+if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" != true ] && [ "$PATCH_MODE" != true ]; then
   echo ""
   echo "✖ Promotion blocked to protect testers:"
   echo "  $IN_TRANSIT ship(s) are in transit; teleport is now opt-in."
-  echo "  Re-run with --allow-teleport to dock them before promote."
+  echo "  Re-run with --allow-teleport to dock them before promote, or use --patch for low-impact code-only promote."
   exit 1
 fi
 
@@ -121,6 +141,10 @@ fi
 
 if [ "$IN_TRANSIT" -gt 0 ] && [ "$ALLOW_TELEPORT" = true ]; then
   confirm_or_abort "⚠ Proceed and teleport $IN_TRANSIT in-transit ship(s)?"
+fi
+
+if [ "$PATCH_MODE" = true ] && [ "$IN_TRANSIT" -gt 0 ]; then
+  echo "▸ Patch mode: leaving $IN_TRANSIT in-transit ship(s) untouched."
 fi
 
 confirm_or_abort "Promote current dev code to test now?"

@@ -1,0 +1,22 @@
+{
+  "recipe_id": "des_4a_colossus",
+  "name": "Assemble DES-4A \"Colossus\"",
+  "output_item_id": "des_4a_colossus",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys", "qty": 48000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 42000.0 },
+    { "item_id": "superconductors", "qty": 32000.0 },
+    { "item_id": "advanced_ceramics", "qty": 28000.0 },
+    { "item_id": "semiconductor_materials", "qty": 22000.0 },
+    { "item_id": "carbon_composites", "qty": 18000.0 },
+    { "item_id": "radiation_composite_armor", "qty": 14000.0 },
+    { "item_id": "strategic_elements", "qty": 8000.0 }
+  ],
+  "build_time_s": 17100,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 2500,
+  "byproducts": []
+}

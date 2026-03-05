@@ -819,6 +819,57 @@ def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog
 
 
+@lru_cache(maxsize=1)
+def load_isru_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all ISRU items from items/isru/<family>/*.json."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    isru_root = APP_DIR / "items" / "isru"
+    if not isru_root.exists() or not isru_root.is_dir():
+        return catalog
+    for family_dir in sorted(
+        [p for p in isru_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+    ):
+        family_path = family_dir / "family.json"
+        if not family_path.exists():
+            continue
+        try:
+            family = _load_json_file(family_path)
+        except ValueError:
+            continue
+        site_req = family.get("site_requirements") or {}
+        mainline_files = [str(v) for v in (family.get("mainline_files") or []) if str(v).strip()]
+        for rel in mainline_files:
+            file_path = family_dir / rel
+            if not file_path.exists():
+                continue
+            try:
+                entry = _load_json_file(file_path)
+            except ValueError:
+                continue
+            item_id = str(entry.get("id") or "").strip()
+            if not item_id:
+                continue
+            perf = entry.get("performance") or {}
+            power_req = entry.get("power_requirements") or {}
+            catalog[item_id] = {
+                "item_id": item_id,
+                "name": str(entry.get("name") or item_id),
+                "type": "isru",
+                "category_id": "isru",
+                "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+                "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
+                "water_extraction_kg_per_hr": max(0.0, float(perf.get("water_extraction_kg_per_hr") or 0.0)),
+                "extraction_method": str(perf.get("extraction_method") or ""),
+                "min_water_ice_fraction": float(perf.get("min_water_ice_fraction") or site_req.get("min_water_ice_fraction") or 0.0),
+                "max_water_ice_fraction": float(perf.get("max_water_ice_fraction") or site_req.get("max_water_ice_fraction") or 1.0),
+                "operational_environment": str(entry.get("operational_environment") or "surface"),
+                "branch": str(entry.get("branch") or ""),
+                "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+                "research_node": str(entry.get("research_node") or ""),
+            }
+    return catalog
+
+
 def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
     """Load all refinery items from items/refineries/<family>/*.json."""
     catalog: Dict[str, Dict[str, Any]] = {}
@@ -889,6 +940,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     radiator_heat_rejection_mw = 0.0
     robonaut_electric_mw = 0.0
     constructor_electric_mw = 0.0
+    isru_electric_mw = 0.0
     refinery_electric_mw = 0.0
 
     for part in parts:
@@ -907,6 +959,8 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
             robonaut_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
         elif cat == "constructor":
             constructor_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
+        elif cat == "isru":
+            isru_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
         elif cat == "refinery":
             refinery_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
 
@@ -948,7 +1002,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     waste_heat_surplus_mw = total_waste_heat_mw - radiator_heat_rejection_mw
 
     # ── Electric balance ──────────────────────────────────────
-    electric_surplus_mw = actual_gen_electric_mw - robonaut_electric_mw - constructor_electric_mw - refinery_electric_mw
+    electric_surplus_mw = actual_gen_electric_mw - robonaut_electric_mw - constructor_electric_mw - isru_electric_mw - refinery_electric_mw
 
     return {
         "reactor_thermal_mw": round(reactor_thermal_mw, 1),
@@ -966,6 +1020,7 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
         "waste_heat_surplus_mw": round(waste_heat_surplus_mw, 1),
         "robonaut_electric_mw": round(robonaut_electric_mw, 1),
         "constructor_electric_mw": round(constructor_electric_mw, 1),
+        "isru_electric_mw": round(isru_electric_mw, 1),
         "refinery_electric_mw": round(refinery_electric_mw, 1),
         "electric_surplus_mw": round(electric_surplus_mw, 1),
         "max_throttle": round(max_throttle, 4),
@@ -1098,6 +1153,7 @@ def get_item_info(item_id: str) -> Optional[Dict[str, Any]]:
         ("storage",     load_storage_catalog),
         ("robonaut",    load_robonaut_catalog),
         ("constructor", load_constructor_catalog),
+        ("isru",        load_isru_catalog),
         ("refinery",    load_refinery_catalog),
         ("resource",    load_resource_catalog),
     ]
@@ -1182,6 +1238,7 @@ def _find_raw_item_json(item_id: str, category: str) -> Dict[str, Any]:
         "storage":     ["Storage"],
         "robonaut":    ["robonauts"],
         "constructor": ["constructors"],
+        "isru":        ["isru"],
         "refinery":    ["refineries"],
         "resource":    ["Resources"],
     }
@@ -1218,6 +1275,7 @@ def _build_item_name_map() -> Dict[str, str]:
         load_storage_catalog,
         load_robonaut_catalog,
         load_constructor_catalog,
+        load_isru_catalog,
         load_refinery_catalog,
         load_resource_catalog,
     ]:
@@ -1546,6 +1604,26 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
         "refineries_volatiles",
     ]
 
+    # ── ISRU subtree mapping (branch → subtree ID) ────────────────────
+    _ISRU_BRANCH_TO_SUB = {
+        "centrifugal_sifting": "isru_sifting",
+        "electrostatic_centrifugal": "isru_sifting",
+        "magnetic_resonance_separation": "isru_sifting",
+        "plasma_assisted_separation": "isru_sifting",
+        "resistive_thermal_drill": "isru_heat_drill",
+        "microwave_thermal_drill": "isru_heat_drill",
+        "plasma_thermal_drill": "isru_heat_drill",
+        "fusion_thermal_drill": "isru_heat_drill",
+    }
+    _ISRU_SUBTREE_LABELS = {
+        "isru_sifting": "Deep Efficiency Sifting",
+        "isru_heat_drill": "Heat Drill Capture",
+    }
+    _ISRU_SUBTREE_ORDER = [
+        "isru_sifting",
+        "isru_heat_drill",
+    ]
+
     # ── Collect all items from all catalogs ────────────────────────────────
     all_items: Dict[str, List[Dict[str, Any]]] = {}
     loaders = [
@@ -1555,6 +1633,7 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
         ("radiators", load_radiator_catalog),
         ("robonauts", load_robonaut_catalog),
         ("constructors", load_constructor_catalog),
+        ("isru", load_isru_catalog),
         ("refineries", load_refinery_catalog),
     ]
 
@@ -1569,6 +1648,9 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
             if cat_id == "refineries":
                 branch = str(item.get("branch") or "")
                 actual_key = _REFINERY_BRANCH_TO_SUB.get(branch, "refineries")
+            elif cat_id == "isru":
+                branch = str(item.get("branch") or "")
+                actual_key = _ISRU_BRANCH_TO_SUB.get(branch, "isru")
 
             entry = {
                 "item_id": item_id,
@@ -1597,6 +1679,11 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
             elif cat_id == "radiators":
                 entry.update({
                     "heat_rejection_mw": float(item.get("heat_rejection_mw") or 0),
+                })
+            elif cat_id == "isru":
+                entry.update({
+                    "water_extraction_kg_per_hr": float(item.get("water_extraction_kg_per_hr") or 0),
+                    "electric_mw": float(item.get("electric_mw") or 0),
                 })
             if actual_key not in all_items:
                 all_items[actual_key] = []
@@ -1711,6 +1798,33 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
                 "nodes": all_nodes,
                 "edges": all_edges,
                 "subtrees": subtrees,
+            })
+        elif cat_id == "isru":
+            # Build two subtrees: Deep Efficiency Sifting and Heat Drill Capture
+            subtrees_isru: List[Dict[str, Any]] = []
+            all_nodes_isru: List[Dict[str, Any]] = []
+            all_edges_isru: List[List[str]] = []
+
+            for col_idx, sub_id in enumerate(_ISRU_SUBTREE_ORDER):
+                sub_items = all_items.get(sub_id, [])
+                x_offset = 60 + col_idx * SUBTREE_COLUMN_WIDTH
+                nodes, edges = _build_nodes_and_edges(sub_items, sub_id, x_offset)
+                subtrees_isru.append({
+                    "id": sub_id,
+                    "label": _ISRU_SUBTREE_LABELS.get(sub_id, sub_id),
+                    "nodes": nodes,
+                    "edges": edges,
+                    "x_offset": x_offset,
+                })
+                all_nodes_isru.extend(nodes)
+                all_edges_isru.extend(edges)
+
+            categories.append({
+                "id": cat_id,
+                "label": cat_label,
+                "nodes": all_nodes_isru,
+                "edges": all_edges_isru,
+                "subtrees": subtrees_isru,
             })
         else:
             # Single vertical path

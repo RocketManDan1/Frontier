@@ -78,6 +78,7 @@ def _get_actor_name(user) -> str:
 class DeployRequest(BaseModel):
     location_id: str
     item_id: str
+    facility_id: str = ""
 
 
 class UndeployRequest(BaseModel):
@@ -116,11 +117,13 @@ class AssignSlotRequest(BaseModel):
 class ReorderSlotsRequest(BaseModel):
     location_id: str
     slot_ids: list
+    facility_id: str = ""
 
 
 class QueueConstructionRequest(BaseModel):
     location_id: str
     recipe_id: str
+    facility_id: str = ""
 
 
 class DequeueConstructionRequest(BaseModel):
@@ -130,6 +133,7 @@ class DequeueConstructionRequest(BaseModel):
 class ReorderQueueRequest(BaseModel):
     location_id: str
     queue_ids: list
+    facility_id: str = ""
 
 
 # ── Sites Overview ─────────────────────────────────────────────────────────────
@@ -224,6 +228,10 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     ).fetchall()
     ships_by_loc = {r["location_id"]: r["cnt"] for r in ship_rows}
 
+    # Get facility counts per location
+    import facility_service
+    facility_counts = facility_service.get_facility_count_by_location(conn)
+
     # Metadata
     metadata = _main()._location_metadata_by_id()
 
@@ -281,6 +289,7 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "active_jobs": jobs_by_loc.get(loc_id, 0),
             "inventory": inv_by_loc.get(loc_id, {"stack_count": 0, "total_mass_kg": 0}),
             "ships_docked": ships_by_loc.get(loc_id, 0),
+            "facility_count": facility_counts.get(loc_id, 0),
         }
         result.append(entry)
 
@@ -325,6 +334,14 @@ def api_site_detail(
     # Active jobs
     jobs = industry_service.get_active_jobs(conn, location_id)
 
+    # Facilities summary
+    import facility_service
+    facilities = facility_service.list_facilities_at_location(
+        conn,
+        location_id,
+        viewer_corp_id=corp_id,
+    )
+
     # Docked ships
     ships = conn.execute(
         "SELECT id, name FROM ships WHERE location_id = ?",
@@ -340,6 +357,7 @@ def api_site_detail(
         "is_surface_site": site is not None,
         "inventory": inv,
         "equipment": equipment,
+        "facilities": facilities,
         "active_jobs": jobs,
         "ships": [{"id": s["id"], "name": s["name"]} for s in ships],
     }
@@ -360,6 +378,82 @@ def api_site_detail(
 
 
 # ── Industry Overview ──────────────────────────────────────────────────────────
+
+
+@router.get("/api/industry/facility/{facility_id}")
+def api_facility_industry_overview(
+    facility_id: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Full industrial overview scoped to a single facility."""
+    import facility_service
+
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    fac = facility_service.require_facility_owner(conn, facility_id, corp_id)
+    if not fac:
+        raise HTTPException(status_code=404, detail="Facility not found")
+
+    location_id = fac["location_id"]
+    _main().settle_arrivals(conn, _main().game_now_s())
+    industry_service.settle_industry(conn, location_id, facility_id=facility_id)
+
+    equipment = industry_service.get_deployed_equipment(conn, location_id, facility_id=facility_id)
+    active_jobs = industry_service.get_active_jobs(conn, location_id, facility_id=facility_id)
+    history = industry_service.get_job_history(conn, location_id, facility_id=facility_id)
+    org_id = _get_org_id(conn, user)
+    unlocked_tech_ids = {
+        str(unlock.get("tech_id") or "")
+        for unlock in org_service.get_unlocked_techs(conn, org_id)
+        if str(unlock.get("tech_id") or "").strip()
+    }
+    available_recipes = industry_service.get_available_recipes_for_location(
+        conn,
+        location_id,
+        corp_id=corp_id,
+        unlocked_tech_ids=unlocked_tech_ids,
+        facility_id=facility_id,
+    )
+    inv = _main().get_location_inventory_payload(conn, location_id, corp_id=corp_id or None)
+
+    # Surface site info for mining
+    site = conn.execute(
+        "SELECT body_id, gravity_m_s2 FROM surface_sites WHERE location_id = ?",
+        (location_id,),
+    ).fetchone()
+    site_prospected = site and org_id and org_service.is_site_prospected(conn, org_id, location_id)
+    minable = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
+
+    idle_constructors = [
+        {"id": e["id"], "name": e["name"], "config": e["config"]}
+        for e in equipment
+        if e["category"] in ("constructor", "robonaut") and e.get("mode", "idle") == "idle"
+    ]
+
+    refinery_slots = industry_service.get_refinery_slots(conn, location_id, facility_id=facility_id)
+    construction_data = industry_service.get_construction_queue(conn, location_id, facility_id=facility_id)
+    power_balance = industry_service.compute_site_power_balance(equipment)
+
+    return {
+        "location_id": location_id,
+        "facility_id": facility_id,
+        "facility_name": fac["name"],
+        "equipment": equipment,
+        "active_jobs": active_jobs,
+        "job_history": history,
+        "available_recipes": available_recipes,
+        "inventory": inv,
+        "is_surface_site": site is not None,
+        "is_prospected": bool(site_prospected),
+        "minable_resources": minable,
+        "idle_constructors": idle_constructors,
+        "refinery_slots": refinery_slots,
+        "construction_queue": construction_data.get("queue", []),
+        "construction_pool_speed": construction_data.get("pool_speed_kg_per_hr", 0),
+        "construction_pool_mult": construction_data.get("pool_throughput_mult", 0),
+        "power_balance": power_balance,
+    }
 
 
 @router.get("/api/industry/{location_id}")
@@ -450,7 +544,7 @@ def api_deploy_equipment(
     actor_name = _get_actor_name(user)
     try:
         result = industry_service.deploy_equipment(
-            conn, body.location_id, body.item_id, actor_name, corp_id=corp_id
+            conn, body.location_id, body.item_id, actor_name, corp_id=corp_id, facility_id=body.facility_id
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -611,7 +705,11 @@ def api_reorder_refinery_slots(
     corp_id = _get_corp_id(user)
     try:
         result = industry_service.reorder_refinery_slots(
-            conn, body.location_id, body.slot_ids, corp_id=corp_id
+            conn,
+            body.location_id,
+            body.slot_ids,
+            corp_id=corp_id,
+            facility_id=body.facility_id,
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -634,7 +732,7 @@ def api_queue_construction(
     industry_service.settle_industry(conn)
     try:
         result = industry_service.queue_construction(
-            conn, body.location_id, body.recipe_id, actor_name, corp_id=corp_id
+            conn, body.location_id, body.recipe_id, actor_name, corp_id=corp_id, facility_id=body.facility_id
         )
         return {"ok": True, **result}
     except ValueError as e:
@@ -671,7 +769,11 @@ def api_reorder_construction_queue(
     corp_id = _get_corp_id(user)
     try:
         result = industry_service.reorder_construction_queue(
-            conn, body.location_id, body.queue_ids, corp_id=corp_id
+            conn,
+            body.location_id,
+            body.queue_ids,
+            corp_id=corp_id,
+            facility_id=body.facility_id,
         )
         return {"ok": True, **result}
     except ValueError as e:

@@ -49,6 +49,22 @@ This script:
 
 > **Important:** Promotion replaces the test *code* only — the test *database* is preserved. Schema migrations run automatically on container startup, so new migrations included in the promoted code will apply to the test DB on next boot.
 
+### Low-impact patch promotion
+
+For small code-only updates where you do not want to affect player transit state, use:
+
+```bash
+./promote-to-test.sh --patch
+```
+
+`--patch` mode is intentionally conservative:
+
+- It **does not teleport** in-transit ships.
+- It **does not allow** migration `0015_industry_v2` to cancel active production jobs.
+- It **does bypass** the in-transit ship preflight block so promotion can proceed without ship state changes.
+
+Use full promotion flags (`--allow-teleport`, `--allow-job-cancel`) only when those gameplay-impacting actions are explicitly intended.
+
 ## Environment Variables
 
 ### `ENV_LABEL` (`TEST` | `DEV` | *empty*)
@@ -88,6 +104,12 @@ sudo docker compose up -d --build frontier-dev
 
 ```bash
 ./promote-to-test.sh
+```
+
+### Promote a low-impact patch to test
+
+```bash
+./promote-to-test.sh --patch
 ```
 
 ### Run the test suite (inside dev container)

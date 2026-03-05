@@ -1,0 +1,21 @@
+{
+  "id": "hdc_2b_cryovein",
+  "name": "HDC-2B \"Cryovein\"",
+  "research_node": "microwave_thermal_extraction",
+  "tech_level": 2.5,
+  "branch": "microwave_thermal_drill",
+  "mass_t": 10.0,
+  "operational_environment": "surface",
+  "power_requirements": {
+    "electric_mw": 10.0
+  },
+  "performance": {
+    "water_extraction_kg_per_hr": 472,
+    "extraction_method": "phased_array_microwave_sublimation",
+    "max_drill_depth_m": 12.0,
+    "min_water_ice_fraction": 0.08,
+    "max_water_ice_fraction": 1.0
+  },
+  "description": "The Cryovein replaces the Borealis's single magnetron with a phased-array microwave system that electronically steers the beam through a cone-shaped sweep pattern, sublimating ice in a 2-metre radius cylinder around the borehole without any mechanical movement. This increases extraction volume per borehole by over 4× compared to the fixed-beam Borealis. Three boreholes can be in simultaneous operation from a single surface pad via a rotating turret mount. Drill depth reaches 12 metres, penetrating through regolith cap layers into the massive ice lenses found at 6–10 m depth in many permanently shadowed craters. At 10 tonnes the Cryovein remains lighter than even the smallest sifting unit, but the phased-array magnetron bank draws 10 MW — requiring a dedicated reactor-generator stack. Water output of 472 kg/hr makes it the mid-game standard for ice-rich site development.",
+  "ui_tags": ["microwave_phased_array", "tier_2", "light", "high_power"]
+}

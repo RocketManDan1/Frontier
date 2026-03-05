@@ -16,6 +16,36 @@
   const mapOrgIncomeEl = document.getElementById("mapOrgIncome");
   const mapOrgResearchEl = document.getElementById("mapOrgResearch");
   const mapOrgExpensesEl = document.getElementById("mapOrgExpenses");
+
+  // ── Ship tooltip (HTML overlay) ──────────────────────────
+  const shipTooltipEl = document.createElement("div");
+  shipTooltipEl.className = "shipTooltip";
+  shipTooltipEl.style.display = "none";
+  document.body.appendChild(shipTooltipEl);
+  let shipTooltipTimerId = null;
+  let shipTooltipShipId = null;
+
+  // ── Body tooltip (HTML overlay) ──────────────────────────
+  const bodyTooltipEl = document.createElement("div");
+  bodyTooltipEl.className = "bodyTooltip";
+  bodyTooltipEl.style.display = "none";
+  document.body.appendChild(bodyTooltipEl);
+  let bodyTooltipTimerId = null;
+  let bodyTooltipBodyId = null;
+  let bodySitesCache = null;         // fetched once from /api/surface_sites
+  let bodySitesFetchPromise = null;  // dedup inflight request
+
+  // ── Fleet filter toggle button ───────────────────────────
+  const fleetToggleBtn = document.createElement("button");
+  fleetToggleBtn.className = "fleetToggleBtn";
+  fleetToggleBtn.title = "Toggle: show all ships / my fleet only";
+  fleetToggleBtn.textContent = "All ships";
+  fleetToggleBtn.addEventListener("click", () => {
+    showMyFleetOnly = !showMyFleetOnly;
+    fleetToggleBtn.textContent = showMyFleetOnly ? "My fleet" : "All ships";
+    fleetToggleBtn.classList.toggle("isActive", showMyFleetOnly);
+  });
+  document.querySelector(".app")?.appendChild(fleetToggleBtn);
   const stageParallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const cameraMotion = { x: 0, y: 0, energy: 0 };
   const PARALLAX_MAX_PX = 12;
@@ -1028,9 +1058,14 @@
     showLocationInfo(loc);
   });
 
-  window.addEventListener("pointerup", () => (dragging = false));
+  window.addEventListener("pointerup", () => {
+    dragging = false;
+    cameraTrackSuppressed = false;  // resume tracking after pan ends
+    cameraTrackBodyId = null;       // re-acquire nearest body
+  });
   window.addEventListener("pointermove", (e) => {
     if (!dragging) return;
+    cameraTrackSuppressed = true;   // suppress tracking while panning
     const dx = e.clientX - last.x;
     const dy = e.clientY - last.y;
     world.x += dx;
@@ -1063,6 +1098,9 @@
       world.scale.set(newScale);
       world.x = mx - wx * newScale;
       world.y = my - wy * newScale;
+
+      // Reset tracked body so tracking re-acquires at new zoom level
+      cameraTrackBodyId = null;
 
       nudgeStageParallax((e.deltaX || 0) * PARALLAX_WHEEL_FACTOR, wheelDeltaY * PARALLAX_WHEEL_FACTOR);
       registerCameraMotion((e.deltaX || 0) * 0.28, wheelDeltaY * 0.28);
@@ -1110,12 +1148,22 @@
   const OVERVIEW_EVERY_N = 10;         // run map overview rebuild every N frames
   function markOrbitsDirty() { orbitRingsDirty = true; }
 
+  // --- Camera tracking: follow nearest celestial body when zoomed in ---
+  const CAMERA_TRACK_MIN_ZOOM = 0.15;          // start tracking at this zoom level
+  // No hardcoded body list — we dynamically search locGfx for groups + moonlets
+  let cameraTrackBodyId = null;                 // currently tracked body id
+  let cameraTrackPrevRx = 0;                    // body's world-x last frame
+  let cameraTrackPrevRy = 0;                    // body's world-y last frame
+  let cameraTrackSuppressed = false;            // suppressed while user is panning
+
   const locGfx = new Map();   // id -> {dot,label,kind,hovered}
   const shipGfx = new Map();  // id -> {ship,container,slot}
   const shipClusterLabels = new Map(); // location_id -> PIXI.Text
   const dockedChipGfx = new Map(); // location_id -> {container,bg,text,hitRadiusWorld}
   let selectedShipId = null;
   let hoveredShipId = null;
+  let showMyFleetOnly = false;  // fleet-filter toggle
+  let stateUser = null;         // user info from /api/state
   let shipInfoTab = "details";
   let shipInfoTabShipId = null;
   let locationInfoTab = "details";
@@ -1485,6 +1533,9 @@
   });
 
   function centerCameraOnWorldPoint(wx, wy, animate = true, durationMs = 320) {
+    // Suppress camera tracking during the tween to avoid fighting
+    cameraTrackSuppressed = true;
+    cameraTrackBodyId = null;
     const scale = Math.max(0.0001, Number(world.scale.x) || 1);
     const targetX = (stage.clientWidth / 2) - wx * scale;
     const targetY = (stage.clientHeight / 2) - wy * scale;
@@ -1511,7 +1562,12 @@
       world.x = nextX;
       world.y = nextY;
       markOrbitsDirty();
-      if (t < 1) requestAnimationFrame(tick);
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        cameraTrackSuppressed = false;  // re-enable tracking after tween
+        cameraTrackBodyId = null;       // re-acquire nearest body
+      }
     }
 
     requestAnimationFrame(tick);
@@ -4831,17 +4887,31 @@
       gfx.__bodyId = bodyId;
       gfx.interactive = true;
       gfx.buttonMode = true;
-      gfx.on("pointerover", () => {
+      gfx.on("pointerover", (e) => {
         hoveredBodyId = bodyId;
+        if (bodyTooltipTimerId) clearTimeout(bodyTooltipTimerId);
+        bodyTooltipTimerId = setTimeout(() => {
+          const pt = e.data?.global || e.global || { x: 0, y: 0 };
+          showBodyTooltip(bodyId, pt.x, pt.y);
+        }, 250);
+      });
+      gfx.on("pointermove", (e) => {
+        if (bodyTooltipBodyId === bodyId) {
+          const pt = e.data?.global || e.global || { x: 0, y: 0 };
+          positionBodyTooltip(pt.x, pt.y);
+        }
       });
       gfx.on("pointerout", () => {
         if (hoveredBodyId === bodyId) hoveredBodyId = null;
+        hideBodyTooltip();
       });
       gfx.on("pointertap", (e) => {
         if (isSecondaryPointerEvent(e)) return;
+        hideBodyTooltip();
         showBodyInfo(bodyId);
       });
       gfx.on("rightclick", (e) => {
+        hideBodyTooltip();
         openBodyContextMenu(bodyId, e);
       });
     }
@@ -5566,19 +5636,36 @@
 
       dot.interactive = true;
       dot.buttonMode = true;
-      dot.on("pointerover", () => {
+      dot.on("pointerover", (e) => {
         entry.hovered = true;
+        if (entry.kind === "moonlet") {
+          if (bodyTooltipTimerId) clearTimeout(bodyTooltipTimerId);
+          const moonGroupId = loc.id;  // moonlet IDs like "IO", "CALLISTO"
+          bodyTooltipTimerId = setTimeout(() => {
+            const pt = e.data?.global || e.global || { x: 0, y: 0 };
+            showBodyTooltip(moonGroupId, pt.x, pt.y);
+          }, 250);
+        }
+      });
+      dot.on("pointermove", (e) => {
+        if (entry.kind === "moonlet" && bodyTooltipBodyId === loc.id) {
+          const pt = e.data?.global || e.global || { x: 0, y: 0 };
+          positionBodyTooltip(pt.x, pt.y);
+        }
       });
       dot.on("pointerout", () => {
         entry.hovered = false;
+        if (entry.kind === "moonlet") hideBodyTooltip();
       });
       dot.on("pointertap", (e) => {
         if (isSecondaryPointerEvent(e)) return;
+        if (entry.kind === "moonlet") hideBodyTooltip();
         const clickCount = Number(e?.data?.originalEvent?.detail || 1);
         if (clickCount >= 2) ensureInfoPanelVisible();
         showLocationInfo(loc);
       });
       dot.on("rightclick", (e) => {
+        if (entry.kind === "moonlet") hideBodyTooltip();
         openLocationContextMenu(loc, e);
       });
 
@@ -5706,6 +5793,8 @@
   }
 
   // ---------- Ships ----------
+  const FOREIGN_SHIP_ALPHA = 0.38;
+  const OWN_SHIP_ALPHA = 0.95;
   const DEFAULT_SHIP_ICON_URL = "/static/img/mining-barge.png";
   const SHIP_PNG_FORWARD_OFFSET_RAD = Math.PI / 2;
   const SHIP_GLOW_ALPHA = 0.12;
@@ -6012,6 +6101,209 @@
     }
   }
 
+  // ── Ship tooltip helpers ─────────────────────────────────
+  function formatMassTons(kg) {
+    const t = (kg || 0) / 1000;
+    return t >= 100 ? `${Math.round(t).toLocaleString()} t` : `${t.toFixed(1)} t`;
+  }
+
+  // ── Body tooltip helpers ──────────────────────────────────
+  async function ensureBodySitesCache() {
+    if (bodySitesCache) return bodySitesCache;
+    if (bodySitesFetchPromise) return bodySitesFetchPromise;
+    bodySitesFetchPromise = (async () => {
+      try {
+        const resp = await fetch("/api/surface_sites", { cache: "no-store" });
+        if (!resp.ok) { bodySitesFetchPromise = null; return null; }
+        const data = await resp.json();
+        bodySitesCache = data.surface_sites || data.sites || data || [];
+        return bodySitesCache;
+      } catch (_) { bodySitesFetchPromise = null; return null; }
+    })();
+    return bodySitesFetchPromise;
+  }
+
+  function bodyIdFromGroupId(groupId) {
+    // "grp_earth" → "earth", "IO" (moonlet) → "io"
+    if (String(groupId).startsWith("grp_")) return groupId.slice(4).toLowerCase();
+    return String(groupId).toLowerCase();
+  }
+
+  function formatGravity(g) {
+    if (g == null || g <= 0) return null;
+    const gees = g / 9.80665;
+    const gStr = g >= 1 ? g.toFixed(2) : (g >= 0.01 ? g.toFixed(3) : g.toFixed(4));
+    const geeStr = gees >= 1 ? gees.toFixed(2) : (gees >= 0.01 ? gees.toFixed(3) : gees.toFixed(4));
+    return `${gStr} m/s² (${geeStr} g)`;
+  }
+
+  function showBodyTooltip(bodyGroupId, screenX, screenY) {
+    if (!bodyGroupId) { hideBodyTooltip(); return; }
+    bodyTooltipBodyId = bodyGroupId;
+    const loc = locationsById.get(bodyGroupId);
+    const bodyName = loc?.name || bodyGroupId;
+    const gravity = loc?.gravity_m_s2;
+    const bId = bodyIdFromGroupId(bodyGroupId);
+
+    // Gravity row
+    const gravStr = formatGravity(gravity);
+    let rows = gravStr
+      ? `<div class="bodyTooltipDivider"></div>
+         <div class="bodyTooltipRow"><span class="bodyTooltipLabel">Gravity</span><span class="bodyTooltipVal">${gravStr}</span></div>`
+      : "";
+
+    // Sites section — filled async
+    const sitesPlaceholder = `<div class="bodyTooltipSites" id="bodyTooltipSites"></div>`;
+
+    bodyTooltipEl.innerHTML = `
+      <div class="bodyTooltipTitle">${bodyName}</div>
+      ${rows}
+      ${sitesPlaceholder}`;
+    bodyTooltipEl.style.display = "block";
+    positionBodyTooltip(screenX, screenY);
+
+    // Async: fill in sites once data is available
+    ensureBodySitesCache().then((sites) => {
+      if (bodyTooltipBodyId !== bodyGroupId) return; // stale
+      const sitesEl = bodyTooltipEl.querySelector("#bodyTooltipSites");
+      if (!sitesEl || !sites) return;
+      const bodySites = sites.filter((s) => s.body_id === bId);
+      if (bodySites.length === 0) {
+        sitesEl.innerHTML = `<div class="bodyTooltipDivider"></div><div class="bodyTooltipMuted">No surface sites</div>`;
+        return;
+      }
+      let html = `<div class="bodyTooltipDivider"></div>`;
+      html += `<div class="bodyTooltipSitesHeader">Sites (${bodySites.length})</div>`;
+      for (const site of bodySites) {
+        const icon = site.is_prospected ? "✓" : "?";
+        const cls = site.is_prospected ? "bodyTooltipSiteProspected" : "bodyTooltipSiteUnknown";
+        html += `<div class="bodyTooltipSiteRow"><span class="${cls}">${icon}</span> ${site.name}</div>`;
+      }
+      sitesEl.innerHTML = html;
+    });
+  }
+
+  function positionBodyTooltip(sx, sy) {
+    const el = bodyTooltipEl;
+    const pad = 14;
+    let x = sx + pad;
+    let y = sy + pad;
+    if (x + el.offsetWidth > window.innerWidth - 8) x = sx - el.offsetWidth - pad;
+    if (y + el.offsetHeight > window.innerHeight - 8) y = sy - el.offsetHeight - pad;
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+  }
+
+  function hideBodyTooltip() {
+    bodyTooltipEl.style.display = "none";
+    bodyTooltipBodyId = null;
+    if (bodyTooltipTimerId) { clearTimeout(bodyTooltipTimerId); bodyTooltipTimerId = null; }
+  }
+
+  function formatAccel(thrustKn, massKg) {
+    const thrustN = (thrustKn || 0) * 1000;
+    const mass = massKg || 0;
+    if (mass <= 0 || thrustN <= 0) return "—";
+    const ms2 = thrustN / mass;
+    const gees = ms2 / 9.80665;
+    const ms2Str = ms2 >= 1 ? ms2.toFixed(1) : ms2.toFixed(2);
+    const geeStr = gees >= 1 ? gees.toFixed(1) : gees >= 0.01 ? gees.toFixed(2) : gees.toFixed(3);
+    return `${ms2Str} m/s² (${geeStr} g)`;
+  }
+
+  function showShipTooltip(ship, screenX, screenY) {
+    if (!ship) { hideShipTooltip(); return; }
+    shipTooltipShipId = ship.id;
+    const isOwn = !!ship.is_own;
+    const locName = ship.location_id
+      ? (locationsById.get(ship.location_id)?.name || ship.location_id)
+      : ship.to_location_id
+        ? `→ ${locationsById.get(ship.to_location_id)?.name || ship.to_location_id}`
+        : "Unknown";
+
+    const statusLabel = ship.status === "docked" ? "Docked" : ship.status === "transit" ? "In transit" : (ship.status || "—");
+
+    let rows = "";
+    // Compute acceleration from thrust & mass (available for all ships)
+    const accelStr = formatAccel(ship.thrust_kn, ship.total_mass_kg);
+
+    if (isOwn) {
+      const dvPct = (ship.delta_v_remaining_m_s != null && ship.delta_v_remaining_m_s > 0)
+        ? Math.round(ship.delta_v_remaining_m_s) + " m/s" : "0 m/s";
+      const fuelPct = (ship.fuel_capacity_kg > 0)
+        ? Math.round((ship.fuel_kg / ship.fuel_capacity_kg) * 100) + "%" : "—";
+      rows = `
+        <div class="shipTooltipDivider"></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Δv</span><span class="shipTooltipVal">${dvPct}</span></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Fuel</span><span class="shipTooltipVal">${fuelPct}</span></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Mass</span><span class="shipTooltipVal">${formatMassTons(ship.total_mass_kg)}</span></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Accel</span><span class="shipTooltipVal">${accelStr}</span></div>`;
+    } else {
+      rows = `
+        <div class="shipTooltipDivider"></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Mass</span><span class="shipTooltipVal">${formatMassTons(ship.total_mass_kg)}</span></div>
+        <div class="shipTooltipRow"><span class="shipTooltipLabel">Accel</span><span class="shipTooltipVal">${accelStr}</span></div>`;
+    }
+
+    const ownerLine = isOwn
+      ? `<div class="shipTooltipOwner">★ Your ship</div>`
+      : (ship.corp_name ? `<div class="shipTooltipOwner">${ship.corp_name}</div>` : "");
+
+    shipTooltipEl.innerHTML = `
+      <div class="shipTooltipTitle">${ship.name || ship.id}</div>
+      ${ownerLine}
+      <div class="shipTooltipStatus">${statusLabel} · ${locName}</div>
+      ${rows}`;
+    shipTooltipEl.style.display = "block";
+    positionShipTooltip(screenX, screenY);
+  }
+
+  function positionShipTooltip(sx, sy) {
+    const pad = 14;
+    const rect = shipTooltipEl.getBoundingClientRect();
+    let x = sx + pad;
+    let y = sy + pad;
+    if (x + rect.width > window.innerWidth - 8) x = sx - rect.width - pad;
+    if (y + rect.height > window.innerHeight - 8) y = sy - rect.height - pad;
+    shipTooltipEl.style.left = Math.max(4, x) + "px";
+    shipTooltipEl.style.top = Math.max(4, y) + "px";
+  }
+
+  function hideShipTooltip() {
+    shipTooltipEl.style.display = "none";
+    shipTooltipShipId = null;
+    if (shipTooltipTimerId) { clearTimeout(shipTooltipTimerId); shipTooltipTimerId = null; }
+  }
+
+  // ── Δv micro-bar (thin bar under ship icon) ─────────────
+  const DV_BAR_WIDTH = 14;
+  const DV_BAR_HEIGHT = 2;
+  const DV_BAR_MAX_DV = 12000; // m/s — scale reference
+
+  function buildDvBar() {
+    const bar = new PIXI.Graphics();
+    return bar;
+  }
+
+  function updateDvBar(bar, ship, size) {
+    if (!bar) return;
+    bar.clear();
+    const dv = Number(ship.delta_v_remaining_m_s) || 0;
+    const maxDv = DV_BAR_MAX_DV;
+    const frac = Math.min(1, Math.max(0, dv / maxDv));
+    // background
+    bar.beginFill(0x1a2233, 0.7);
+    bar.drawRoundedRect(-DV_BAR_WIDTH / 2, 0, DV_BAR_WIDTH, DV_BAR_HEIGHT, 1);
+    bar.endFill();
+    // filled portion
+    const fillColor = frac > 0.5 ? 0x44cc44 : frac > 0.2 ? 0xccaa22 : 0xff4444;
+    if (frac > 0.005) {
+      bar.beginFill(fillColor, 0.9);
+      bar.drawRoundedRect(-DV_BAR_WIDTH / 2, 0, DV_BAR_WIDTH * frac, DV_BAR_HEIGHT, 1);
+      bar.endFill();
+    }
+  }
+
   function buildShipSprite(ship) {
     const c = new PIXI.Container();
     c.interactive = true;
@@ -6022,7 +6314,14 @@
     const colorInt = parseHexColor(ship.color, 0xff2c4d);
     const hitRadius = Math.max(14, size * SHIP_CLICK_RADIUS_MULT);
     c.hitArea = new PIXI.Circle(0, 0, hitRadius);
-    const shipIcon = buildShipIconSprite(ship, size, colorInt, 0.95);
+    const isOwn = !!ship.is_own;
+    const baseAlpha = isOwn ? OWN_SHIP_ALPHA : FOREIGN_SHIP_ALPHA;
+    const shipIcon = buildShipIconSprite(ship, size, colorInt, baseAlpha);
+
+    // Δv micro-bar — thin bar underneath icon
+    const dvBar = buildDvBar();
+    dvBar.position.set(0, size * 0.7);
+    updateDvBar(dvBar, ship, size);
 
     const headingLine = null;
 
@@ -6061,14 +6360,27 @@
     label.position.set(0, labelOffsetY);
     label.alpha = 0;
 
-    c.on("pointerover", () => {
+    c.on("pointerover", (e) => {
       hoveredShipId = ship.id;
+      if (shipTooltipTimerId) clearTimeout(shipTooltipTimerId);
+      const sx = e?.data?.global?.x ?? 0;
+      const sy = e?.data?.global?.y ?? 0;
+      shipTooltipTimerId = setTimeout(() => {
+        const gfxEntry = shipGfx.get(ship.id);
+        if (gfxEntry) showShipTooltip(gfxEntry.ship, sx, sy);
+      }, 200);
+    });
+    c.on("pointermove", (e) => {
+      if (shipTooltipShipId === ship.id && shipTooltipEl.style.display === "block") {
+        positionShipTooltip(e?.data?.global?.x ?? 0, e?.data?.global?.y ?? 0);
+      }
     });
     c.on("pointerout", () => {
       if (hoveredShipId === ship.id) hoveredShipId = null;
+      hideShipTooltip();
     });
 
-    c.addChild(selectionBox, shipIcon, idTag, label);
+    c.addChild(selectionBox, shipIcon, dvBar, idTag, label);
 
     c.on("pointertap", (e) => {
       if (isSecondaryPointerEvent(e)) return;
@@ -6083,7 +6395,7 @@
       openShipContextMenu(ship, e);
     });
 
-    return { container: c, shipIcon, headingLine, selectionBox, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius };
+    return { container: c, shipIcon, headingLine, selectionBox, dvBar, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius };
   }
 
   function upsertShips(shipsArr) {
@@ -6100,7 +6412,7 @@
         continue;
       }
 
-      const { container, shipIcon, headingLine, selectionBox, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius } = buildShipSprite(s);
+      const { container, shipIcon, headingLine, selectionBox, dvBar, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius } = buildShipSprite(s);
       const pathGfx = new PIXI.Graphics();
 
       const slot = { index: 0 };
@@ -6113,6 +6425,7 @@
         shipIcon,
         headingLine,
         selectionBox,
+        dvBar,
         pathGfx,
         label,
         idTag,
@@ -6165,7 +6478,16 @@
     }
 
     for (const gfx of shipGfx.values()) {
-      const { ship, container, shipIcon, headingLine, selectionBox, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot } = gfx;
+      const { ship, container, shipIcon, headingLine, selectionBox, dvBar, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot } = gfx;
+
+      // ── Fleet filter: hide foreign ships when toggle active ──
+      const isOwn = !!ship.is_own;
+      if (showMyFleetOnly && !isOwn && ship.id !== selectedShipId && ship.id !== hoveredShipId) {
+        container.visible = false;
+        if (pathGfx) pathGfx.visible = false;
+        continue;
+      }
+
       let facingAngle = 0;
       let headingAngle = 0;
       let px = 0;
@@ -6510,6 +6832,12 @@
       const iconDisplayScale = zoom >= SHIP_ICON_LOCK_ZOOM_START ? lockedScale : effectiveShipScale;
 
       if (shipIcon) shipIcon.scale.set(iconDisplayScale);
+
+      // ── Ownership dimming: foreign ships are ghosted ──
+      const isSelectedOrHoveredShip = (ship.id === selectedShipId || ship.id === hoveredShipId);
+      const ownerAlpha = isOwn ? 1.0 : (isSelectedOrHoveredShip ? 0.75 : FOREIGN_SHIP_ALPHA);
+      if (shipIcon) shipIcon.alpha = ownerAlpha;
+
       if (container?.hitArea) {
         const glowBase = Math.max(2.4, Number(shipIcon?.__glowRadiusPx) || Number(shipIcon?.__hitRadiusPx) || (Number(hitRadius) || 8) * 0.3);
         const minWorldRadius = MIN_SHIP_HIT_SCREEN_PX / zoom;
@@ -6551,8 +6879,22 @@
         idTag.rotation = -theta;
         idTag.scale.set(shipTextLockedToScreen);
         const selectedBoost = (ship.id === selectedShipId || ship.id === hoveredShipId) ? 1 : 0.82;
-        idTag.alpha = idTagZoomAlpha * selectedBoost;
+        idTag.alpha = idTagZoomAlpha * selectedBoost * (isOwn ? 1 : 0.6);
         idTag.visible = idTag.alpha > 0.01;
+      }
+
+      // ── Δv micro-bar update ──
+      if (dvBar && isOwn) {
+        updateDvBar(dvBar, ship, size);
+        dvBar.scale.set(iconDisplayScale);
+        const theta = container.rotation || 0;
+        const barDy = baseIconPx * iconDisplayScale * 0.48;
+        dvBar.position.set(Math.sin(theta) * barDy, Math.cos(theta) * barDy);
+        dvBar.rotation = -theta;
+        dvBar.alpha = idTagZoomAlpha * 0.9;
+        dvBar.visible = idTagZoomAlpha > 0.15;
+      } else if (dvBar) {
+        dvBar.visible = false;
       }
     }
 
@@ -8460,6 +8802,7 @@
     timeScale = Number.isFinite(parsedScale) && parsedScale >= 0 ? parsedScale : 1;
 
     ships = data.ships || [];
+    stateUser = data.user || null;
     ensureTransitAnchorsForShips(ships).catch((err) => console.error("Transit anchor prefetch failed:", err));
     upsertShips(ships);
     applyDockSlots(ships);
@@ -8547,6 +8890,72 @@
     // Don't clear — the next syncLocationsOnce() call resets locLerp
   }
 
+  // --- Camera tracking: follow nearest celestial body ---
+  // After celestial positions are lerped, shift the camera so the nearest
+  // body stays under the same screen position.  This prevents planets
+  // from orbiting off-screen when zoomed in.
+  function applyCameraTrack() {
+    const zoom = Math.max(0.0001, world.scale.x);
+    if (zoom < CAMERA_TRACK_MIN_ZOOM || cameraTrackSuppressed) {
+      cameraTrackBodyId = null;
+      return;
+    }
+
+    // Screen-center → world coords
+    const cx = (stage.clientWidth / 2 - world.x) / zoom;
+    const cy = (stage.clientHeight / 2 - world.y) / zoom;
+
+    // Find nearest body to screen center.
+    // Two sources: locationsById for grp_* groups (planets — rendered by the
+    // planet sprite system, NOT in locGfx), and locGfx for moonlets.
+    // This scales automatically as new celestials are added.
+    let bestId = null;
+    let bestDist2 = Infinity;
+
+    // 1) All grp_* groups from locationsById (planets & major bodies)
+    for (const [id, loc] of locationsById) {
+      if (!String(id).startsWith("grp_")) continue;
+      if (!Number.isFinite(loc.rx)) continue;
+      const dx = loc.rx - cx;
+      const dy = loc.ry - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDist2) { bestDist2 = d2; bestId = id; }
+    }
+    // 2) Moonlets from locGfx (moons like Io, Callisto, Titan, etc.)
+    for (const [id, entry] of locGfx) {
+      if (entry.kind !== "moonlet") continue;
+      const loc = locationsById.get(id);
+      if (!loc || !Number.isFinite(loc.rx)) continue;
+      const dx = loc.rx - cx;
+      const dy = loc.ry - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDist2) { bestDist2 = d2; bestId = id; }
+    }
+    if (!bestId) { cameraTrackBodyId = null; return; }
+
+    const body = locationsById.get(bestId);
+
+    // If the tracked body changed, reset — don't jump the camera
+    if (bestId !== cameraTrackBodyId) {
+      cameraTrackBodyId = bestId;
+      cameraTrackPrevRx = body.rx;
+      cameraTrackPrevRy = body.ry;
+      return;
+    }
+
+    // Compute body movement delta since last frame
+    const drx = body.rx - cameraTrackPrevRx;
+    const dry = body.ry - cameraTrackPrevRy;
+    cameraTrackPrevRx = body.rx;
+    cameraTrackPrevRy = body.ry;
+
+    // Shift camera by the same delta (world coords → screen offset)
+    if (Math.abs(drx) > 1e-12 || Math.abs(dry) > 1e-12) {
+      world.x -= drx * zoom;
+      world.y -= dry * zoom;
+    }
+  }
+
   // Listen for transfer planner requests from embedded iframes
   window.addEventListener(TRANSFER_PLANNER_EVENT, (event) => {
     const payload = event?.detail || {};
@@ -8565,6 +8974,7 @@
       if (hadLerp) markOrbitsDirty();  // celestials moved
       positionPlanets();
       updateLocationPositions();
+      applyCameraTrack();              // follow nearest body when zoomed in
       renderOrbitRings();              // skips internally when not dirty
       applyZoomDetailVisibility();
       updateShipPositions();

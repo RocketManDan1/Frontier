@@ -24,6 +24,7 @@
             <a class="tab" href="/research">Research</a>
             <a class="tab" href="/organization">Organization</a>
             <a class="tab" href="/contracts">Contracts</a>
+            <a class="tab" href="/missions">Missions</a>
             <a class="tab authAdminTab" href="/admin">Admin</a>
           </nav>
         </div>
@@ -97,11 +98,11 @@
                 <div class="muted" id="siteInventoryEmpty">No inventory</div>
               </div>
 
-              <!-- Deployed equipment -->
+              <!-- Facilities -->
               <div class="siteSection">
-                <div class="siteSectionTitle">Deployed Equipment</div>
-                <div class="invGrid" id="siteEquipmentGrid"></div>
-                <div class="muted" id="siteEquipmentEmpty">No deployed equipment</div>
+                <div class="siteSectionTitle">Facilities</div>
+                <div id="siteFacilitiesList" class="siteShipsList"></div>
+                <div class="muted" id="siteFacilitiesEmpty">No facilities at this site</div>
               </div>
 
               <!-- Docked ships -->
@@ -129,6 +130,29 @@
 
         <div id="industryContent" style="display:none">
 
+          <!-- Facility breadcrumb / back button -->
+          <div class="panel facilityBreadcrumb" id="facilityBreadcrumb" style="display:none">
+            <button class="btnSmall btnBack" id="btnBackToFacilities">← Back</button>
+            <span class="facilityBreadcrumbText" id="facilityBreadcrumbText"></span>
+          </div>
+
+          <!-- Facility Grid (shown after location select, before entering a facility) -->
+          <div id="facilityGridView" style="display:none">
+            <div class="facilityGridLayout">
+              <div class="facilityGridLeft">
+                <div class="facilityGridCards" id="facilityGridCards"></div>
+              </div>
+              <div class="facilityGridRight">
+                <div class="panel siteUpgradesPlaceholder">
+                  <div class="panelHeader"><span class="panelTitle">Site Upgrades</span></div>
+                  <div class="siteUpgradesBody muted">Coming Soon</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Facility industry view (existing content, shown when inside a facility) -->
+          <div id="facilityIndustryView" style="display:none">
           <!-- Power Balance (compact) -->
           <div class="panel industryPowerPanel">
             <div class="panelHeader">
@@ -223,6 +247,8 @@
             <div class="industryHistoryList" id="industryHistoryList"></div>
           </div>
 
+          </div><!-- /facilityIndustryView -->
+
         </div>
       </div>
 
@@ -264,6 +290,7 @@
                 <span class="panelTitle" id="cargoLocationName">—</span>
                 <button class="btnSmall" id="cargoRefreshBtn">Refresh</button>
               </div>
+              <div class="cargoContextBreadcrumb muted" id="cargoContextBreadcrumb">Body: —  →  Site: —  →  Facility: —</div>
 
               <!-- Three-column layout -->
               <div class="cargoColumns">
@@ -329,6 +356,27 @@
             <button class="btnSmall" id="recipeSelectModalClose">✕</button>
           </div>
           <div id="recipeSelectContent"></div>
+        </div>
+      </div>
+
+      <!-- Facility Creation Modal -->
+      <div class="modal" id="facilityCreateModal" style="display:none">
+        <div class="modalOverlay"></div>
+        <div class="modalBody" style="max-width:400px">
+          <div class="panelHeader">
+            <span class="panelTitle">Create New Facility</span>
+            <button class="btnSmall" id="facilityCreateModalClose">✕</button>
+          </div>
+          <div style="padding:16px">
+            <div class="muted" id="facilityCreateLocationLabel" style="margin-bottom:12px"></div>
+            <label style="display:block;margin-bottom:4px;font-size:13px">Facility Name</label>
+            <input type="text" id="facilityCreateNameInput" class="sitesSearch" maxlength="50" placeholder="e.g. Alpha Base" style="width:100%;margin-bottom:16px" />
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btnSmall" id="facilityCreateCancel">Cancel</button>
+              <button class="btnSmall btnPrimary" id="facilityCreateConfirm">Create</button>
+            </div>
+            <div class="muted" id="facilityCreateError" style="color:#f66;margin-top:8px;display:none"></div>
+          </div>
         </div>
       </div>
 
