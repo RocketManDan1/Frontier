@@ -117,6 +117,72 @@ class TestShipStats:
         stats = derive_ship_stats_from_parts(parts, resource_catalog)
         assert isinstance(stats, dict)
 
+    def test_thermal_pairing_modifies_isp_and_thrust(self, reactor_catalog, thruster_catalog, resource_catalog):
+        from catalog_service import derive_ship_stats_from_parts
+
+        reactor = reactor_catalog.get("vcr400_tempest")
+        thruster = thruster_catalog.get("lcn_1_torrent")
+        if not reactor or not thruster:
+            pytest.skip("Required thermal pairing fixtures missing")
+
+        base_stats = derive_ship_stats_from_parts([thruster], resource_catalog)
+        paired_stats = derive_ship_stats_from_parts([reactor, thruster], resource_catalog)
+
+        assert paired_stats["isp_s"] > base_stats["isp_s"]
+        assert paired_stats["thrust_kn"] < base_stats["thrust_kn"]
+
+    def test_equal_temp_pairing_has_no_isp_or_thrust_modifier(self, reactor_catalog, thruster_catalog, resource_catalog):
+        from catalog_service import derive_ship_stats_from_parts
+
+        reactor = reactor_catalog.get("rd0410_igrit")
+        thruster = thruster_catalog.get("scn_1_pioneer")
+        if not reactor or not thruster:
+            pytest.skip("Required equal-temp fixtures missing")
+
+        stats = derive_ship_stats_from_parts([reactor, thruster], resource_catalog)
+
+        assert stats["isp_s"] == pytest.approx(stats["base_isp_s"])
+        assert stats["thrust_kn"] == pytest.approx(stats["base_thrust_kn"])
+        assert stats["isp_modifier_pct"] == pytest.approx(0.0)
+        assert stats["thrust_modifier_pct"] == pytest.approx(0.0)
+
+    def test_incompatible_pairing_zeroes_propulsion(self, reactor_catalog, thruster_catalog, resource_catalog):
+        from catalog_service import derive_ship_stats_from_parts
+
+        reactor = reactor_catalog.get("rd0410_igrit")
+        thruster = thruster_catalog.get("lcn_1_torrent")
+        if not reactor or not thruster:
+            pytest.skip("Required compatibility fixtures missing")
+
+        stats = derive_ship_stats_from_parts([reactor, thruster], resource_catalog)
+        assert stats["isp_s"] == pytest.approx(0.0)
+        assert stats["thrust_kn"] == pytest.approx(0.0)
+
+
+class TestShipyardCompatibility:
+    def test_preview_returns_incompatibility(self, client):
+        r = client.post(
+            "/api/shipyard/preview",
+            json={"parts": ["rd0410_igrit", "lcn_1_torrent"]},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        compatibility = data.get("compatibility") or {}
+        assert compatibility.get("ok") is False
+        assert "not compatible" in str(compatibility.get("error") or "").lower()
+
+    def test_find_incompatible_pairs(self, reactor_catalog, thruster_catalog):
+        from catalog_service import find_incompatible_reactor_thruster_pairs
+
+        reactor = reactor_catalog.get("rd0410_igrit")
+        thruster = thruster_catalog.get("lcn_1_torrent")
+        if not reactor or not thruster:
+            pytest.skip("Required compatibility fixtures missing")
+
+        incompatible = find_incompatible_reactor_thruster_pairs([reactor, thruster])
+        assert len(incompatible) == 1
+        assert incompatible[0]["thruster_item_id"] == "lcn_1_torrent"
+
 
 # ── Canonical item category ───────────────────────────────────────────────
 
@@ -125,13 +191,11 @@ class TestCanonicalItemCategory:
         from catalog_service import canonical_item_category
         assert canonical_item_category("thruster") == "thruster"
         assert canonical_item_category("reactor") == "reactor"
-        assert canonical_item_category("storage") == "storage"
 
     def test_aliases(self):
         from catalog_service import canonical_item_category
         assert canonical_item_category("engines") == "thruster"
         assert canonical_item_category("propellant") == "fuel"
-        assert canonical_item_category("tanks") == "storage"
 
     def test_unknown_passes_through(self):
         from catalog_service import canonical_item_category

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "miners_cryovolatile",
+  "display_name": "Cryovolatile Miner",
+  "notes": [
+    "Specialized surface miners for sites dominated by water ice, carbon volatiles, or nitrogen volatiles.",
+    "miner_type: cryovolatile — deployment requires that more than 50% of site resource mass fraction is water_ice, carbon_volatiles, or nitrogen_volatiles combined.",
+    "Uses thermal or laser drilling and sublimation capture to extract ices efficiently.",
+    "mining_rate_kg_per_hr describes bulk ice/volatile throughput under full-concentration conditions.",
+    "Effective rate scales with resource mass_fraction as normal.",
+    "Multiple units may be run concurrently; rates sum.",
+    "Draws electric_mw from ship or surface power bus during active operations."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "cvm_1a_chione.json",
+    "cvm_2a_boreas.json",
+    "cvm_3a_themis.json"
+  ]
+}

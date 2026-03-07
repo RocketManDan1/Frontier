@@ -41,10 +41,13 @@
   const fuelSliderEl = document.getElementById("shipyardFuelSlider");
   const fuelInputEl = document.getElementById("shipyardFuelInput");
   const fuelAvailEl = document.getElementById("shipyardFuelAvail");
+  const fuelBarEl = document.getElementById("shipyardFuelBar");
   const fuelBarFillEl = document.getElementById("shipyardFuelBarFill");
   const fuelLabelEl = document.getElementById("shipyardFuelLabel");
   const fuelFillBtn = document.getElementById("shipyardFuelFillBtn");
   const fuelEmptyBtn = document.getElementById("shipyardFuelEmptyBtn");
+  const fuelMinus10tBtn = document.getElementById("shipyardFuelMinus10t");
+  const fuelPlus10tBtn = document.getElementById("shipyardFuelPlus10t");
   const pickerSectionEl = fuelSectionEl ? fuelSectionEl.closest(".shipyardPicker") : document.querySelector(".shipyardPicker");
 
   const SHIPYARD_DRAG_MIME = "application/x-earthmoon-shipyard-item";
@@ -80,9 +83,10 @@
 
   /* ── Category definitions ─────────────────────────────── */
   const SLOT_CATEGORIES = [
-    { id: "robonauts",    label: "Robonauts",     catId: "robonaut",    hue: 310, tooltip: "Automated systems that prospect celestial sites and enable refueling." },
+    { id: "robonauts",    label: "Prospectors",   catId: "prospector",  hue: 310, tooltip: "Automated systems that prospect celestial sites using directed-energy scanning." },
     { id: "refineries",   label: "Refineries",    catId: "refinery",    hue: 340, tooltip: "Processes raw feedstock into refined industrial resources." },
-    { id: "constructors", label: "Constructors",  catId: "constructor", hue: 175, tooltip: "Mines celestial sites and constructs modules from refined goods." },
+    { id: "miners",       label: "Miners",        catId: "miner",       hue: 175, tooltip: "Surface excavation systems specialized for large-body, microgravity, or cryovolatile sites." },
+    { id: "printers",     label: "Printers",      catId: "printer",     hue: 165, tooltip: "Surface fabrication systems specialized for industrial equipment or ship components." },
     { id: "storage",      label: "Storage",       catId: "storage",     hue: 260, tooltip: "Cargo and propellant capacity for logistics and mission endurance." },
     { id: "radiators",    label: "Radiators",     catId: "radiator",    hue: 200, tooltip: "Rejects excess waste heat so the ship can run at sustained power." },
     { id: "generators",   label: "Generators",    catId: "generator",   hue: 145, tooltip: "Converts MWth into electrical output (MWe)." },
@@ -111,6 +115,13 @@
   function fmtMs(v) { return `${Math.max(0, Number(v) || 0).toFixed(0)} m/s`; }
   function fmtGs(v) { return `${Math.max(0, Number(v) || 0).toFixed(3)} g`; }
   function fmtUsd(v) { return `$${Math.round(Number(v) || 0).toLocaleString("en-US")}`; }
+  function fmtSignedPct(v) {
+    const n = Number(v) || 0;
+    const abs = Math.abs(n);
+    if (abs < 0.05) return "0%";
+    const sign = n > 0 ? "+" : "";
+    return `${sign}${n.toFixed(0)}%`;
+  }
 
   /* ── Screen management ────────────────────────────────── */
   function showScreen(screen) {
@@ -216,9 +227,11 @@
     if (rawCategory === "thruster") return "thrusters";
     if (rawCategory === "generator") return "generators";
     if (rawCategory === "radiator") return "radiators";
-    if (rawCategory === "constructor") return "constructors";
+    if (rawCategory === "constructor") return "miners";
+    if (rawCategory === "miner") return "miners";
+    if (rawCategory === "printer") return "printers";
     if (rawCategory === "refinery") return "refineries";
-    if (rawCategory === "robonaut") return "robonauts";
+    if (rawCategory === "prospector" || rawCategory === "robonaut") return "robonauts";
     if (rawCategory === "storage") return "storage";
 
     const name = String(part?.name || "").toLowerCase();
@@ -226,9 +239,11 @@
     if (rawCategory.includes("thruster") || rawCategory.includes("engine") || name.includes("thruster") || name.includes("engine")) return "thrusters";
     if (rawCategory.includes("generator") || rawCategory === "power" || rawCategory === "power_generator") return "generators";
     if (rawCategory.includes("radiator") || rawCategory === "cooler" || rawCategory === "cooling") return "radiators";
-    if (rawCategory.includes("constructor") || rawCategory.includes("fabricat")) return "constructors";
+    if (rawCategory.includes("constructor")) return "miners";
+    if (rawCategory.includes("miner") || rawCategory.includes("excavat")) return "miners";
+    if (rawCategory.includes("printer") || rawCategory.includes("fabricat")) return "printers";
     if (rawCategory.includes("refiner") || rawCategory.includes("smelter") || rawCategory.includes("processing")) return "refineries";
-    if (rawCategory.includes("robonaut") || rawCategory.includes("drone") || rawCategory.includes("rover")) return "robonauts";
+    if (rawCategory.includes("prospector") || rawCategory.includes("robonaut") || rawCategory.includes("drone") || rawCategory.includes("rover")) return "robonauts";
     if (Number(part?.thrust_kn) > 0 || Number(part?.isp_s) > 0) return "thrusters";
     if (Number(part?.heat_rejection_mw) > 0) return "radiators";
     if (Number(part?.capacity_m3) > 0 || Number(part?.fuel_capacity_kg) > 0 || Number(part?.water_kg) > 0) return "storage";
@@ -344,10 +359,13 @@
     if (Number(part?.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(part.thrust_kn).toFixed(0)} kN`]);
     if (Number(part?.isp_s) > 0) tooltipLines.push(["ISP", `${Number(part.isp_s).toFixed(0)} s`]);
     if (Number(part?.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(part.thermal_mw).toFixed(1)} MWth`]);
+    if (Number(part?.core_temp_k) > 0) tooltipLines.push(["Core Temp", `${Number(part.core_temp_k).toFixed(0)} K`]);
+    if (Number(part?.rated_temp_k) > 0) tooltipLines.push(["Core Temp Req", `${Number(part.rated_temp_k).toFixed(0)} K`]);
     if (Number(part?.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(part.electric_mw).toFixed(1)} MWe`]);
     if (Number(part?.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(part.heat_rejection_mw).toFixed(1)} MWth`]);
     if (Number(part?.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(part.capacity_m3).toFixed(0)} m³`]);
     if (Number(part?.fuel_capacity_kg) > 0) tooltipLines.push(["Fuel Cap", fmtMassKg(Number(part.fuel_capacity_kg))]);
+    if (Number(part?.scan_rate_km2_per_hr) > 0) tooltipLines.push(["Scan Rate", `${Number(part.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
 
     const cell = itemDisplay && typeof itemDisplay.createGridCell === "function"
       ? itemDisplay.createGridCell({
@@ -364,6 +382,9 @@
           branch: part?.branch || "",
           family: part?.family || part?.thruster_family || "",
           techLevel: part?.tech_level || "",
+          water_extraction_kg_per_hr: part?.water_extraction_kg_per_hr,
+          min_water_ice_fraction: part?.min_water_ice_fraction,
+          max_water_ice_fraction: part?.max_water_ice_fraction,
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         })
       : (() => {
@@ -706,6 +727,16 @@
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
     const wasteSurplus = Math.max(0, Number(pb.waste_heat_surplus_mw || 0));
     const maxThrottle = Number(pb.max_throttle || 0);
+    // Ship-active equipment (draws power in flight)
+    const prospectorMw = Number(pb.prospector_electric_mw || 0);
+    const isruMw = Number(pb.isru_electric_mw || 0);
+    const shipActiveMw = prospectorMw + isruMw;
+    // Site-only equipment (dormant in flight, active when deployed)
+    const constructorMw = Number(pb.constructor_electric_mw || 0);
+    const refineryMw = Number(pb.refinery_electric_mw || 0);
+    const siteOnlyMw = Number(pb.site_only_electric_mw || 0);
+    const electricSurplus = Number(pb.electric_surplus_mw || 0);
+    const electricSurplusDep = Number(pb.electric_surplus_deployed_mw || 0);
 
     const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
     if (!hasAny) return "";
@@ -716,9 +747,30 @@
       : "";
     const genThrottled = genThrottle < 1 && electricRated > 0;
 
+    // Build site-only consumer rows (only if any exist)
+    let siteOnlyHtml = "";
+    if (siteOnlyMw > 0) {
+      const items = [];
+      if (constructorMw > 0) items.push(`<div class="pbRow pbIndent"><span class="pbLabel">Miners / Printers / Constructors</span><span class="pbVal">${fmtMwE(constructorMw)}</span></div>`);
+      if (refineryMw > 0) items.push(`<div class="pbRow pbIndent"><span class="pbLabel">Refineries</span><span class="pbVal">${fmtMwE(refineryMw)}</span></div>`);
+
+      const deployedPwrCls = electricSurplusDep >= 0 ? "pbPositive" : "pbNegative";
+      siteOnlyHtml = `
+        <div class="pbSection">
+          <div class="pbSectionHead">⚡ Electric Budget — When Deployed (MWe)</div>
+          <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMwE(electricMw)}</span></div>
+          ${prospectorMw > 0 ? `<div class="pbRow pbIndent"><span class="pbLabel">Prospectors</span><span class="pbVal">−${fmtMwE(prospectorMw)}</span></div>` : ""}
+          ${isruMw > 0 ? `<div class="pbRow pbIndent"><span class="pbLabel">ISRU</span><span class="pbVal">−${fmtMwE(isruMw)}</span></div>` : ""}
+          ${items.join("")}
+          <div class="pbRow pbDivider"><span class="pbLabel"><b>Site surplus</b></span><span class="pbVal ${deployedPwrCls}"><b>${electricSurplusDep >= 0 ? "+" : ""}${electricSurplusDep.toFixed(1)}<span class="pbUnit">MWe</span></b></span></div>
+          ${electricSurplusDep < 0 ? `<div class="pbNote pbNegative">⚠ Insufficient power — equipment will be unpowered at site</div>` : ""}
+          <div class="pbNote muted">Site equipment (constructors, refineries) is dormant during flight.</div>
+        </div>`;
+    }
+
     return `
       <div class="powerBalancePanel${isOverheating ? ' pbOverheating' : ''}">
-        <div class="pbTitle">Power &amp; Thermal Balance</div>
+        <div class="pbTitle">Thermal Balance</div>
         <div class="pbSection">
           <div class="pbSectionHead">Thermal Budget (MWth)</div>
           <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
@@ -726,10 +778,6 @@
           <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMwTh(genInputMw)}</span></div>
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Thermal surplus</b></span><span class="pbVal ${balanceClass(thermalSurplus)}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
           ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${maxThrottle < 1 ? "pbNegative" : "pbPositive"}">${fmtPct(maxThrottle)}</span></div>` : ""}
-        </div>
-        <div class="pbSection">
-          <div class="pbSectionHead">Electric Output (MWe)</div>
-          <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
         </div>
         <div class="pbSection">
           <div class="pbSectionHead">Waste Heat Budget (MWth)</div>
@@ -740,6 +788,18 @@
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated heat</b></span><span class="pbVal ${balanceClass(wasteSurplus)}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
         </div>
         ${overheatBanner}
+      </div>
+      <div class="powerBalancePanel">
+        <div class="pbTitle">Power Balance</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">⚡ Electric — In Flight (MWe)</div>
+          <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
+          ${prospectorMw > 0 ? `<div class="pbRow"><span class="pbLabel">Prospectors</span><span class="pbVal">−${fmtMwE(prospectorMw)}</span></div>` : ""}
+          ${isruMw > 0 ? `<div class="pbRow"><span class="pbLabel">ISRU</span><span class="pbVal">−${fmtMwE(isruMw)}</span></div>` : ""}
+          ${shipActiveMw > 0 ? `<div class="pbRow pbDivider"><span class="pbLabel"><b>Flight surplus</b></span><span class="pbVal ${electricSurplus >= 0 ? 'pbPositive' : 'pbNegative'}"><b>${electricSurplus >= 0 ? '+' : ''}${electricSurplus.toFixed(1)}<span class="pbUnit">MWe</span></b></span></div>` : ""}
+          ${siteOnlyMw > 0 ? `<div class="pbRow"><span class="pbLabel">Site equipment</span><span class="pbVal muted">dormant</span></div>` : ""}
+        </div>
+        ${siteOnlyHtml}
       </div>
     `;
   }
@@ -756,9 +816,18 @@
     const wetMass = Number(stats?.wet_mass_kg || 0);
     const isp = Number(stats?.isp_s || 0);
     const thrust = Number(stats?.thrust_kn || 0);
+    const baseIsp = Number(stats?.base_isp_s || 0);
+    const baseThrust = Number(stats?.base_thrust_kn || 0);
+    const ispModifierPct = Number.isFinite(Number(stats?.isp_modifier_pct))
+      ? Number(stats?.isp_modifier_pct)
+      : (baseIsp > 0 ? ((isp / baseIsp) - 1) * 100 : 0);
+    const thrustModifierPct = Number.isFinite(Number(stats?.thrust_modifier_pct))
+      ? Number(stats?.thrust_modifier_pct)
+      : (baseThrust > 0 ? ((thrust / baseThrust) - 1) * 100 : 0);
+    const ispModText = Math.abs(ispModifierPct) >= 0.05 ? ` <span class="muted">(${fmtSignedPct(ispModifierPct)})</span>` : "";
+    const thrustModText = Math.abs(thrustModifierPct) >= 0.05 ? ` <span class="muted">(${fmtSignedPct(thrustModifierPct)})</span>` : "";
     const dv = Number(stats?.delta_v_remaining_m_s || 0);
     const accelG = Number(stats?.accel_g || 0);
-    const fPct = fuelPct(fuelMass, fuelCap);
     const dvClass = dv > 0 ? "pbPositive" : "pbNeutral";
 
     return `
@@ -768,13 +837,12 @@
           <div class="pbSectionHead">Mass Budget</div>
           <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtMassKg(dryMass)}</span></div>
           <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtMassKg(fuelMass)} / ${fmtMassKg(fuelCap)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtMassKg(wetMass)}</b></span></div>
         </div>
         <div class="pbSection">
           <div class="pbSectionHead">Propulsion</div>
-          <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN</span></div>
-          <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s</span></div>
+          <div class="pbRow"><span class="pbLabel">Thrust</span><span class="pbVal">${thrust.toFixed(0)} kN${thrustModText}</span></div>
+          <div class="pbRow"><span class="pbLabel">Specific impulse</span><span class="pbVal">${isp.toFixed(0)} s${ispModText}</span></div>
           <div class="pbRow"><span class="pbLabel">Acceleration</span><span class="pbVal">${fmtGs(accelG)}</span></div>
         </div>
         <div class="pbSection">
@@ -836,7 +904,8 @@
   /* ── Fuel UI ──────────────────────────────────────────── */
 
   function updateFuelUI() {
-    const hasFuelCapacity = fuelCapacityKg > 0;
+    // In boost mode, always show fuel section (no tank capacity required)
+    const hasFuelCapacity = currentMode === "boost" || fuelCapacityKg > 0;
 
     // Toggle hasFuel class on the picker section to split the layout
     if (pickerSectionEl) pickerSectionEl.classList.toggle("hasFuel", hasFuelCapacity);
@@ -844,16 +913,32 @@
     if (fuelSectionEl) fuelSectionEl.style.display = hasFuelCapacity ? "" : "none";
     if (!hasFuelCapacity) return;
 
-    // In boost mode, water is unlimited (launched from Earth)
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
+    const isBoost = currentMode === "boost";
 
-    requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
-    if (fuelSliderEl) { fuelSliderEl.max = String(Math.floor(maxFuel)); fuelSliderEl.value = String(Math.floor(requestedFuelKg)); }
-    if (fuelInputEl) { fuelInputEl.max = String(Math.floor(maxFuel)); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
-    if (fuelAvailEl) fuelAvailEl.textContent = currentMode === "boost" ? "Unlimited water (boosted from Earth)" : `${fmtMassKg(availableFuelKg)} water at site`;
-    if (fuelBarFillEl) { const pct = fuelCapacityKg > 0 ? Math.min(100, (requestedFuelKg / fuelCapacityKg) * 100) : 0; fuelBarFillEl.style.width = `${pct.toFixed(1)}%`; }
-    if (fuelLabelEl) { const pct = fuelCapacityKg > 0 ? (requestedFuelKg / fuelCapacityKg) * 100 : 0; fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} / ${fmtMassKg(fuelCapacityKg)} (${pct.toFixed(0)}%)`; }
+    // Toggle slider vs +/- buttons based on mode
+    if (fuelSliderEl) fuelSliderEl.style.display = isBoost ? "none" : "";
+    if (fuelMinus10tBtn) fuelMinus10tBtn.style.display = isBoost ? "" : "none";
+    if (fuelPlus10tBtn) fuelPlus10tBtn.style.display = isBoost ? "" : "none";
+    if (fuelFillBtn) fuelFillBtn.style.display = isBoost ? "none" : "";
+    if (fuelEmptyBtn) fuelEmptyBtn.style.display = isBoost ? "none" : "";
+
+    if (isBoost) {
+      // Boost mode: no fuel cap, just a number input + step buttons
+      requestedFuelKg = Math.max(0, requestedFuelKg);
+      if (fuelInputEl) { fuelInputEl.removeAttribute("max"); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
+    } else {
+      // Site/edit mode: cap at tank capacity vs available water
+      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+      requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
+      if (fuelSliderEl) { fuelSliderEl.max = String(Math.floor(maxFuel)); fuelSliderEl.value = String(Math.floor(requestedFuelKg)); }
+      if (fuelInputEl) { fuelInputEl.max = String(Math.floor(maxFuel)); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
+    }
+    if (fuelAvailEl) fuelAvailEl.textContent = isBoost ? "Unlimited water (boosted from Earth)" : `${fmtMassKg(availableFuelKg)} water at site`;
+    // Hide bar and label in boost mode
+    if (fuelBarEl) fuelBarEl.style.display = isBoost ? "none" : "";
+    if (fuelLabelEl) fuelLabelEl.style.display = isBoost ? "none" : "";
+    if (!isBoost && fuelBarFillEl) { const pct = fuelCapacityKg > 0 ? Math.min(100, (requestedFuelKg / fuelCapacityKg) * 100) : 0; fuelBarFillEl.style.width = `${pct.toFixed(1)}%`; }
+    if (!isBoost && fuelLabelEl) { const pct = fuelCapacityKg > 0 ? (requestedFuelKg / fuelCapacityKg) * 100 : 0; fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} / ${fmtMassKg(fuelCapacityKg)} (${pct.toFixed(0)}%)`; }
   }
 
   /* ── Preview ──────────────────────────────────────────── */
@@ -883,10 +968,11 @@
       fuelCapacityKg = Number(stats.fuel_capacity_kg || 0);
       availableFuelKg = Number(data.available_fuel_kg || 0);
 
-      // In boost mode, water is unlimited (boosted from Earth)
-      const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-      const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
-      requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
+      // In non-boost mode, clamp to tank capacity / available water
+      if (currentMode !== "boost") {
+        const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+        requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
+      }
       updateFuelUI();
       renderStats(stats, data.power_balance || null);
       renderBoostCost();
@@ -1340,17 +1426,19 @@
   });
 
   fuelInputEl?.addEventListener("change", () => {
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    const maxFuel = Math.min(fuelCapacityKg, effectiveAvail);
-    requestedFuelKg = Math.max(0, Math.min(Number(fuelInputEl.value || 0), maxFuel));
+    let val = Math.max(0, Number(fuelInputEl.value || 0));
+    if (currentMode !== "boost") {
+      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+      val = Math.min(val, maxFuel);
+    }
+    requestedFuelKg = val;
     updateFuelUI();
     renderBoostCost();
     refreshPreview();
   });
 
   fuelFillBtn?.addEventListener("click", () => {
-    const effectiveAvail = currentMode === "boost" ? fuelCapacityKg : availableFuelKg;
-    requestedFuelKg = Math.min(fuelCapacityKg, effectiveAvail);
+    requestedFuelKg = Math.min(fuelCapacityKg, availableFuelKg);
     updateFuelUI();
     renderBoostCost();
     refreshPreview();
@@ -1358,6 +1446,20 @@
 
   fuelEmptyBtn?.addEventListener("click", () => {
     requestedFuelKg = 0;
+    updateFuelUI();
+    renderBoostCost();
+    refreshPreview();
+  });
+
+  fuelMinus10tBtn?.addEventListener("click", () => {
+    requestedFuelKg = Math.max(0, requestedFuelKg - 10000);
+    updateFuelUI();
+    renderBoostCost();
+    refreshPreview();
+  });
+
+  fuelPlus10tBtn?.addEventListener("click", () => {
+    requestedFuelKg += 10000;
     updateFuelUI();
     renderBoostCost();
     refreshPreview();

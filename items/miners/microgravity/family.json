@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "miners_microgravity",
+  "display_name": "Microgravity Miner",
+  "notes": [
+    "Surface-anchored mining robots for low-gravity bodies: near-Earth asteroids, small moons, and other objects below 1.0 m/s².",
+    "miner_type: microgravity — deployment blocked at sites with gravity >= 1.0 m/s².",
+    "Uses anchoring tethers and thrust-counter reaction systems to stay surface-coupled without relying on weight.",
+    "mining_rate_kg_per_hr describes bulk fragment capture and volatiles suction throughput.",
+    "Multiple units on the same site may be operated concurrently; rates sum.",
+    "Draws electric_mw from ship or surface power bus during active operations."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "mgm_1a_phaethon.json",
+    "mgm_2a_ixion.json",
+    "mgm_3a_sedna.json",
+    "mgm_4a_quaoar.json"
+  ]
+}

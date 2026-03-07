@@ -101,12 +101,6 @@ def resource_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @pytest.fixture(scope="session")
-def storage_catalog() -> Dict[str, Dict[str, Any]]:
-    import catalog_service
-    return catalog_service.load_storage_catalog()
-
-
-@pytest.fixture(scope="session")
 def thruster_catalog() -> Dict[str, Dict[str, Any]]:
     import catalog_service
     return catalog_service.load_thruster_main_catalog()
@@ -139,7 +133,6 @@ def recipe_catalog() -> Dict[str, Dict[str, Any]]:
 @pytest.fixture(scope="session")
 def all_catalogs(
     resource_catalog,
-    storage_catalog,
     thruster_catalog,
     reactor_catalog,
     generator_catalog,
@@ -149,7 +142,6 @@ def all_catalogs(
     """Aggregated dict of all loaded catalogs."""
     return {
         "resource": resource_catalog,
-        "storage": storage_catalog,
         "thruster": thruster_catalog,
         "reactor": reactor_catalog,
         "generator": generator_catalog,

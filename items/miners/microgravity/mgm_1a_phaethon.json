@@ -1,0 +1,24 @@
+{
+  "id": "mgm_1a_phaethon",
+  "name": "MGM-1A \"Phaethon\"",
+  "research_node": "prospecting_and_mining",
+  "tech_level": 1,
+  "branch": "anchor_percussion",
+  "mass_t": 1.2,
+  "operational_environment": "microgravity",
+  "miner_type": "microgravity",
+  "max_surface_gravity_ms2": 1.0,
+  "power_requirements": {
+    "electric_mw": 0.6
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 30,
+    "excavation_type": "anchored_percussion_drill"
+  },
+  "description": "The MGM-1A Phaethon is a first-generation microgravity miner built around a spring-loaded anchor-and-percuss cycle. Three expanding piton anchors fire into the surface at deployment, securing the unit against reaction forces; an internal flywheel provides momentum cancellation during drill operation. Suited to near-Earth asteroids and small icy moons where bulk gravity cannot be relied upon to keep equipment grounded.",
+  "ui_tags": [
+    "anchor_percussion",
+    "asteroid_mining",
+    "tier_1"
+  ]
+}

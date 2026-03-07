@@ -1412,14 +1412,14 @@
       });
     }
 
-    // Add Prospect option if ship has a robonaut
+    // Add Prospect option if ship has a prospector
     const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
-    const hasRobonaut = shipParts.some((p) => {
+    const hasProspector = shipParts.some((p) => {
       if (!p || typeof p !== "object") return false;
       const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
-      return cat === "robonaut" || cat === "robonauts";
+      return cat === "prospector" || cat === "robonaut" || cat === "robonauts";
     });
-    if (hasRobonaut && ship.status === "docked") {
+    if (hasProspector && ship.status === "docked") {
       actionsList.push({
         label: "Prospect…",
         onClick: () => openProspectDialog(ship),
@@ -2276,6 +2276,7 @@
       if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
       if (Number(p.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
       if (Number(p.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MW`]);
+      if (Number(p.scan_rate_km2_per_hr) > 0) tooltipLines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
       if (Number(p.water_kg) > 0) tooltipLines.push(["Water", fmtKg(Number(p.water_kg))]);
       const cell = ID.createGridCell({
         label: name,
@@ -2448,7 +2449,6 @@
             <div class="pbSectionHead">Mass Budget</div>
             <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
             <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
-            <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
           </div>
           <div class="pbSection">
@@ -2502,7 +2502,7 @@
     return `
       <li>
         <div class="powerBalancePanel${isOverheating ? ' pbOverheating' : ''}">
-          <div class="pbTitle">Power &amp; Thermal Balance</div>
+          <div class="pbTitle">Thermal Balance</div>
           <div class="pbSection">
             <div class="pbSectionHead">Thermal Budget (MWth)</div>
             <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
@@ -2510,10 +2510,6 @@
             <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMwTh(genInputMw)}</span></div>
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
             ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
-          </div>
-          <div class="pbSection">
-            <div class="pbSectionHead">Electric (MWe)</div>
-            <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
           </div>
           <div class="pbSection">
             <div class="pbSectionHead">Waste Heat (MWth)</div>
@@ -2524,6 +2520,15 @@
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
           </div>
           ${overheatBanner}
+        </div>
+      </li>
+      <li>
+        <div class="powerBalancePanel">
+          <div class="pbTitle">Power Balance</div>
+          <div class="pbSection">
+            <div class="pbSectionHead">⚡ Electric (MWe)</div>
+            <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
+          </div>
         </div>
       </li>
     `;
@@ -6275,34 +6280,7 @@
     if (shipTooltipTimerId) { clearTimeout(shipTooltipTimerId); shipTooltipTimerId = null; }
   }
 
-  // ── Δv micro-bar (thin bar under ship icon) ─────────────
-  const DV_BAR_WIDTH = 14;
-  const DV_BAR_HEIGHT = 2;
-  const DV_BAR_MAX_DV = 12000; // m/s — scale reference
 
-  function buildDvBar() {
-    const bar = new PIXI.Graphics();
-    return bar;
-  }
-
-  function updateDvBar(bar, ship, size) {
-    if (!bar) return;
-    bar.clear();
-    const dv = Number(ship.delta_v_remaining_m_s) || 0;
-    const maxDv = DV_BAR_MAX_DV;
-    const frac = Math.min(1, Math.max(0, dv / maxDv));
-    // background
-    bar.beginFill(0x1a2233, 0.7);
-    bar.drawRoundedRect(-DV_BAR_WIDTH / 2, 0, DV_BAR_WIDTH, DV_BAR_HEIGHT, 1);
-    bar.endFill();
-    // filled portion
-    const fillColor = frac > 0.5 ? 0x44cc44 : frac > 0.2 ? 0xccaa22 : 0xff4444;
-    if (frac > 0.005) {
-      bar.beginFill(fillColor, 0.9);
-      bar.drawRoundedRect(-DV_BAR_WIDTH / 2, 0, DV_BAR_WIDTH * frac, DV_BAR_HEIGHT, 1);
-      bar.endFill();
-    }
-  }
 
   function buildShipSprite(ship) {
     const c = new PIXI.Container();
@@ -6317,11 +6295,6 @@
     const isOwn = !!ship.is_own;
     const baseAlpha = isOwn ? OWN_SHIP_ALPHA : FOREIGN_SHIP_ALPHA;
     const shipIcon = buildShipIconSprite(ship, size, colorInt, baseAlpha);
-
-    // Δv micro-bar — thin bar underneath icon
-    const dvBar = buildDvBar();
-    dvBar.position.set(0, size * 0.7);
-    updateDvBar(dvBar, ship, size);
 
     const headingLine = null;
 
@@ -6380,7 +6353,7 @@
       hideShipTooltip();
     });
 
-    c.addChild(selectionBox, shipIcon, dvBar, idTag, label);
+    c.addChild(selectionBox, shipIcon, idTag, label);
 
     c.on("pointertap", (e) => {
       if (isSecondaryPointerEvent(e)) return;
@@ -6395,7 +6368,7 @@
       openShipContextMenu(ship, e);
     });
 
-    return { container: c, shipIcon, headingLine, selectionBox, dvBar, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius };
+    return { container: c, shipIcon, headingLine, selectionBox, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius };
   }
 
   function upsertShips(shipsArr) {
@@ -6412,7 +6385,7 @@
         continue;
       }
 
-      const { container, shipIcon, headingLine, selectionBox, dvBar, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius } = buildShipSprite(s);
+      const { container, shipIcon, headingLine, selectionBox, label, idTag, idOffsetY, labelOffsetY, size, colorInt, hitRadius } = buildShipSprite(s);
       const pathGfx = new PIXI.Graphics();
 
       const slot = { index: 0 };
@@ -6425,7 +6398,6 @@
         shipIcon,
         headingLine,
         selectionBox,
-        dvBar,
         pathGfx,
         label,
         idTag,
@@ -6478,7 +6450,7 @@
     }
 
     for (const gfx of shipGfx.values()) {
-      const { ship, container, shipIcon, headingLine, selectionBox, dvBar, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot } = gfx;
+      const { ship, container, shipIcon, headingLine, selectionBox, pathGfx, label, idTag, idOffsetY, labelOffsetY, size, hitRadius, slot } = gfx;
 
       // ── Fleet filter: hide foreign ships when toggle active ──
       const isOwn = !!ship.is_own;
@@ -6883,19 +6855,7 @@
         idTag.visible = idTag.alpha > 0.01;
       }
 
-      // ── Δv micro-bar update ──
-      if (dvBar && isOwn) {
-        updateDvBar(dvBar, ship, size);
-        dvBar.scale.set(iconDisplayScale);
-        const theta = container.rotation || 0;
-        const barDy = baseIconPx * iconDisplayScale * 0.48;
-        dvBar.position.set(Math.sin(theta) * barDy, Math.cos(theta) * barDy);
-        dvBar.rotation = -theta;
-        dvBar.alpha = idTagZoomAlpha * 0.9;
-        dvBar.visible = idTagZoomAlpha > 0.15;
-      } else if (dvBar) {
-        dvBar.visible = false;
-      }
+
     }
 
     updateDockedShipChips(dockedShipsByLocation);
@@ -7408,17 +7368,17 @@
 
     function fmtPct(v) { return `${(Number(v || 0) * 100).toFixed(1)}%`; }
 
-    // Get robonaut info from parts
+    // Get prospector info from parts
     const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
-    const robonauts = shipParts.filter((p) => {
+    const prospectors = shipParts.filter((p) => {
       if (!p || typeof p !== "object") return false;
       const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
-      return cat === "robonaut" || cat === "robonauts";
+      return cat === "prospector" || cat === "robonaut" || cat === "robonauts";
     });
-    const bestRobonaut = robonauts.reduce((best, r) => {
+    const bestRobonaut = prospectors.reduce((best, r) => {
       const range = Number(r.prospect_range_km || 0);
       return range > (Number(best?.prospect_range_km) || 0) ? r : best;
-    }, robonauts[0] || {});
+    }, prospectors[0] || {});
     const rangeKm = Number(bestRobonaut.prospect_range_km || 0);
 
     // Build overlay
@@ -7432,7 +7392,7 @@
         <div class="prospectHeader">
           <div class="prospectHeaderLeft">
             <div class="prospectTitle">Prospecting</div>
-            <div class="prospectSubtitle">${_esc(ship.name)} &bull; ${_esc(bestRobonaut.name || "Robonaut")} &bull; Range ${fmtDist(rangeKm)}</div>
+            <div class="prospectSubtitle">${_esc(ship.name)} &bull; ${_esc(bestRobonaut.name || "Prospector")} &bull; Range ${fmtDist(rangeKm)}</div>
           </div>
           <button class="iconBtn btnSecondary" id="prospectClose">✕</button>
         </div>
@@ -7464,7 +7424,7 @@
 
       const sites = Array.isArray(data.sites) ? data.sites : [];
       if (!sites.length) {
-        bodyEl.innerHTML = '<div class="prospectEmpty">No surface sites within range of this ship\'s robonaut.</div>';
+        bodyEl.innerHTML = '<div class="prospectEmpty">No surface sites within range of this ship\'s prospector.</div>';
         return;
       }
 

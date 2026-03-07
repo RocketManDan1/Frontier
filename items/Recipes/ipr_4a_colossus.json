@@ -1,0 +1,22 @@
+{
+  "recipe_id": "ipr_4a_colossus",
+  "name": "Assemble IPR-4A \"Colossus\"",
+  "output_item_id": "ipr_4a_colossus",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "structural_alloys", "qty": 70000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 65000.0 },
+    { "item_id": "semiconductor_materials", "qty": 42000.0 },
+    { "item_id": "advanced_ceramics", "qty": 36000.0 },
+    { "item_id": "superconductors", "qty": 30000.0 },
+    { "item_id": "radiation_composite_armor", "qty": 24000.0 },
+    { "item_id": "carbon_composites", "qty": 22000.0 },
+    { "item_id": "strategic_elements", "qty": 12000.0 }
+  ],
+  "build_time_s": 17100,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 4,
+  "power_kw": 2500,
+  "byproducts": []
+}

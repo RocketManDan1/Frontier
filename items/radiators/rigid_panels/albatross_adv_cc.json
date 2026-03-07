@@ -1,7 +1,7 @@
 {
   "id": "albatross_adv_cc",
   "name": "Adv. C/C Panel \"Albatross\"",
-  "research_node": "high_temp_rigid_panel_radiator",
+  "research_node": "high_temp_rigid_panel_radiators",
   "tech_level": 4,
   "branch": "advanced_carbon_composite",
   "mass_t": 29.5,
@@ -16,6 +16,12 @@
   "output": {
     "heat_rejection_mw": 1800
   },
-  "description": "The highest-performance rigid panel in current service. Advanced 3D-woven carbon-carbon fabric with an iridium oxide refractory coating sustains continuous 1250 K operation, pushing specific rejection above 127 kW/m². The 14,100 m² panel array masses only 29.5 tonnes — a consequence of the composite's exceptional specific stiffness and ultra-low 2.1 kg/m² areal density. Mandatory for skutterudite-class thermoelectric generators and any vessel where radiator mass is a first-order design constraint.",
-  "ui_tags": ["rigid_panel", "carbon_composite", "advanced", "high_temp", "high_output"]
+  "description": "The highest-performance rigid panel in current service. Advanced 3D-woven carbon-carbon fabric with an iridium oxide refractory coating sustains continuous 1250 K operation, pushing specific rejection above 127 kW/m\u00b2. The 14,100 m\u00b2 panel array masses only 29.5 tonnes \u2014 a consequence of the composite's exceptional specific stiffness and ultra-low 2.1 kg/m\u00b2 areal density. Mandatory for skutterudite-class thermoelectric generators and any vessel where radiator mass is a first-order design constraint.",
+  "ui_tags": [
+    "rigid_panel",
+    "carbon_composite",
+    "advanced",
+    "high_temp",
+    "high_output"
+  ]
 }

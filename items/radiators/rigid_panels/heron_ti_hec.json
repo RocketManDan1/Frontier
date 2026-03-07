@@ -1,13 +1,13 @@
 {
   "id": "heron_ti_hec",
   "name": "Ti-HEC Panel \"Heron\"",
-  "research_node": "advanced_rigid_panel_radiator",
+  "research_node": "electrical_thermal_systems",
   "tech_level": 2,
   "branch": "titanium",
   "mass_t": 29.0,
   "substrate": "titanium_alloy",
   "coating": "high_emissivity_ceramic",
-  "emissivity": 0.90,
+  "emissivity": 0.9,
   "operating_temp_k": 950,
   "radiating_area_m2": 7200,
   "input": {
@@ -16,6 +16,10 @@
   "output": {
     "heat_rejection_mw": 300
   },
-  "description": "A 7,200 m² array of titanium-alloy substrate panels coated with plasma-sprayed high-emissivity ceramic. The 950 K operating temperature dramatically improves specific rejection per unit area over aluminum OSR panels (Stefan-Boltzmann scales as T^4). The titanium substrate is heavier per square metre than composites, but robust and field-proven. One array handles the waste-heat budget of a mid-range reactor or a reactor paired with an early thermoelectric generator.",
-  "ui_tags": ["rigid_panel", "titanium", "advanced"]
+  "description": "A 7,200 m\u00b2 array of titanium-alloy substrate panels coated with plasma-sprayed high-emissivity ceramic. The 950 K operating temperature dramatically improves specific rejection per unit area over aluminum OSR panels (Stefan-Boltzmann scales as T^4). The titanium substrate is heavier per square metre than composites, but robust and field-proven. One array handles the waste-heat budget of a mid-range reactor or a reactor paired with an early thermoelectric generator.",
+  "ui_tags": [
+    "rigid_panel",
+    "titanium",
+    "advanced"
+  ]
 }

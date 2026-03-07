@@ -4,7 +4,7 @@ across the hangar, shipyard, sites/cargo, and inventory systems.
 
 Covers:
   - Catalog cross-referencing (every item resolvable, no orphans)
-  - Shipyard preview/build with every part type (thrusters, reactors, storage, etc.)
+  - Shipyard preview/build with every part type (thrusters, reactors, etc.)
   - Inventory round-trip: add items → query → transfer → verify conservation
   - Hangar context endpoint: verify all parts and cargo rendered correctly
   - Cargo context endpoint: verify location + docked ship inventories
@@ -222,7 +222,6 @@ class TestCatalogPerformance:
 
         loaders = [
             ("resource", catalog_service.load_resource_catalog),
-            ("storage", catalog_service.load_storage_catalog),
             ("thruster", catalog_service.load_thruster_main_catalog),
             ("reactor", catalog_service.load_reactor_catalog),
             ("generator", catalog_service.load_generator_catalog),
@@ -257,14 +256,12 @@ class TestCatalogPerformance:
                     slow.append(f"{cat_name}/{item_id}: {elapsed*1000:.1f}ms")
         assert not slow, f"Slow get_item_info lookups: {slow}"
 
-    def test_derive_stats_fast_with_many_parts(self, thruster_catalog, storage_catalog, resource_catalog):
+    def test_derive_stats_fast_with_many_parts(self, thruster_catalog, resource_catalog):
         """derive_ship_stats_from_parts with 20 parts should be < 100ms."""
         from catalog_service import derive_ship_stats_from_parts
 
         parts = []
-        for item_id, item in list(thruster_catalog.items())[:5]:
-            parts.append(dict(item))
-        for item_id, item in list(storage_catalog.items())[:15]:
+        for item_id, item in list(thruster_catalog.items())[:20]:
             parts.append(dict(item))
 
         t0 = time.perf_counter()
@@ -291,13 +288,6 @@ class TestShipyardItemHandling:
         assert "stats" in data
         assert float(data["stats"].get("dry_mass_kg", 0)) > 0
 
-    def test_preview_with_storage_only(self, client, storage_catalog):
-        if not storage_catalog:
-            pytest.skip("No storage items")
-        first_id = next(iter(storage_catalog))
-        r = client.post("/api/shipyard/preview", json={"parts": [first_id]})
-        assert r.status_code == 200
-
     def test_preview_with_reactor_only(self, client, reactor_catalog):
         if not reactor_catalog:
             pytest.skip("No reactors")
@@ -320,12 +310,12 @@ class TestShipyardItemHandling:
         assert r.status_code == 200
 
     def test_preview_full_ship_all_part_types(
-        self, client, thruster_catalog, storage_catalog, reactor_catalog,
+        self, client, thruster_catalog, reactor_catalog,
         generator_catalog, radiator_catalog,
     ):
         """Preview a ship with one of every part type — must not crash."""
         parts = []
-        for cat in [thruster_catalog, storage_catalog, reactor_catalog,
+        for cat in [thruster_catalog, reactor_catalog,
                      generator_catalog, radiator_catalog]:
             if cat:
                 parts.append(next(iter(cat)))
@@ -358,13 +348,11 @@ class TestShipyardItemHandling:
         # Should have a power_balance key (may be empty dict for minimal parts)
         assert "power_balance" in data
 
-    def test_preview_with_fuel(self, client, thruster_catalog, storage_catalog):
+    def test_preview_with_fuel(self, client, thruster_catalog):
         """Preview with explicit fuel_kg should reflect in stats."""
         parts = []
         if thruster_catalog:
             parts.append(next(iter(thruster_catalog)))
-        if storage_catalog:
-            parts.append(next(iter(storage_catalog)))
         if not parts:
             pytest.skip("No parts")
         r = client.post("/api/shipyard/preview", json={
@@ -373,13 +361,11 @@ class TestShipyardItemHandling:
         })
         assert r.status_code == 200
 
-    def test_preview_with_unlimited_fuel(self, client, thruster_catalog, storage_catalog):
+    def test_preview_with_unlimited_fuel(self, client, thruster_catalog):
         """Preview with unlimited_fuel=True should not crash."""
         parts = []
         if thruster_catalog:
             parts.append(next(iter(thruster_catalog)))
-        if storage_catalog:
-            parts.append(next(iter(storage_catalog)))
         if not parts:
             pytest.skip("No parts")
         r = client.post("/api/shipyard/preview", json={
@@ -406,13 +392,11 @@ class TestShipyardItemHandling:
         r = client.post("/api/shipyard/preview", json={"parts": [first, first]})
         assert r.status_code == 200
 
-    def test_preview_response_timing(self, client, thruster_catalog, storage_catalog):
+    def test_preview_response_timing(self, client, thruster_catalog):
         """Preview should complete within the time budget."""
         parts = []
         if thruster_catalog:
             parts.append(next(iter(thruster_catalog)))
-        if storage_catalog:
-            parts.append(next(iter(storage_catalog)))
         if not parts:
             pytest.skip("No parts")
         t0 = time.perf_counter()
@@ -429,15 +413,6 @@ class TestShipyardItemHandling:
             if r.status_code != 200:
                 failures.append(f"{item_id}: HTTP {r.status_code}")
         assert not failures, f"Thruster preview failures: {failures}"
-
-    def test_preview_every_storage(self, client, storage_catalog):
-        """Preview should not crash for any individual storage item."""
-        failures = []
-        for item_id in storage_catalog:
-            r = client.post("/api/shipyard/preview", json={"parts": [item_id]})
-            if r.status_code != 200:
-                failures.append(f"{item_id}: HTTP {r.status_code}")
-        assert not failures, f"Storage preview failures: {failures}"
 
     def test_preview_every_reactor(self, client, reactor_catalog):
         """Preview should not crash for any individual reactor."""
@@ -535,8 +510,6 @@ class TestShipyardBuildRoundTrip:
         inv = r2.json()
         assert inv["ship_id"] == ship_id
         assert isinstance(inv.get("items"), list)
-        assert isinstance(inv.get("container_groups"), list)
-        assert isinstance(inv.get("capacity_summary"), dict)
 
     def test_build_with_all_part_families(
         self, client,
@@ -710,7 +683,6 @@ class TestHangarContext:
                 assert "parts" in entity
                 assert "stats" in entity or entity.get("stats") is None
                 assert "inventory_items" in entity
-                assert "container_groups" in entity
 
     def test_hangar_ship_stats_consistency(
         self, client, resource_catalog,
@@ -1063,7 +1035,6 @@ class TestNormalizePartsEdgeCases:
             normalize_parts,
             canonical_item_category,
             load_thruster_main_catalog,
-            load_storage_catalog,
             load_reactor_catalog,
             load_generator_catalog,
             load_radiator_catalog,
@@ -1074,7 +1045,6 @@ class TestNormalizePartsEdgeCases:
         return normalize_parts(
             raw_parts,
             load_thruster_main_catalog(),
-            load_storage_catalog(),
             canonical_item_category,
             reactor_catalog=load_reactor_catalog(),
             generator_catalog=load_generator_catalog(),
@@ -1105,14 +1075,6 @@ class TestNormalizePartsEdgeCases:
         assert len(result) == 1
         assert result[0].get("name")
 
-    def test_valid_storage_id(self, storage_catalog):
-        if not storage_catalog:
-            pytest.skip("No storage")
-        item_id = next(iter(storage_catalog))
-        result = self._normalize([item_id])
-        assert len(result) == 1
-        assert result[0].get("name")
-
     def test_unknown_string_gets_generic_category(self):
         result = self._normalize(["completely_unknown_part"])
         assert len(result) == 1
@@ -1128,12 +1090,10 @@ class TestNormalizePartsEdgeCases:
         # Should be merged with catalog data
         assert result[0].get("name")
 
-    def test_mixed_types(self, thruster_catalog, storage_catalog):
+    def test_mixed_types(self, thruster_catalog):
         parts = []
         if thruster_catalog:
             parts.append(next(iter(thruster_catalog)))
-        if storage_catalog:
-            parts.append({"item_id": next(iter(storage_catalog))})
         parts.append("unknown_thing")
         if not parts:
             pytest.skip("No parts")
@@ -1166,25 +1126,17 @@ class TestDeriveStatsStress:
         assert stats["dry_mass_kg"] >= 0
         assert stats["thrust_kn"] >= 0
 
-    def test_storage_contributes_fuel_capacity(self, thruster_catalog, storage_catalog, resource_catalog):
+    def test_fuel_capacity_from_thrusters(self, thruster_catalog, resource_catalog):
+        """Fuel capacity should come from thruster fuel_capacity_kg."""
         from catalog_service import derive_ship_stats_from_parts
-        parts_no_storage = []
-        parts_with_storage = []
-        if thruster_catalog:
-            t = dict(next(iter(thruster_catalog.values())))
-            parts_no_storage.append(t)
-            parts_with_storage.append(t)
-        if storage_catalog:
-            s = dict(next(iter(storage_catalog.values())))
-            parts_with_storage.append(s)
-        if not parts_with_storage:
-            pytest.skip("No parts")
-
-        stats_no = derive_ship_stats_from_parts(parts_no_storage, resource_catalog)
-        stats_with = derive_ship_stats_from_parts(parts_with_storage, resource_catalog)
-        # Adding storage should increase fuel capacity (if it's a fuel tank)
-        # or at least not decrease dry mass
-        assert stats_with["dry_mass_kg"] >= stats_no["dry_mass_kg"]
+        if not thruster_catalog:
+            pytest.skip("No thrusters")
+        t = dict(next(iter(thruster_catalog.values())))
+        parts = [t]
+        stats = derive_ship_stats_from_parts(parts, resource_catalog)
+        # Thruster should contribute fuel capacity
+        assert stats["fuel_capacity_kg"] >= 0
+        assert stats["dry_mass_kg"] >= 0
 
     def test_every_thruster_individually(self, thruster_catalog, resource_catalog):
         """Every thruster should produce valid stats when used alone."""
@@ -1272,24 +1224,24 @@ class TestMassConservation:
 class TestItemEdgeCases:
     """Edge cases that could cause crashes or data corruption."""
 
-    def test_shipyard_build_empty_name(self, client, storage_catalog):
+    def test_shipyard_build_empty_name(self, client, thruster_catalog):
         """Building with empty name should be handled."""
-        if not storage_catalog:
-            pytest.skip("No storage")
+        if not thruster_catalog:
+            pytest.skip("No thrusters")
         r = client.post("/api/shipyard/build", json={
             "name": "",
-            "parts": [next(iter(storage_catalog))],
+            "parts": [next(iter(thruster_catalog))],
         })
         # Should either fail gracefully or use a fallback name
         assert r.status_code in (200, 400, 422)
 
-    def test_shipyard_build_very_long_name(self, client, storage_catalog):
+    def test_shipyard_build_very_long_name(self, client, thruster_catalog):
         """Building with extremely long name should be handled."""
-        if not storage_catalog:
-            pytest.skip("No storage")
+        if not thruster_catalog:
+            pytest.skip("No thrusters")
         r = client.post("/api/shipyard/build", json={
             "name": "A" * 500,
-            "parts": [next(iter(storage_catalog))],
+            "parts": [next(iter(thruster_catalog))],
         })
         assert r.status_code in (200, 400, 422)
 

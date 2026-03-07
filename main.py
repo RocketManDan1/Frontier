@@ -503,11 +503,6 @@ def load_resource_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
-def load_storage_catalog() -> Dict[str, Dict[str, Any]]:
-    return catalog_service.load_storage_catalog()
-
-
-@lru_cache(maxsize=1)
 def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_reactor_catalog()
 
@@ -533,8 +528,23 @@ def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
+def load_miner_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_miner_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_printer_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_printer_catalog()
+
+
+@lru_cache(maxsize=1)
 def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_refinery_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_storage_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_storage_catalog()
 
 
 @lru_cache(maxsize=1)
@@ -1161,7 +1171,7 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
         generator_catalog=load_generator_catalog(),
         radiator_catalog=load_radiator_catalog(),
         robonaut_catalog=load_robonaut_catalog(),
-        constructor_catalog=load_constructor_catalog(),
+        constructor_catalog={**load_miner_catalog(), **load_printer_catalog()},
         refinery_catalog=load_refinery_catalog(),
     )
 
@@ -1169,6 +1179,8 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
 def derive_ship_stats_from_parts(
     parts: List[Dict[str, Any]],
     current_fuel_kg: Optional[float] = None,
+    cargo_mass_kg: float = 0.0,
+    cargo_avg_density: float = 2500.0,
 ) -> Dict[str, float]:
     return catalog_service.derive_ship_stats_from_parts(
         parts,
@@ -1185,522 +1197,211 @@ def compute_acceleration_gs(dry_mass_kg: float, fuel_kg: float, thrust_kn: float
     return catalog_service.compute_acceleration_gs(dry_mass_kg, fuel_kg, thrust_kn)
 
 
-def classify_resource_phase(resource_id: str, resource_name: str, density_kg_m3: float) -> str:
-    """Return the canonical storage phase for a resource.
+def split_ship_parts_and_cargo(parts_json: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Parse ship parts_json in either legacy-list or object form.
 
-    Checks the resource catalog's explicit ``phase`` field first;
-    falls back to name/density heuristics only for unknown resources.
+    Supported shapes:
+    - [ ...parts... ]
+    - {"parts": [...], "cargo": [...]} (cargo retained for forward compatibility)
     """
-    rid = str(resource_id or "").strip().lower()
+    try:
+        raw = json.loads(parts_json or "[]")
+    except Exception:
+        return [], []
 
-    # ── Authoritative: check catalog phase field ──────────────
-    resources = load_resource_catalog()
-    meta = resources.get(rid)
-    if meta:
-        explicit = str(meta.get("phase") or "").strip().lower()
-        if explicit in {"solid", "liquid", "gas"}:
-            return explicit
+    if isinstance(raw, dict):
+        raw_parts = raw.get("parts") or []
+        raw_cargo = raw.get("cargo") or []
+        parts = [p for p in raw_parts if isinstance(p, dict)]
+        cargo = [c for c in raw_cargo if isinstance(c, dict)]
+        return parts, cargo
 
-    # ── Fallback heuristics for un-cataloged resources ────────
-    rname = str(resource_name or "").strip().lower()
-    text = f"{rid} {rname}"
+    if isinstance(raw, list):
+        return [p for p in raw if isinstance(p, dict)], []
 
-    gas_hints = ("helium", "hydrogen", "nitrogen", "oxygen", "argon", "methane", "deuterium")
-    liquid_hints = ("water", "propellant", "hydrolox", "ammonia", "fuel")
-
-    if any(h in text for h in gas_hints):
-        return "gas"
-    if any(h in text for h in liquid_hints):
-        return "liquid"
-
-    d = max(0.0, float(density_kg_m3 or 0.0))
-    if d > 0.0:
-        if d < 200.0:
-            return "gas"
-        if d < 2000.0:
-            return "liquid"
-    return "solid"
+    return [], []
 
 
-def _is_storage_part(part: Dict[str, Any]) -> bool:
-    capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-    if capacity_m3 > 0.0:
-        return True
-    ptype = str(part.get("type") or "").strip().lower()
-    pcat = str(part.get("category_id") or "").strip().lower()
-    return ptype in {"storage", "cargo"} or pcat in {"storage", "cargo"}
+def merge_ship_parts_and_cargo(parts: List[Dict[str, Any]], cargo: Optional[List[Dict[str, Any]]] = None) -> str:
+    """Serialize ship parts/cargo to DB JSON.
 
-
-def _has_explicit_container_fill(part: Dict[str, Any]) -> bool:
-    if not isinstance(part, dict):
-        return False
-    for key in (
-        "cargo_used_m3",
-        "used_m3",
-        "fill_m3",
-        "stored_m3",
-        "current_m3",
-        "cargo_mass_kg",
-        "contents_mass_kg",
-        "stored_mass_kg",
-        "current_mass_kg",
-    ):
-        if key in part:
-            return True
-    return False
-
-
-def _harden_ship_parts(parts: List[Dict[str, Any]], fuel_kg: float) -> Tuple[List[Dict[str, Any]], bool]:
-    hardened: List[Dict[str, Any]] = []
-    changed = False
-    resources = load_resource_catalog()
-
-    legacy_water_rows: List[Dict[str, Any]] = []
-    legacy_total_capacity_kg = 0.0
-
-    for raw_part in parts or []:
-        part = dict(raw_part or {})
-        if _is_storage_part(part):
-            if not str(part.get("container_uid") or "").strip():
-                part["container_uid"] = str(uuid.uuid4())
-                changed = True
-
-            # ── Migrate single-resource format → cargo_manifest ──
-            if "cargo_manifest" not in part:
-                old_rid = str(part.get("resource_id") or "").strip()
-                old_mass = 0.0
-                for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-                    if key in part:
-                        old_mass = max(0.0, float(part.get(key) or 0.0))
-                        break
-                old_vol = 0.0
-                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                    if key in part:
-                        old_vol = max(0.0, float(part.get(key) or 0.0))
-                        break
-                old_density = max(0.0, float(part.get("mass_per_m3_kg") or (resources.get(old_rid) or {}).get("mass_per_m3_kg") or 0.0))
-
-                if old_rid and old_mass > 1e-9:
-                    part["cargo_manifest"] = [{
-                        "resource_id": old_rid,
-                        "mass_kg": old_mass,
-                        "volume_m3": old_vol,
-                        "density_kg_m3": old_density,
-                    }]
-                else:
-                    part["cargo_manifest"] = []
-                # Keep total fields in sync
-                part["cargo_mass_kg"] = old_mass
-                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                    part[key] = old_vol
-                # Derive tank_phase from the original resource before clearing it
-                if old_rid and not str(part.get("tank_phase") or "").strip():
-                    old_meta = resources.get(old_rid) or {}
-                    part["tank_phase"] = classify_resource_phase(
-                        old_rid,
-                        str(old_meta.get("name") or old_rid),
-                        max(0.0, float(old_meta.get("mass_per_m3_kg") or old_density or 0.0)),
-                    )
-                # Keep resource_id as a tank property — the cargo_manifest
-                # gate prevents re-migration, and other functions
-                # (derive_ship_stats, compute_ship_inventory_containers) rely
-                # on resource_id to identify water/fuel tanks.
-                changed = True
-
-            # ── Sync legacy mass fields to match cargo_manifest ──
-            # Parts that already have a cargo_manifest may still carry
-            # stale water_kg / fuel_kg values from earlier code paths.
-            # Syncing here prevents derive_ship_stats and other readers
-            # from using the wrong numbers.
-            if "cargo_manifest" in part:
-                manifest_mass = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in (part.get("cargo_manifest") or []))
-                manifest_vol = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in (part.get("cargo_manifest") or []))
-                for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-                    if key in part and abs(float(part.get(key) or 0.0) - manifest_mass) > 0.01:
-                        part[key] = manifest_mass
-                        changed = True
-                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                    if key in part and abs(float(part.get(key) or 0.0) - manifest_vol) > 0.01:
-                        part[key] = manifest_vol
-                        changed = True
-
-            resource_id = str(part.get("resource_id") or "").strip().lower()
-            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-
-            # ── Derive tank_phase from resource_id if not already set ──
-            if resource_id and capacity_m3 > 0.0 and not str(part.get("tank_phase") or "").strip():
-                res_meta = resources.get(resource_id) or {}
-                res_density = max(0.0, float(res_meta.get("mass_per_m3_kg") or part.get("mass_per_m3_kg") or 0.0))
-                part["tank_phase"] = classify_resource_phase(
-                    resource_id,
-                    str(res_meta.get("name") or resource_id),
-                    res_density,
-                )
-                changed = True
-
-            if resource_id == "water" and capacity_m3 > 0.0 and not _has_explicit_container_fill(part):
-                density = max(
-                    0.0,
-                    float(part.get("mass_per_m3_kg") or (resources.get(resource_id) or {}).get("mass_per_m3_kg") or 0.0),
-                )
-                if density > 0.0:
-                    legacy_water_rows.append(part)
-                    legacy_total_capacity_kg += capacity_m3 * density
-
-        hardened.append(part)
-
-    if legacy_water_rows and legacy_total_capacity_kg > 0.0:
-        ratio = min(1.0, max(0.0, float(fuel_kg or 0.0)) / legacy_total_capacity_kg)
-        for part in legacy_water_rows:
-            density = max(
-                0.0,
-                float(part.get("mass_per_m3_kg") or (resources.get("water") or {}).get("mass_per_m3_kg") or 0.0),
-            )
-            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-            used_m3 = capacity_m3 * ratio
-            cargo_mass = used_m3 * density
-
-            for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                part[key] = used_m3
-            for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-                part[key] = cargo_mass
-            # Also update manifest for water fill
-            if cargo_mass > 1e-9:
-                part["cargo_manifest"] = [{
-                    "resource_id": "water",
-                    "mass_kg": cargo_mass,
-                    "volume_m3": used_m3,
-                    "density_kg_m3": density,
-                }]
-            else:
-                part["cargo_manifest"] = []
-            changed = True
-
-    # ── Sync water‑tank manifests to authoritative fuel_kg ──────────
-    # Manifests can become stale when fuel is burned (only fuel_kg is
-    # decremented) or from old migration artefacts.  Redistribute
-    # fuel_kg across all water tanks proportionally to their capacity.
-    water_density_ref = max(
-        0.0,
-        float((resources.get("water") or {}).get("mass_per_m3_kg") or 0.0),
-    )
-    if water_density_ref > 0.0:
-        all_water_parts: List[Dict[str, Any]] = []
-        total_water_cap_m3 = 0.0
-        total_water_manifest_kg = 0.0
-
-        for part in hardened:
-            if not _is_storage_part(part):
-                continue
-            rid = str(part.get("resource_id") or "").strip().lower()
-            cap = max(0.0, float(part.get("capacity_m3") or 0.0))
-            if rid != "water" or cap <= 0.0:
-                continue
-            all_water_parts.append(part)
-            total_water_cap_m3 += cap
-            # Sum water mass in this part's manifest
-            for entry in (part.get("cargo_manifest") or []):
-                if str(entry.get("resource_id") or "").strip().lower() == "water":
-                    total_water_manifest_kg += max(0.0, float(entry.get("mass_kg") or 0.0))
-
-        resolved_fuel = max(0.0, float(fuel_kg or 0.0))
-        total_water_cap_kg = total_water_cap_m3 * water_density_ref
-
-        if all_water_parts and total_water_cap_kg > 0.0 and abs(total_water_manifest_kg - resolved_fuel) > 0.5:
-            ratio = min(1.0, resolved_fuel / total_water_cap_kg)
-            for part in all_water_parts:
-                cap = max(0.0, float(part.get("capacity_m3") or 0.0))
-                fill_m3 = cap * ratio
-                fill_kg = fill_m3 * water_density_ref
-
-                # Rebuild manifest: keep non-water entries, replace water entry
-                non_water = [e for e in (part.get("cargo_manifest") or [])
-                             if str(e.get("resource_id") or "").strip().lower() != "water"]
-                manifest = list(non_water)
-                if fill_kg > 1e-9:
-                    manifest.append({
-                        "resource_id": "water",
-                        "mass_kg": fill_kg,
-                        "volume_m3": fill_m3,
-                        "density_kg_m3": water_density_ref,
-                    })
-                part["cargo_manifest"] = manifest
-
-                total_mass = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in manifest)
-                total_vol = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in manifest)
-                for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                    if key in part:
-                        part[key] = total_vol
-                for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-                    if key in part:
-                        part[key] = total_mass
-            changed = True
-
-    return hardened, changed
-
-
-def compute_ship_inventory_containers(parts: List[Dict[str, Any]], current_fuel_kg: float) -> List[Dict[str, Any]]:
-    resources = load_resource_catalog()
-    rows: List[Dict[str, Any]] = []
-    water_tank_rows: List[Dict[str, Any]] = []
-    water_meta = resources.get("water") or {}
-    water_density = max(0.0, float(water_meta.get("mass_per_m3_kg") or 0.0))
-
-    for idx, part in enumerate(parts):
-        capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-        ptype = str(part.get("type") or "").strip().lower()
-        pcat = str(part.get("category_id") or "").strip().lower()
-        if capacity_m3 <= 0.0 and ptype not in {"storage", "cargo"} and pcat not in {"storage", "cargo"}:
-            continue
-
-        # ── Read cargo_manifest (multi-resource) ──
-        manifest = list(part.get("cargo_manifest") or [])
-
-        # Compute totals from manifest
-        used_m3 = 0.0
-        cargo_mass_kg = 0.0
-        for entry in manifest:
-            used_m3 += max(0.0, float(entry.get("volume_m3") or 0.0))
-            cargo_mass_kg += max(0.0, float(entry.get("mass_kg") or 0.0))
-
-        # Fallback: if no manifest, read legacy single-resource fields
-        if not manifest:
-            resource_id = str(part.get("resource_id") or "").strip()
-            density = max(0.0, float(part.get("mass_per_m3_kg") or (resources.get(resource_id) or {}).get("mass_per_m3_kg") or 0.0))
-
-            explicit_m3 = 0.0
-            for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-                if key in part:
-                    explicit_m3 = max(0.0, float(part.get(key) or 0.0))
-                    break
-
-            explicit_mass_kg = 0.0
-            for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-                if key in part:
-                    explicit_mass_kg = max(0.0, float(part.get(key) or 0.0))
-                    break
-
-            if explicit_m3 > 0.0:
-                used_m3 = min(capacity_m3, explicit_m3) if capacity_m3 > 0.0 else explicit_m3
-                cargo_mass_kg = used_m3 * density if density > 0.0 else explicit_mass_kg
-            elif explicit_mass_kg > 0.0 and density > 0.0:
-                cargo_mass_kg = explicit_mass_kg
-                used_m3 = min(capacity_m3, cargo_mass_kg / density) if capacity_m3 > 0.0 else cargo_mass_kg / density
-
-            if resource_id and cargo_mass_kg > 1e-9:
-                manifest = [{
-                    "resource_id": resource_id,
-                    "mass_kg": cargo_mass_kg,
-                    "volume_m3": used_m3,
-                    "density_kg_m3": density,
-                }]
-
-        dry_mass_kg = max(0.0, float(part.get("mass_kg") or 0.0))
-
-        tank_phase = str(part.get("tank_phase") or "").strip().lower()
-        if tank_phase not in {"solid", "liquid", "gas"}:
-            # Derive from part's resource_id, first manifest entry, or part name/type
-            phase_hint_rid = str(part.get("resource_id") or "").strip()
-            first_rid = manifest[0]["resource_id"] if manifest else ""
-            if not phase_hint_rid and first_rid:
-                phase_hint_rid = first_rid
-            phase_hint_meta = resources.get(phase_hint_rid) or {} if phase_hint_rid else {}
-            phase_hint_density = float(phase_hint_meta.get("mass_per_m3_kg") or 0.0)
-            tank_phase = classify_resource_phase(phase_hint_rid, str(phase_hint_meta.get("name") or phase_hint_rid), phase_hint_density)
-
-        row = {
-            "container_index": idx,
-            "container_uid": str(part.get("container_uid") or ""),
-            "name": str(part.get("name") or f"Container {idx + 1}"),
-            "phase": tank_phase,
-            "tank_phase": tank_phase,
-            "capacity_m3": capacity_m3,
-            "used_m3": used_m3,
-            "cargo_mass_kg": cargo_mass_kg,
-            "dry_mass_kg": dry_mass_kg,
-            "total_mass_kg": dry_mass_kg + cargo_mass_kg,
-            "cargo_manifest": manifest,
-        }
-
-        rows.append(row)
-
-        # Track water-capable tanks for fuel distribution
-        part_resource_id = str(part.get("resource_id") or "").strip().lower()
-        if part_resource_id == "water" and capacity_m3 > 0.0:
-            water_tank_rows.append(row)
-
-    # ── Distribute current_fuel_kg across water tanks ──
-    # fuel_kg is the authoritative source for water propellant.  Container
-    # manifests may be stale (e.g. after a burn only fuel_kg is decremented).
-    # However, when manifests already match fuel_kg (e.g. right after a
-    # targeted container transfer), skip redistribution to preserve the
-    # per-tank fill the player intended.
-    if water_tank_rows and water_density > 0.0:
-        total_water_cap_m3 = sum(max(0.0, float(r.get("capacity_m3") or 0.0)) for r in water_tank_rows)
-        total_water_cap_kg = total_water_cap_m3 * water_density
-        fuel_to_show = max(0.0, min(float(current_fuel_kg or 0.0), total_water_cap_kg))
-
-        # Sum water mass already present in manifests
-        total_manifest_water_kg = 0.0
-        for r in water_tank_rows:
-            for entry in (r.get("cargo_manifest") or []):
-                if str(entry.get("resource_id") or "").strip().lower() == "water":
-                    total_manifest_water_kg += max(0.0, float(entry.get("mass_kg") or 0.0))
-
-        # Only redistribute when manifests are stale (mismatch > 0.5 kg)
-        needs_redistribution = abs(total_manifest_water_kg - fuel_to_show) > 0.5
-
-        if not needs_redistribution:
-            # Manifests are authoritative — just ensure row totals are correct
-            for row in water_tank_rows:
-                manifest = list(row.get("cargo_manifest") or [])
-                total_m = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in manifest)
-                total_v = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in manifest)
-                row["used_m3"] = total_v
-                row["cargo_mass_kg"] = total_m
-                row["total_mass_kg"] = row["dry_mass_kg"] + total_m
-        else:
-            ratio = fuel_to_show / total_water_cap_kg if total_water_cap_kg > 1e-9 else 0.0
-
-            for row in water_tank_rows:
-                cap_m3 = max(0.0, float(row.get("capacity_m3") or 0.0))
-                fill_m3 = cap_m3 * ratio
-                fill_kg = fill_m3 * water_density
-
-                # Preserve non-water entries in manifest
-                non_water = [e for e in (row.get("cargo_manifest") or [])
-                             if str(e.get("resource_id") or "").strip().lower() != "water"]
-                non_water_m3 = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in non_water)
-                non_water_kg = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in non_water)
-
-                manifest = list(non_water)
-                if fill_kg > 1e-9:
-                    manifest.append({
-                        "resource_id": "water",
-                        "mass_kg": fill_kg,
-                        "volume_m3": fill_m3,
-                        "density_kg_m3": water_density,
-                    })
-
-                total_used_m3 = non_water_m3 + fill_m3
-                total_cargo_kg = non_water_kg + fill_kg
-
-                row["cargo_manifest"] = manifest
-                row["used_m3"] = total_used_m3
-                row["cargo_mass_kg"] = total_cargo_kg
-                row["total_mass_kg"] = row["dry_mass_kg"] + total_cargo_kg
-
-    return rows
+    Writes legacy list form when cargo is empty to minimize compatibility risk.
+    """
+    safe_parts = [dict(p) for p in (parts or []) if isinstance(p, dict)]
+    safe_cargo = [dict(c) for c in (cargo or []) if isinstance(c, dict)]
+    if safe_cargo:
+        return json.dumps({"parts": safe_parts, "cargo": safe_cargo}, sort_keys=True)
+    return json.dumps(safe_parts)
 
 
 def compute_ship_inventory_resources(
     ship_id: str,
-    containers: List[Dict[str, Any]],
+    cargo_stacks: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    """Build resource display items from ship cargo stacks (DB rows)."""
     resources_catalog = load_resource_catalog()
-    by_resource: Dict[str, Dict[str, Any]] = {}
-
-    for container in containers or []:
-        manifest = list(container.get("cargo_manifest") or [])
-
-        # Fallback for legacy single-resource containers without manifest
-        if not manifest:
-            resource_id = str(container.get("resource_id") or "").strip()
-            if not resource_id:
-                continue
-            mass_kg = max(0.0, float(container.get("cargo_mass_kg") or 0.0))
-            volume_m3 = max(0.0, float(container.get("used_m3") or 0.0))
-            if mass_kg > 1e-9 or volume_m3 > 1e-9:
-                density = max(0.0, float(container.get("density_kg_m3") or 0.0))
-                manifest = [{"resource_id": resource_id, "mass_kg": mass_kg, "volume_m3": volume_m3, "density_kg_m3": density}]
-
-        for m_entry in manifest:
-            resource_id = str(m_entry.get("resource_id") or "").strip()
-            if not resource_id:
-                continue
-            mass_kg = max(0.0, float(m_entry.get("mass_kg") or 0.0))
-            volume_m3 = max(0.0, float(m_entry.get("volume_m3") or 0.0))
-            if mass_kg <= 1e-9 and volume_m3 <= 1e-9:
-                continue
-
-            meta = resources_catalog.get(resource_id) or {}
-            label = str(meta.get("name") or resource_id)
-            phase = str(meta.get("phase") or "").strip().lower()
-            if phase not in {"solid", "liquid", "gas"}:
-                phase = classify_resource_phase(resource_id, label, float(meta.get("mass_per_m3_kg") or 0.0))
-
-            entry = by_resource.get(resource_id)
-            if not entry:
-                res_category_id = str(meta.get("category_id") or "resource")
-                res_icon = str(meta.get("icon") or "")
-                entry = {
-                    "item_uid": f"ship:{ship_id}:resource:{resource_id}",
-                    "item_kind": "resource",
-                    "item_id": resource_id,
-                    "label": label,
-                    "subtitle": f"{phase.title()} cargo",
-                    "category": res_category_id,
-                    "category_id": res_category_id,
-                    "resource_id": resource_id,
-                    "phase": phase,
-                    "icon": res_icon,
-                    "mass_kg": 0.0,
-                    "volume_m3": 0.0,
-                    "quantity": 0.0,
-                    "icon_seed": f"ship_resource::{resource_id}",
-                    "transfer": {
-                        "source_kind": "ship_resource",
-                        "source_id": ship_id,
-                        "source_key": resource_id,
-                        "amount": 0.0,
-                    },
-                }
-                by_resource[resource_id] = entry
-
-            entry["mass_kg"] = max(0.0, float(entry.get("mass_kg") or 0.0)) + mass_kg
-            entry["volume_m3"] = max(0.0, float(entry.get("volume_m3") or 0.0)) + volume_m3
-            entry["quantity"] = max(0.0, float(entry.get("quantity") or 0.0)) + mass_kg
-            transfer = entry.get("transfer") if isinstance(entry.get("transfer"), dict) else None
-            if transfer is not None:
-                transfer["amount"] = max(0.0, float(transfer.get("amount") or 0.0)) + mass_kg
-
-    rows = list(by_resource.values())
-    rows.sort(key=lambda r: (str(r.get("phase") or ""), str(r.get("label") or r.get("resource_id") or "")))
+    rows: List[Dict[str, Any]] = []
+    for stack in cargo_stacks or []:
+        resource_id = str(stack.get("resource_id") or "").strip()
+        mass_kg = max(0.0, float(stack.get("mass_kg") or 0.0))
+        if not resource_id or mass_kg <= 1e-9:
+            continue
+        meta = resources_catalog.get(resource_id) or {}
+        label = str(meta.get("name") or resource_id)
+        res_category_id = str(meta.get("category_id") or "resource")
+        res_icon = str(meta.get("icon") or "")
+        rows.append({
+            "item_uid": f"ship:{ship_id}:resource:{resource_id}",
+            "item_kind": "resource",
+            "item_id": resource_id,
+            "label": label,
+            "subtitle": f"Cargo · {mass_kg:,.0f} kg",
+            "category": res_category_id,
+            "category_id": res_category_id,
+            "resource_id": resource_id,
+            "icon": res_icon,
+            "mass_kg": mass_kg,
+            "quantity": mass_kg,
+            "icon_seed": f"ship_resource::{resource_id}",
+            "transfer": {
+                "source_kind": "ship_resource",
+                "source_id": ship_id,
+                "source_key": resource_id,
+                "amount": mass_kg,
+            },
+        })
+    rows.sort(key=lambda r: str(r.get("label") or r.get("resource_id") or ""))
     return rows
 
 
-def compute_ship_capacity_summary(containers: List[Dict[str, Any]]) -> Dict[str, Any]:
-    by_phase: Dict[str, Dict[str, float]] = {
-        "solid": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
-        "liquid": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
-        "gas": {"used_m3": 0.0, "capacity_m3": 0.0, "free_m3": 0.0, "utilization": 0.0},
-    }
+def get_ship_cargo_stacks(conn: sqlite3.Connection, ship_id: str) -> List[Dict[str, Any]]:
+    """Read all cargo resource stacks for a ship from DB."""
+    db_rows = conn.execute(
+        "SELECT resource_id, mass_kg FROM ship_cargo_stacks WHERE ship_id=? AND mass_kg > 0",
+        (str(ship_id),),
+    ).fetchall()
+    return [{"resource_id": str(r["resource_id"]), "mass_kg": float(r["mass_kg"])} for r in db_rows]
 
-    for container in containers or []:
-        phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
-        if phase not in by_phase:
-            phase = "solid"
 
-        cap = max(0.0, float(container.get("capacity_m3") or 0.0))
-        used = max(0.0, float(container.get("used_m3") or 0.0))
+def add_cargo_to_ship(
+    conn: sqlite3.Connection,
+    ship_id: str,
+    resource_id: str,
+    mass_kg: float,
+    cargo_capacity_kg: float = 0.0,
+) -> float:
+    """Add resource mass to ship cargo. Enforces ship cargo mass budget. Returns accepted kg."""
+    sid = str(ship_id)
+    rid = str(resource_id)
+    requested = max(0.0, float(mass_kg))
+    if requested <= 0.01:
+        raise ValueError("Nothing to load")
 
-        by_phase[phase]["capacity_m3"] += cap
-        by_phase[phase]["used_m3"] += min(cap, used)
+    if cargo_capacity_kg > 0.0:
+        capacity_kg = max(0.0, float(cargo_capacity_kg))
+    else:
+        ship_row = conn.execute("SELECT parts_json FROM ships WHERE id=?", (sid,)).fetchone()
+        if not ship_row:
+            raise ValueError("Ship not found")
+        raw_parts, _raw_cargo = split_ship_parts_and_cargo(ship_row["parts_json"] or "[]")
+        parts = normalize_parts(raw_parts)
+        capacity_kg = sum(
+            max(0.0, float(part.get("cargo_capacity_kg") or 0.0))
+            for part in parts
+            if str(part.get("type") or "").lower() == "thruster"
+        )
 
-    total_capacity = 0.0
-    total_used = 0.0
-    for row in by_phase.values():
-        row["free_m3"] = max(0.0, row["capacity_m3"] - row["used_m3"])
-        row["utilization"] = (row["used_m3"] / row["capacity_m3"]) if row["capacity_m3"] > 1e-9 else 0.0
-        total_capacity += row["capacity_m3"]
-        total_used += row["used_m3"]
+    row = conn.execute(
+        "SELECT COALESCE(SUM(mass_kg), 0.0) AS total_mass_kg FROM ship_cargo_stacks WHERE ship_id=?",
+        (sid,),
+    ).fetchone()
+    used_kg = max(0.0, float(row["total_mass_kg"] if row else 0.0))
+    available_kg = max(0.0, capacity_kg - used_kg)
+    accepted = min(requested, available_kg)
+    if accepted <= 0.01:
+        raise ValueError("Ship cargo is full")
 
+    conn.execute(
+        """
+        INSERT INTO ship_cargo_stacks (ship_id, resource_id, mass_kg)
+        VALUES (?, ?, ?)
+        ON CONFLICT(ship_id, resource_id)
+        DO UPDATE SET mass_kg = mass_kg + excluded.mass_kg
+        """,
+        (sid, rid, accepted),
+    )
+    return accepted
+
+
+def remove_cargo_from_ship(
+    conn: sqlite3.Connection,
+    ship_id: str,
+    resource_id: str,
+    mass_kg: float,
+) -> float:
+    """Remove resource mass from ship cargo. Returns actual amount taken."""
+    sid = str(ship_id)
+    rid = str(resource_id)
+    row = conn.execute(
+        "SELECT mass_kg FROM ship_cargo_stacks WHERE ship_id=? AND resource_id=?",
+        (sid, rid),
+    ).fetchone()
+    if not row:
+        raise ValueError(f"No {resource_id} in ship cargo")
+    available = max(0.0, float(row["mass_kg"]))
+    taken = min(max(0.0, float(mass_kg)), available)
+    if taken <= 0.01:
+        return 0.0
+    remaining = available - taken
+    if remaining < 0.01:
+        conn.execute(
+            "DELETE FROM ship_cargo_stacks WHERE ship_id=? AND resource_id=?",
+            (sid, rid),
+        )
+    else:
+        conn.execute(
+            "UPDATE ship_cargo_stacks SET mass_kg=? WHERE ship_id=? AND resource_id=?",
+            (remaining, sid, rid),
+        )
+    return taken
+
+
+def wipe_ship_cargo(conn: sqlite3.Connection, ship_id: str) -> None:
+    """Delete all cargo stacks for a ship."""
+    conn.execute("DELETE FROM ship_cargo_stacks WHERE ship_id=?", (str(ship_id),))
+
+
+def compute_ship_cargo_summary(
+    parts: List[Dict[str, Any]],
+    cargo_stacks: List[Dict[str, Any]],
+    resource_catalog: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Mass-budget cargo summary with surcharge."""
+    cargo_capacity_kg = sum(
+        max(0.0, float(part.get("cargo_capacity_kg") or 0.0))
+        for part in (parts or [])
+        if str(part.get("type") or "").lower() == "thruster"
+    )
+    total_cargo_kg = sum(
+        max(0.0, float(c.get("mass_kg") or 0.0))
+        for c in (cargo_stacks or [])
+    )
+    total_volume_m3 = 0.0
+    for c in (cargo_stacks or []):
+        rid = c.get("resource_id", "")
+        mass = max(0.0, float(c.get("mass_kg") or 0.0))
+        res = resource_catalog.get(rid) or {}
+        density = max(1.0, float(res.get("mass_per_m3_kg") or 2500.0))
+        total_volume_m3 += mass / density
+    avg_density = (total_cargo_kg / total_volume_m3) if total_volume_m3 > 0 else 2500.0
+    surcharge_kg = 0.0  # future: density-based surcharge
     return {
-        "used_m3": total_used,
-        "capacity_m3": total_capacity,
-        "free_m3": max(0.0, total_capacity - total_used),
-        "utilization": (total_used / total_capacity) if total_capacity > 1e-9 else 0.0,
-        "by_phase": by_phase,
+        "cargo_capacity_kg": round(cargo_capacity_kg, 2),
+        "cargo_used_kg": total_cargo_kg,
+        "cargo_free_kg": round(max(0.0, cargo_capacity_kg - total_cargo_kg), 2),
+        "cargo_surcharge_kg": round(surcharge_kg, 2),
+        "cargo_effective_kg": round(total_cargo_kg + surcharge_kg, 2),
+        "avg_density_kg_m3": round(avg_density, 1),
     }
 
 
@@ -1907,10 +1608,10 @@ def _resolve_inventory_part_fallback(item_id: str, name: str, stack_mass_kg: flo
         load_reactor_catalog,
         load_generator_catalog,
         load_radiator_catalog,
-        load_constructor_catalog,
+        load_miner_catalog,
+        load_printer_catalog,
         load_refinery_catalog,
         load_robonaut_catalog,
-        load_storage_catalog,
     )
     item_key = str(item_id or "").strip()
     for loader in loaders:
@@ -1939,10 +1640,10 @@ def _part_catalog_item_ids() -> set[str]:
         load_reactor_catalog,
         load_generator_catalog,
         load_radiator_catalog,
-        load_constructor_catalog,
+        load_miner_catalog,
+        load_printer_catalog,
         load_refinery_catalog,
         load_robonaut_catalog,
-        load_storage_catalog,
     ):
         item_ids.update(str(k) for k in loader().keys())
     return item_ids
@@ -2128,97 +1829,25 @@ def _load_ship_inventory_state(conn: sqlite3.Connection, ship_id: str) -> Dict[s
     if not row:
         raise HTTPException(status_code=404, detail="Ship not found")
 
-    parts = normalize_parts(json.loads(row["parts_json"] or "[]"))
+    raw_parts, _raw_cargo = split_ship_parts_and_cargo(row["parts_json"] or "[]")
+    parts = normalize_parts(raw_parts)
     fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
-    parts, hardened_changed = _harden_ship_parts(parts, fuel_kg)
-    if hardened_changed:
-        conn.execute(
-            "UPDATE ships SET parts_json=? WHERE id=?",
-            (json.dumps(parts), sid),
-        )
-    containers = compute_ship_inventory_containers(parts, fuel_kg)
-    resources = compute_ship_inventory_resources(sid, containers)
-    capacity_summary = compute_ship_capacity_summary(containers)
+    cargo_stacks = get_ship_cargo_stacks(conn, sid)
+    resource_catalog = load_resource_catalog()
+    resources = compute_ship_inventory_resources(sid, cargo_stacks)
+    cargo_summary = compute_ship_cargo_summary(parts, cargo_stacks, resource_catalog)
     location_id = str(row["location_id"] or "").strip()
     is_docked = bool(location_id) and row["arrives_at"] is None
     return {
         "row": row,
         "parts": parts,
         "fuel_kg": fuel_kg,
-        "containers": containers,
+        "cargo_stacks": cargo_stacks,
         "resources": resources,
-        "capacity_summary": capacity_summary,
+        "cargo_summary": cargo_summary,
         "location_id": location_id,
         "is_docked": is_docked,
     }
-
-
-def _apply_ship_container_fill(
-    part: Dict[str, Any],
-    *,
-    resource_id: str,
-    cargo_mass_kg: float,
-    used_m3: float,
-    density_kg_m3: float,
-) -> Dict[str, Any]:
-    """Update a storage part's cargo for one resource.
-
-    Uses cargo_manifest to support multiple resources per container.
-    ``cargo_mass_kg`` and ``used_m3`` are the *new* totals for this
-    specific resource (not the whole container).
-    """
-    next_part = dict(part or {})
-    rid = str(resource_id or "").strip()
-    new_mass = max(0.0, float(cargo_mass_kg or 0.0))
-    new_vol = max(0.0, float(used_m3 or 0.0))
-    density = max(0.0, float(density_kg_m3 or 0.0))
-
-    manifest = list(next_part.get("cargo_manifest") or [])
-
-    # Find existing entry for this resource in manifest
-    found_idx = -1
-    for i, entry in enumerate(manifest):
-        if str(entry.get("resource_id") or "").strip() == rid:
-            found_idx = i
-            break
-
-    if new_mass > 1e-9 and rid:
-        new_entry = {
-            "resource_id": rid,
-            "mass_kg": new_mass,
-            "volume_m3": new_vol,
-            "density_kg_m3": density,
-        }
-        if found_idx >= 0:
-            manifest[found_idx] = new_entry
-        else:
-            manifest.append(new_entry)
-    elif found_idx >= 0:
-        # Resource emptied — remove from manifest
-        manifest.pop(found_idx)
-
-    next_part["cargo_manifest"] = manifest
-
-    # Recompute totals from full manifest
-    total_mass = sum(max(0.0, float(e.get("mass_kg") or 0.0)) for e in manifest)
-    total_vol = sum(max(0.0, float(e.get("volume_m3") or 0.0)) for e in manifest)
-
-    for key in ("cargo_used_m3", "used_m3", "fill_m3", "stored_m3", "current_m3"):
-        next_part[key] = total_vol
-    for key in ("cargo_mass_kg", "contents_mass_kg", "stored_mass_kg", "current_mass_kg", "water_kg", "fuel_kg"):
-        next_part[key] = total_mass
-
-    # Legacy resource_id: keep for backward compat display, clear if empty
-    if manifest:
-        next_part["resource_id"] = manifest[0]["resource_id"]
-    else:
-        next_part.pop("resource_id", None)
-        next_part.pop("mass_per_m3_kg", None)
-
-    if density > 0.0:
-        next_part["mass_per_m3_kg"] = density
-
-    return next_part
 
 
 def _persist_ship_inventory_state(
@@ -2228,9 +1857,28 @@ def _persist_ship_inventory_state(
     parts: List[Dict[str, Any]],
     fuel_kg: float,
 ) -> None:
-    stats = derive_ship_stats_from_parts(parts, current_fuel_kg=max(0.0, float(fuel_kg or 0.0)))
+    """Persist ship parts, fuel, and derived stats. Cargo lives in ship_cargo_stacks."""
+    cargo_stacks = get_ship_cargo_stacks(conn, ship_id)
+    resource_catalog = load_resource_catalog()
+    total_cargo_kg = sum(max(0.0, float(c.get("mass_kg") or 0.0)) for c in cargo_stacks)
+    total_volume_m3 = 0.0
+    for c in cargo_stacks:
+        rid = c.get("resource_id", "")
+        mass = max(0.0, float(c.get("mass_kg") or 0.0))
+        res = resource_catalog.get(rid) or {}
+        density = max(1.0, float(res.get("mass_per_m3_kg") or 2500.0))
+        total_volume_m3 += mass / density
+    avg_density = (total_cargo_kg / total_volume_m3) if total_volume_m3 > 0 else 2500.0
+
+    stats = derive_ship_stats_from_parts(
+        parts,
+        current_fuel_kg=max(0.0, float(fuel_kg or 0.0)),
+        cargo_mass_kg=total_cargo_kg,
+        cargo_avg_density=avg_density,
+    )
     if len(parts) == 0 and max(0.0, float(stats.get("fuel_kg") or 0.0)) <= 1e-9:
         conn.execute("DELETE FROM ships WHERE id=?", (ship_id,))
+        wipe_ship_cargo(conn, ship_id)
         return
     conn.execute(
         """
@@ -2239,7 +1887,7 @@ def _persist_ship_inventory_state(
         WHERE id=?
         """,
         (
-            json.dumps(parts),
+            merge_ship_parts_and_cargo(parts),
             stats["fuel_kg"],
             stats["fuel_capacity_kg"],
             stats["dry_mass_kg"],
@@ -2360,6 +2008,18 @@ def _consume_location_part_unit(conn: sqlite3.Connection, row: sqlite3.Row) -> D
     if normalized:
         part = normalized[0]
 
+    item_id = str(part.get("item_id") or row["item_id"] or "")
+    if item_id == "mission_materials_module" and not part.get("_mission_id"):
+        mission_id = ""
+        if isinstance(payload, dict):
+            mission_id = str(payload.get("mission_id") or "")
+            if not mission_id:
+                payload_part = payload.get("part")
+                if isinstance(payload_part, dict):
+                    mission_id = str(payload_part.get("_mission_id") or payload_part.get("mission_id") or "")
+        if mission_id:
+            part["_mission_id"] = mission_id
+
     row_corp_id = str(row["corp_id"]) if "corp_id" in row.keys() else ""
     _upsert_inventory_stack(
         conn,
@@ -2384,130 +2044,6 @@ def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]
     return rows
 
 
-def _inventory_container_groups_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    ship_row = ship_state.get("row")
-    if isinstance(ship_row, sqlite3.Row):
-        ship_id = str(ship_row["id"] or "")
-    elif isinstance(ship_row, dict):
-        ship_id = str(ship_row.get("id") or "")
-    else:
-        ship_id = ""
-
-    groups: List[Dict[str, Any]] = []
-    for container in ship_state.get("containers") or []:
-        raw_idx = container.get("container_index")
-        idx = int(raw_idx) if raw_idx is not None else -1
-        if idx < 0:
-            continue
-
-        name = str(container.get("name") or f"Container {idx + 1}")
-        phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
-        if phase not in {"solid", "liquid", "gas"}:
-            phase = "solid"
-
-        capacity_m3 = max(0.0, float(container.get("capacity_m3") or 0.0))
-        used_m3 = max(0.0, float(container.get("used_m3") or 0.0))
-        cargo_mass_kg = max(0.0, float(container.get("cargo_mass_kg") or 0.0))
-
-        # Build items from cargo_manifest (multi-resource) or legacy single-resource
-        manifest = container.get("cargo_manifest") or []
-        items: List[Dict[str, Any]] = []
-        if manifest:
-            for entry in manifest:
-                res_id = str(entry.get("resource_id") or "").strip()
-                res_mass = max(0.0, float(entry.get("mass_kg") or 0.0))
-                res_vol = max(0.0, float(entry.get("volume_m3") or 0.0))
-                if not res_id or res_mass < 1e-9:
-                    continue
-                res_label = str(entry.get("resource_name") or res_id).replace("_", " ").title()
-                _res_meta = load_resource_catalog().get(res_id) or {}
-                _res_cat_id = str(_res_meta.get("category_id") or "resource")
-                _res_icon = str(_res_meta.get("icon") or "")
-                items.append(
-                    {
-                        "item_uid": f"ship:{ship_id}:container:{idx}:resource:{res_id}",
-                        "item_kind": "resource",
-                        "item_id": res_id,
-                        "label": res_label,
-                        "subtitle": f"{phase.title()} cargo · {res_vol:.2f} m³",
-                        "category": _res_cat_id,
-                        "category_id": _res_cat_id,
-                        "resource_id": res_id,
-                        "phase": phase,
-                        "icon": _res_icon,
-                        "mass_kg": res_mass,
-                        "volume_m3": res_vol,
-                        "quantity": res_mass,
-                        "capacity_m3": capacity_m3,
-                        "icon_seed": f"ship_container::{ship_id}::{idx}::{res_id}",
-                        "transfer": {
-                            "source_kind": "ship_container",
-                            "source_id": ship_id,
-                            "source_key": str(idx),
-                            "resource_id": res_id,
-                            "amount": res_mass,
-                        },
-                    }
-                )
-        else:
-            # Legacy fallback: single resource_id / cargo_mass_kg
-            resource_id = str(container.get("resource_id") or "").strip()
-            resource_name = str(container.get("resource_name") or resource_id or "Cargo")
-            if resource_id and cargo_mass_kg > 1e-9:
-                _res_meta2 = load_resource_catalog().get(resource_id) or {}
-                _res_cat_id2 = str(_res_meta2.get("category_id") or "resource")
-                _res_icon2 = str(_res_meta2.get("icon") or "")
-                items.append(
-                    {
-                        "item_uid": f"ship:{ship_id}:container:{idx}:resource:{resource_id}",
-                        "item_kind": "resource",
-                        "item_id": resource_id,
-                        "label": resource_name,
-                        "subtitle": f"{phase.title()} cargo · {used_m3:.2f} m³",
-                        "category": _res_cat_id2,
-                        "category_id": _res_cat_id2,
-                        "resource_id": resource_id,
-                        "phase": phase,
-                        "icon": _res_icon2,
-                        "mass_kg": cargo_mass_kg,
-                        "volume_m3": used_m3,
-                        "quantity": cargo_mass_kg,
-                        "capacity_m3": capacity_m3,
-                        "icon_seed": f"ship_container::{ship_id}::{idx}::{resource_id}",
-                        "transfer": {
-                            "source_kind": "ship_container",
-                            "source_id": ship_id,
-                            "source_key": str(idx),
-                            "amount": cargo_mass_kg,
-                        },
-                    }
-                )
-
-        # Summary resource fields for the group
-        first_res_id = items[0]["resource_id"] if items else ""
-        first_res_name = items[0]["label"] if items else ""
-
-        groups.append(
-            {
-                "group_id": f"ship:{ship_id}:container:{idx}",
-                "group_kind": "container",
-                "container_index": idx,
-                "name": name,
-                "phase": phase,
-                "capacity_m3": capacity_m3,
-                "used_m3": used_m3,
-                "free_m3": max(0.0, capacity_m3 - used_m3),
-                "resource_id": first_res_id,
-                "resource_name": first_res_name,
-                "item_count": len(items),
-                "items": items,
-            }
-        )
-
-    groups.sort(key=lambda g: int(g.get("container_index") or 0))
-    return groups
-
-
 def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     ship_row = ship_state.get("row")
     if isinstance(ship_row, sqlite3.Row):
@@ -2517,14 +2053,6 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     else:
         ship_id = ""
     can_transfer = bool(ship_state.get("is_docked"))
-    containers_by_index: Dict[int, Dict[str, Any]] = {}
-    for container in ship_state.get("containers") or []:
-        try:
-            idx = int(container.get("container_index") or -1)
-        except Exception:
-            idx = -1
-        if idx >= 0:
-            containers_by_index[idx] = container
 
     rows: List[Dict[str, Any]] = []
 
@@ -2536,24 +2064,6 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         mass_kg = max(0.0, float(part_payload.get("mass_kg") or 0.0))
         volume_m3 = 0.0
         subtitle = ptype
-
-        container = containers_by_index.get(idx)
-        if isinstance(container, dict):
-            phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
-            if phase not in {"solid", "liquid", "gas"}:
-                phase = "solid"
-            cap_m3 = max(0.0, float(container.get("capacity_m3") or 0.0))
-            used_m3 = max(0.0, float(container.get("used_m3") or 0.0))
-            cargo_mass_kg = max(0.0, float(container.get("cargo_mass_kg") or 0.0))
-            total_mass_kg = max(0.0, float(container.get("total_mass_kg") or (mass_kg + cargo_mass_kg)))
-            resource_label = str(container.get("resource_name") or container.get("resource_id") or "").strip()
-
-            mass_kg = total_mass_kg
-            volume_m3 = used_m3
-            if resource_label and cargo_mass_kg > 1e-9:
-                subtitle = f"{phase.title()} tank · {resource_label} {cargo_mass_kg:.0f} kg · {used_m3:.2f}/{cap_m3:.2f} m³"
-            else:
-                subtitle = f"{phase.title()} tank · Empty · {used_m3:.2f}/{cap_m3:.2f} m³"
 
         transfer = None
         if can_transfer and ship_id:
@@ -2577,10 +2087,16 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         ship_thermal_mw_input = float(part_payload.get("thermal_mw_input") or 0)
         ship_waste_heat_mw = float(part_payload.get("waste_heat_mw") or 0)
         ship_heat_rejection_mw = float(part_payload.get("heat_rejection_mw") or 0)
+        ship_water_extraction_rate = float(part_payload.get("water_extraction_kg_per_hr") or 0)
+        ship_min_water_ice_fraction = float(part_payload.get("min_water_ice_fraction") or 0)
+        ship_max_water_ice_fraction = float(part_payload.get("max_water_ice_fraction") or 1)
         ship_mining_rate = float(part_payload.get("mining_rate_kg_per_hr") or 0)
         ship_construction_rate = float(part_payload.get("construction_rate_kg_per_hr") or 0)
         ship_conversion_eff = float(part_payload.get("conversion_efficiency") or 0)
         ship_excavation_type = str(part_payload.get("excavation_type") or "")
+        ship_miner_type = str(part_payload.get("miner_type") or "")
+        ship_printer_type = str(part_payload.get("printer_type") or "")
+        ship_fabrication_type = str(part_payload.get("fabrication_type") or "")
         ship_specialization = str(part_payload.get("specialization") or "")
         ship_max_recipe_tier = int(part_payload.get("max_recipe_tier") or 0)
         ship_throughput_mult = float(part_payload.get("throughput_mult") or 0)
@@ -2620,6 +2136,12 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
             ship_row["waste_heat_mw"] = ship_waste_heat_mw
         if ship_heat_rejection_mw > 0:
             ship_row["heat_rejection_mw"] = ship_heat_rejection_mw
+        if ship_water_extraction_rate > 0:
+            ship_row["water_extraction_kg_per_hr"] = ship_water_extraction_rate
+        if "min_water_ice_fraction" in part_payload:
+            ship_row["min_water_ice_fraction"] = ship_min_water_ice_fraction
+        if "max_water_ice_fraction" in part_payload:
+            ship_row["max_water_ice_fraction"] = ship_max_water_ice_fraction
         if ship_mining_rate > 0:
             ship_row["mining_rate_kg_per_hr"] = ship_mining_rate
         if ship_construction_rate > 0:
@@ -2628,6 +2150,12 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
             ship_row["conversion_efficiency"] = ship_conversion_eff
         if ship_excavation_type:
             ship_row["excavation_type"] = ship_excavation_type
+        if ship_miner_type:
+            ship_row["miner_type"] = ship_miner_type
+        if ship_printer_type:
+            ship_row["printer_type"] = ship_printer_type
+        if ship_fabrication_type:
+            ship_row["fabrication_type"] = ship_fabrication_type
         if ship_specialization:
             ship_row["specialization"] = ship_specialization
         if ship_max_recipe_tier > 0:
@@ -2690,7 +2218,7 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
 
                 phase = str(part_payload.get("tank_phase") or "").strip().lower()
                 if phase not in {"solid", "liquid", "gas"}:
-                    phase = classify_resource_phase(resource_id, resource_id, density)
+                    phase = "solid"
 
                 if resource_id and cargo_mass_kg > 1e-9:
                     subtitle = f"Count: {int(round(qty))} · {phase.title()} · {resource_id} {cargo_mass_kg:.0f} kg · {used_m3:.2f}/{capacity_m3:.2f} m³"
@@ -2710,10 +2238,16 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
         thermal_mw_input = float(part_payload_loc.get("thermal_mw_input") or 0)
         waste_heat_mw = float(part_payload_loc.get("waste_heat_mw") or 0)
         heat_rejection_mw = float(part_payload_loc.get("heat_rejection_mw") or 0)
+        water_extraction_rate = float(part_payload_loc.get("water_extraction_kg_per_hr") or 0)
+        min_water_ice_fraction = float(part_payload_loc.get("min_water_ice_fraction") or 0)
+        max_water_ice_fraction = float(part_payload_loc.get("max_water_ice_fraction") or 1)
         mining_rate = float(part_payload_loc.get("mining_rate_kg_per_hr") or 0)
         construction_rate = float(part_payload_loc.get("construction_rate_kg_per_hr") or 0)
         conversion_eff = float(part_payload_loc.get("conversion_efficiency") or 0)
         excavation_type = str(part_payload_loc.get("excavation_type") or "")
+        miner_type = str(part_payload_loc.get("miner_type") or "")
+        printer_type = str(part_payload_loc.get("printer_type") or "")
+        fabrication_type = str(part_payload_loc.get("fabrication_type") or "")
         specialization = str(part_payload_loc.get("specialization") or "")
         max_recipe_tier = int(part_payload_loc.get("max_recipe_tier") or 0)
         throughput_mult = float(part_payload_loc.get("throughput_mult") or 0)
@@ -2758,6 +2292,12 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
             row_dict["waste_heat_mw"] = waste_heat_mw
         if heat_rejection_mw > 0:
             row_dict["heat_rejection_mw"] = heat_rejection_mw
+        if water_extraction_rate > 0:
+            row_dict["water_extraction_kg_per_hr"] = water_extraction_rate
+        if "min_water_ice_fraction" in part_payload_loc:
+            row_dict["min_water_ice_fraction"] = min_water_ice_fraction
+        if "max_water_ice_fraction" in part_payload_loc:
+            row_dict["max_water_ice_fraction"] = max_water_ice_fraction
         if mining_rate > 0:
             row_dict["mining_rate_kg_per_hr"] = mining_rate
         if construction_rate > 0:
@@ -2766,6 +2306,12 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
             row_dict["conversion_efficiency"] = conversion_eff
         if excavation_type:
             row_dict["excavation_type"] = excavation_type
+        if miner_type:
+            row_dict["miner_type"] = miner_type
+        if printer_type:
+            row_dict["printer_type"] = printer_type
+        if fabrication_type:
+            row_dict["fabrication_type"] = fabrication_type
         if specialization:
             row_dict["specialization"] = specialization
         if max_recipe_tier > 0:
@@ -2836,11 +2382,18 @@ def shipyard_parts_from_item_ids(item_ids: List[str]) -> List[Dict[str, Any]]:
     return catalog_service.shipyard_parts_from_item_ids(item_ids, normalize_parts_fn=normalize_parts)
 
 
-def build_ship_stats_payload(parts: List[Dict[str, Any]], current_fuel_kg: Optional[float] = None) -> Dict[str, float]:
+def build_ship_stats_payload(
+    parts: List[Dict[str, Any]],
+    current_fuel_kg: Optional[float] = None,
+    cargo_mass_kg: float = 0.0,
+    cargo_avg_density: float = 2500.0,
+) -> Dict[str, float]:
     return catalog_service.build_ship_stats_payload(
         parts,
         resource_catalog=load_resource_catalog(),
         current_fuel_kg=current_fuel_kg,
+        cargo_mass_kg=cargo_mass_kg,
+        cargo_avg_density=cargo_avg_density,
     )
 
 
@@ -2915,8 +2468,7 @@ def ensure_inventory_baseline_ship(conn: sqlite3.Connection) -> None:
         )
     else:
         current_fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
-        fuel_capacity_kg = starter_stats["fuel_capacity_kg"]
-        resolved_fuel_kg = min(current_fuel_kg, fuel_capacity_kg)
+        resolved_fuel_kg = current_fuel_kg
         conn.execute(
             """
             UPDATE ships
@@ -2934,7 +2486,7 @@ def ensure_inventory_baseline_ship(conn: sqlite3.Connection) -> None:
                 json.dumps(["Shipyard baseline hull"]),
                 json.dumps(starter_parts),
                 resolved_fuel_kg,
-                fuel_capacity_kg,
+                starter_stats["fuel_capacity_kg"],
                 starter_stats["dry_mass_kg"],
                 starter_stats["isp_s"],
                 starter_id,
@@ -3114,7 +2666,6 @@ def _startup():
 
     load_thruster_main_catalog()
     load_resource_catalog()
-    load_storage_catalog()
 
 # ── Server environment info (for UI banner) ─────────────────────────
 _ENV_LABEL = os.environ.get("ENV_LABEL", "").strip().upper()

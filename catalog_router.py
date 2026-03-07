@@ -67,7 +67,9 @@ def api_catalog_browse(request: Request, conn: sqlite3.Connection = Depends(get_
         ("generator", catalog_service.load_generator_catalog),
         ("radiator", catalog_service.load_radiator_catalog),
         ("storage", catalog_service.load_storage_catalog),
-        ("robonaut", catalog_service.load_robonaut_catalog),
+        ("prospector", catalog_service.load_robonaut_catalog),
+        ("miner", catalog_service.load_miner_catalog),
+        ("printer", catalog_service.load_printer_catalog),
         ("constructor", catalog_service.load_constructor_catalog),
         ("isru", catalog_service.load_isru_catalog),
         ("refinery", catalog_service.load_refinery_catalog),
@@ -126,7 +128,7 @@ def api_catalog_recipes_by_category(request: Request, conn: sqlite3.Connection =
 @router.get("/api/research/tree")
 def api_research_tree(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     user = require_login(conn, request)
-    tree = catalog_service.build_ksp_tech_tree()
+    tree = catalog_service.build_unified_research_tree()
 
     # Include org's unlock state
     import org_service

@@ -371,7 +371,12 @@ def _normalize_main_from_item(entry: Dict[str, Any]) -> Dict[str, Any]:
         "P_req_mw_th": power.get("thermal_mw"),
         "isp_s": performance.get("isp_s"),
         "max_thrust_kN": performance.get("max_thrust_kN"),
+        "rated_temp_k": performance.get("rated_temp_k"),
+        "fuel_capacity_kg": performance.get("fuel_capacity_kg"),
         "branch": str(entry.get("branch") or "core"),
+        "compatible_reactor_branches": [
+            str(v) for v in (entry.get("compatible_reactor_branches") or []) if str(v).strip()
+        ],
         "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
         "research_node": str(entry.get("research_node") or ""),
         "consumables": {
@@ -502,7 +507,14 @@ def load_thruster_main_catalog() -> Dict[str, Dict[str, Any]]:
                 "isp_s": max(0.0, float(main.get("isp_s") or 0.0)),
                 "thrust_kn": max(0.0, float(main.get("max_thrust_kN") or 0.0)),
                 "thermal_mw": float(main.get("P_req_mw_th") or 0.0),
+                "rated_temp_k": max(0.0, float(main.get("rated_temp_k") or 0.0)),
+                "fuel_capacity_kg": max(0.0, float(main.get("fuel_capacity_kg") or 0.0)),
                 "reaction_mass": str((main.get("consumables") or {}).get("reaction_mass") or ""),
+                "compatible_reactor_branches": [
+                    str(v).strip().lower()
+                    for v in (main.get("compatible_reactor_branches") or [])
+                    if str(v).strip()
+                ],
                 "tech_level": max(1.0, float(main.get("tech_level") or 1)),
                 "research_node": str(main.get("research_node") or ""),
             }
@@ -612,6 +624,7 @@ def load_reactor_catalog() -> Dict[str, Dict[str, Any]]:
                 "category_id": "reactor",
                 "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
                 "thermal_mw": max(0.0, float(output.get("thermal_mw") or 0.0)),
+                "core_temp_k": max(0.0, float(output.get("core_temp_k") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
                 "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
                 "research_node": str(entry.get("research_node") or ""),
@@ -748,19 +761,15 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
             perf = entry.get("performance") or {}
             power_req = entry.get("power_requirements") or {}
             tech_level = max(1.0, float(entry.get("tech_level") or 1))
-            # ISRU mining baseline: 50 kg/hr at tech level 1, +10% per tech level.
-            mining_rate_kg_per_hr = 50.0 * (1.1 ** (tech_level - 1.0))
             catalog[item_id] = {
                 "item_id": item_id,
                 "name": str(entry.get("name") or item_id),
-                "type": "robonaut",
-                "category_id": "robonaut",
+                "type": "prospector",
+                "category_id": "prospector",
                 "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
                 "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
                 "prospect_range_km": max(0.0, float(perf.get("prospect_range_km") or 0.0)),
                 "scan_rate_km2_per_hr": max(0.0, float(perf.get("scan_rate_km2_per_hr") or 0.0)),
-                "melt_rate_t_per_hr": max(0.0, float(perf.get("melt_rate_t_per_hr") or 0.0)),
-                "mining_rate_kg_per_hr": round(max(0.0, mining_rate_kg_per_hr), 4),
                 "emission_type": str(perf.get("emission_type") or ""),
                 "branch": str(entry.get("branch") or ""),
                 "tech_level": tech_level,
@@ -769,15 +778,14 @@ def load_robonaut_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog
 
 
-@lru_cache(maxsize=1)
-def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
-    """Load all constructor items from items/constructors/<family>/*.json."""
-    catalog: Dict[str, Dict[str, Any]] = {}
-    con_root = APP_DIR / "items" / "constructors"
-    if not con_root.exists() or not con_root.is_dir():
-        return catalog
+def _load_family_items_from_root(root: Any) -> Dict[str, Any]:
+    """Scan a root directory for <family>/ subdirs containing family.json + mainline items.
+    Returns a flat dict of item_id -> raw entry dict."""
+    raw: Dict[str, Any] = {}
+    if not root.exists() or not root.is_dir():
+        return raw
     for family_dir in sorted(
-        [p for p in con_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
+        [p for p in root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()
     ):
         family_path = family_dir / "family.json"
         if not family_path.exists():
@@ -798,24 +806,68 @@ def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
             item_id = str(entry.get("id") or "").strip()
             if not item_id:
                 continue
+            raw[item_id] = entry
+    return raw
+
+
+@lru_cache(maxsize=1)
+def load_miner_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all miner items from items/constructors/<family>/ and items/miners/<family>/."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    # Scan legacy constructors dir (now large_body miners) plus new miners dir
+    for root in (APP_DIR / "items" / "constructors", APP_DIR / "items" / "miners"):
+        for item_id, entry in _load_family_items_from_root(root).items():
             perf = entry.get("performance") or {}
             power_req = entry.get("power_requirements") or {}
+            miner_type = str(entry.get("miner_type") or "large_body")
             catalog[item_id] = {
                 "item_id": item_id,
                 "name": str(entry.get("name") or item_id),
-                "type": "constructor",
-                "category_id": "constructor",
+                "type": "miner",
+                "category_id": "miner",
+                "miner_type": miner_type,
                 "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
                 "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
                 "mining_rate_kg_per_hr": max(0.0, float(perf.get("mining_rate_kg_per_hr") or 0.0)),
-                "construction_rate_kg_per_hr": max(0.0, float(perf.get("construction_rate_kg_per_hr") or 0.0)),
                 "excavation_type": str(perf.get("excavation_type") or ""),
                 "operational_environment": str(entry.get("operational_environment") or "surface_gravity"),
                 "min_surface_gravity_ms2": max(0.0, float(entry.get("min_surface_gravity_ms2") or 0.0)),
+                "max_surface_gravity_ms2": float(entry.get("max_surface_gravity_ms2") or 0.0) or None,
+                "min_volatile_mass_fraction": max(0.0, float(entry.get("min_volatile_mass_fraction") or 0.0)),
                 "branch": str(entry.get("branch") or ""),
                 "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
                 "research_node": str(entry.get("research_node") or ""),
             }
+    return catalog
+
+
+def load_constructor_catalog() -> Dict[str, Dict[str, Any]]:
+    """Backward-compatibility alias for load_miner_catalog()."""
+    return load_miner_catalog()
+
+
+@lru_cache(maxsize=1)
+def load_printer_catalog() -> Dict[str, Dict[str, Any]]:
+    """Load all printer items from items/printers/<family>/."""
+    catalog: Dict[str, Dict[str, Any]] = {}
+    for item_id, entry in _load_family_items_from_root(APP_DIR / "items" / "printers").items():
+        perf = entry.get("performance") or {}
+        power_req = entry.get("power_requirements") or {}
+        catalog[item_id] = {
+            "item_id": item_id,
+            "name": str(entry.get("name") or item_id),
+            "type": "printer",
+            "category_id": "printer",
+            "printer_type": str(entry.get("printer_type") or "industrial"),
+            "mass_kg": max(0.0, float(entry.get("mass_t") or 0.0) * 1000.0),
+            "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
+            "construction_rate_kg_per_hr": max(0.0, float(perf.get("construction_rate_kg_per_hr") or 0.0)),
+            "fabrication_type": str(perf.get("fabrication_type") or ""),
+            "operational_environment": str(entry.get("operational_environment") or "surface"),
+            "branch": str(entry.get("branch") or ""),
+            "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
+            "research_node": str(entry.get("research_node") or ""),
+        }
     return catalog
 
 
@@ -931,6 +983,10 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
       waste heat (reactor excess).
     - Radiators reject waste heat.
     - Generators do NOT create thermal energy — they only transform it.
+
+    Site-only equipment (miners, refineries, printers, constructors, ISRU,
+    robonauts) is tracked separately — these modules only draw power when
+    deployed at a surface facility, not while loaded on a ship.
     """
     reactor_thermal_mw = 0.0
     thruster_thermal_mw = 0.0
@@ -938,9 +994,11 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     generator_electric_mw = 0.0
     generator_waste_heat_mw = 0.0
     radiator_heat_rejection_mw = 0.0
-    robonaut_electric_mw = 0.0
-    constructor_electric_mw = 0.0
+    # Ship-active consumer categories (draw power in flight)
+    prospector_electric_mw = 0.0
     isru_electric_mw = 0.0
+    # Site-only consumer categories (dormant in flight)
+    constructor_electric_mw = 0.0
     refinery_electric_mw = 0.0
 
     for part in parts:
@@ -955,14 +1013,19 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
             generator_waste_heat_mw += max(0.0, float(part.get("waste_heat_mw") or 0.0))
         elif cat == "radiator":
             radiator_heat_rejection_mw += max(0.0, float(part.get("heat_rejection_mw") or 0.0))
-        elif cat == "robonaut":
-            robonaut_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
-        elif cat == "constructor":
+        elif cat in ("robonaut", "prospector"):
+            prospector_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
+        elif cat in ("constructor", "miner", "printer"):
             constructor_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
         elif cat == "isru":
             isru_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
         elif cat == "refinery":
             refinery_electric_mw += max(0.0, float(part.get("electric_mw") or 0.0))
+
+    # Ship-active equipment demand (draws power in flight)
+    ship_active_electric_mw = prospector_electric_mw + isru_electric_mw
+    # Site-only demand (dormant during flight, active when deployed)
+    site_only_electric_mw = constructor_electric_mw + refinery_electric_mw
 
     # ── Thermal budget (rated values) ─────────────────────────
     total_thermal_demand_mw = thruster_thermal_mw + generator_thermal_mw_input
@@ -1002,7 +1065,10 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
     waste_heat_surplus_mw = total_waste_heat_mw - radiator_heat_rejection_mw
 
     # ── Electric balance ──────────────────────────────────────
-    electric_surplus_mw = actual_gen_electric_mw - robonaut_electric_mw - constructor_electric_mw - isru_electric_mw - refinery_electric_mw
+    # In-flight: prospectors + ISRU draw power; site-only equipment is dormant.
+    electric_surplus_mw = actual_gen_electric_mw - ship_active_electric_mw
+    # When deployed at a site, ALL consumers draw power:
+    electric_surplus_deployed_mw = actual_gen_electric_mw - ship_active_electric_mw - site_only_electric_mw
 
     return {
         "reactor_thermal_mw": round(reactor_thermal_mw, 1),
@@ -1018,11 +1084,14 @@ def compute_power_balance(parts: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_waste_heat_mw": round(total_waste_heat_mw, 1),
         "radiator_heat_rejection_mw": round(radiator_heat_rejection_mw, 1),
         "waste_heat_surplus_mw": round(waste_heat_surplus_mw, 1),
-        "robonaut_electric_mw": round(robonaut_electric_mw, 1),
+        "prospector_electric_mw": round(prospector_electric_mw, 1),
+        "robonaut_electric_mw": round(prospector_electric_mw, 1),
         "constructor_electric_mw": round(constructor_electric_mw, 1),
         "isru_electric_mw": round(isru_electric_mw, 1),
         "refinery_electric_mw": round(refinery_electric_mw, 1),
+        "site_only_electric_mw": round(site_only_electric_mw, 1),
         "electric_surplus_mw": round(electric_surplus_mw, 1),
+        "electric_surplus_deployed_mw": round(electric_surplus_deployed_mw, 1),
         "max_throttle": round(max_throttle, 4),
     }
 
@@ -1151,7 +1220,9 @@ def get_item_info(item_id: str) -> Optional[Dict[str, Any]]:
         ("generator",   load_generator_catalog),
         ("radiator",    load_radiator_catalog),
         ("storage",     load_storage_catalog),
-        ("robonaut",    load_robonaut_catalog),
+        ("prospector",  load_robonaut_catalog),
+        ("miner",      load_miner_catalog),
+        ("printer",    load_printer_catalog),
         ("constructor", load_constructor_catalog),
         ("isru",        load_isru_catalog),
         ("refinery",    load_refinery_catalog),
@@ -1237,7 +1308,10 @@ def _find_raw_item_json(item_id: str, category: str) -> Dict[str, Any]:
         "radiator":    ["radiators"],
         "storage":     ["Storage"],
         "robonaut":    ["robonauts"],
-        "constructor": ["constructors"],
+        "prospector":  ["robonauts"],
+        "constructor": ["constructors", "miners"],
+        "miner":       ["constructors", "miners"],
+        "printer":     ["printers"],
         "isru":        ["isru"],
         "refinery":    ["refineries"],
         "resource":    ["Resources"],
@@ -1274,7 +1348,8 @@ def _build_item_name_map() -> Dict[str, str]:
         load_radiator_catalog,
         load_storage_catalog,
         load_robonaut_catalog,
-        load_constructor_catalog,
+        load_miner_catalog,
+        load_printer_catalog,
         load_isru_catalog,
         load_refinery_catalog,
         load_resource_catalog,
@@ -1624,6 +1699,37 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
         "isru_heat_drill",
     ]
 
+    # ── Miner subtrees by miner_type ──────────────────────────────────────
+    _MINER_TYPE_TO_SUB = {
+        "large_body":    "miners_large_body",
+        "microgravity":  "miners_microgravity",
+        "cryovolatile":  "miners_cryovolatile",
+    }
+    _MINER_SUBTREE_LABELS = {
+        "miners_large_body":   "Large-Body",
+        "miners_microgravity": "Microgravity",
+        "miners_cryovolatile": "Cryovolatile",
+    }
+    _MINER_SUBTREE_ORDER = [
+        "miners_large_body",
+        "miners_microgravity",
+        "miners_cryovolatile",
+    ]
+
+    # ── Printer subtrees by printer_type ─────────────────────────────────
+    _PRINTER_TYPE_TO_SUB = {
+        "industrial": "printers_industrial",
+        "ship":       "printers_ship",
+    }
+    _PRINTER_SUBTREE_LABELS = {
+        "printers_industrial": "Industrial Printer",
+        "printers_ship":       "Ship Printer",
+    }
+    _PRINTER_SUBTREE_ORDER = [
+        "printers_industrial",
+        "printers_ship",
+    ]
+
     # ── Collect all items from all catalogs ────────────────────────────────
     all_items: Dict[str, List[Dict[str, Any]]] = {}
     loaders = [
@@ -1632,7 +1738,8 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
         ("generators", load_generator_catalog),
         ("radiators", load_radiator_catalog),
         ("robonauts", load_robonaut_catalog),
-        ("constructors", load_constructor_catalog),
+        ("miners", load_miner_catalog),
+        ("printers", load_printer_catalog),
         ("isru", load_isru_catalog),
         ("refineries", load_refinery_catalog),
     ]
@@ -1651,6 +1758,12 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
             elif cat_id == "isru":
                 branch = str(item.get("branch") or "")
                 actual_key = _ISRU_BRANCH_TO_SUB.get(branch, "isru")
+            elif cat_id == "miners":
+                miner_type = str(item.get("miner_type") or "large_body")
+                actual_key = _MINER_TYPE_TO_SUB.get(miner_type, "miners_large_body")
+            elif cat_id == "printers":
+                printer_type = str(item.get("printer_type") or "industrial")
+                actual_key = _PRINTER_TYPE_TO_SUB.get(printer_type, "printers_industrial")
 
             entry = {
                 "item_id": item_id,
@@ -1683,6 +1796,18 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
             elif cat_id == "isru":
                 entry.update({
                     "water_extraction_kg_per_hr": float(item.get("water_extraction_kg_per_hr") or 0),
+                    "electric_mw": float(item.get("electric_mw") or 0),
+                })
+            elif cat_id == "miners":
+                entry.update({
+                    "mining_rate_kg_per_hr": float(item.get("mining_rate_kg_per_hr") or 0),
+                    "miner_type": str(item.get("miner_type") or "large_body"),
+                    "electric_mw": float(item.get("electric_mw") or 0),
+                })
+            elif cat_id == "printers":
+                entry.update({
+                    "construction_rate_kg_per_hr": float(item.get("construction_rate_kg_per_hr") or 0),
+                    "printer_type": str(item.get("printer_type") or "industrial"),
                     "electric_mw": float(item.get("electric_mw") or 0),
                 })
             if actual_key not in all_items:
@@ -1826,6 +1951,58 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
                 "edges": all_edges_isru,
                 "subtrees": subtrees_isru,
             })
+        elif cat_id == "miners":
+            subtrees_miners: List[Dict[str, Any]] = []
+            all_nodes_miners: List[Dict[str, Any]] = []
+            all_edges_miners: List[List[str]] = []
+
+            for col_idx, sub_id in enumerate(_MINER_SUBTREE_ORDER):
+                sub_items = all_items.get(sub_id, [])
+                x_offset = 60 + col_idx * SUBTREE_COLUMN_WIDTH
+                nodes, edges = _build_nodes_and_edges(sub_items, sub_id, x_offset)
+                subtrees_miners.append({
+                    "id": sub_id,
+                    "label": _MINER_SUBTREE_LABELS.get(sub_id, sub_id),
+                    "nodes": nodes,
+                    "edges": edges,
+                    "x_offset": x_offset,
+                })
+                all_nodes_miners.extend(nodes)
+                all_edges_miners.extend(edges)
+
+            categories.append({
+                "id": cat_id,
+                "label": cat_label,
+                "nodes": all_nodes_miners,
+                "edges": all_edges_miners,
+                "subtrees": subtrees_miners,
+            })
+        elif cat_id == "printers":
+            subtrees_printers: List[Dict[str, Any]] = []
+            all_nodes_printers: List[Dict[str, Any]] = []
+            all_edges_printers: List[List[str]] = []
+
+            for col_idx, sub_id in enumerate(_PRINTER_SUBTREE_ORDER):
+                sub_items = all_items.get(sub_id, [])
+                x_offset = 60 + col_idx * SUBTREE_COLUMN_WIDTH
+                nodes, edges = _build_nodes_and_edges(sub_items, sub_id, x_offset)
+                subtrees_printers.append({
+                    "id": sub_id,
+                    "label": _PRINTER_SUBTREE_LABELS.get(sub_id, sub_id),
+                    "nodes": nodes,
+                    "edges": edges,
+                    "x_offset": x_offset,
+                })
+                all_nodes_printers.extend(nodes)
+                all_edges_printers.extend(edges)
+
+            categories.append({
+                "id": cat_id,
+                "label": cat_label,
+                "nodes": all_nodes_printers,
+                "edges": all_edges_printers,
+                "subtrees": subtrees_printers,
+            })
         else:
             # Single vertical path
             items = all_items.get(cat_id, [])
@@ -1844,6 +2021,129 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Unified Research Tree (v3) — single tree from config/research_tree.json
+# ---------------------------------------------------------------------------
+
+def build_unified_research_tree() -> Dict[str, Any]:
+    """Build the unified research tree.
+
+    Loads the tree structure from ``config/research_tree.json`` and attaches
+    catalog items to each node based on the item's ``research_node`` field.
+    """
+    tree_path = Path(APP_DIR) / "config" / "research_tree.json"
+    with open(tree_path, "r") as f:
+        tree_config = json.load(f)
+
+    # ── Collect all items grouped by research_node ────────────────────────
+    items_by_node: Dict[str, List[Dict[str, Any]]] = {}
+
+    loaders: List[Tuple[str, Callable]] = [
+        ("thrusters", load_thruster_main_catalog),
+        ("reactors", load_reactor_catalog),
+        ("generators", load_generator_catalog),
+        ("radiators", load_radiator_catalog),
+        ("robonauts", load_robonaut_catalog),
+        ("miners", load_miner_catalog),
+        ("printers", load_printer_catalog),
+        ("isru", load_isru_catalog),
+        ("refineries", load_refinery_catalog),
+    ]
+
+    for cat_id, loader_fn in loaders:
+        catalog = loader_fn()
+        for item_id, item in catalog.items():
+            research_node = str(item.get("research_node") or "").strip()
+            if not research_node:
+                continue
+
+            if cat_id == "thrusters":
+                category_id = "thruster"
+            elif cat_id == "reactors":
+                category_id = "reactor"
+            elif cat_id == "generators":
+                category_id = "generator"
+            elif cat_id == "radiators":
+                category_id = "radiator"
+            elif cat_id == "robonauts":
+                category_id = "prospector"
+            elif cat_id == "miners":
+                category_id = "miner"
+            elif cat_id == "printers":
+                category_id = "printer"
+            elif cat_id == "refineries":
+                category_id = "refinery"
+            else:
+                category_id = str(item.get("category_id") or cat_id).rstrip("s")
+
+            entry: Dict[str, Any] = {
+                "item_id": item_id,
+                "name": item.get("name", item_id),
+                "mass_kg": float(item.get("mass_kg") or item.get("dry_mass_kg") or 0),
+                "tech_level": float(item.get("tech_level") or 1),
+                "category": cat_id,
+                "category_id": category_id,
+                "branch": str(item.get("branch") or ""),
+                "research_node": research_node,
+            }
+
+            # Category-specific stats
+            if cat_id == "thrusters":
+                entry.update({
+                    "thrust_kn": float(item.get("thrust_kn") or 0),
+                    "isp_s": float(item.get("isp_s") or 0),
+                    "thermal_mw": float(item.get("thermal_mw") or 0),
+                    "rated_temp_k": float(item.get("rated_temp_k") or 0),
+                    "family": str(item.get("thruster_family") or ""),
+                })
+            elif cat_id == "reactors":
+                entry.update({
+                    "thermal_mw": float(item.get("thermal_mw") or 0),
+                    "core_temp_k": float(item.get("core_temp_k") or 0),
+                })
+            elif cat_id == "generators":
+                entry["electric_mw"] = float(item.get("electric_mw") or 0)
+            elif cat_id == "radiators":
+                entry["heat_rejection_mw"] = float(item.get("heat_rejection_mw") or 0)
+            elif cat_id == "robonauts":
+                entry["electric_mw"] = float(item.get("electric_mw") or 0)
+                entry["prospect_range_km"] = float(item.get("prospect_range_km") or 0)
+                entry["scan_rate_km2_per_hr"] = float(item.get("scan_rate_km2_per_hr") or 0)
+            elif cat_id in ("isru", "miners"):
+                entry["electric_mw"] = float(item.get("electric_mw") or 0)
+                if cat_id == "isru":
+                    entry["water_extraction_kg_per_hr"] = float(item.get("water_extraction_kg_per_hr") or 0)
+                    entry["min_water_ice_fraction"] = float(item.get("min_water_ice_fraction") or 0)
+                    entry["max_water_ice_fraction"] = float(item.get("max_water_ice_fraction") or 1)
+                else:
+                    entry["mining_rate_kg_per_hr"] = float(item.get("mining_rate_kg_per_hr") or 0)
+                    entry["miner_type"] = str(item.get("miner_type") or "")
+            elif cat_id == "printers":
+                entry["construction_rate_kg_per_hr"] = float(item.get("construction_rate_kg_per_hr") or 0)
+                entry["printer_type"] = str(item.get("printer_type") or "")
+                entry["electric_mw"] = float(item.get("electric_mw") or 0)
+
+            items_by_node.setdefault(research_node, []).append(entry)
+
+    # ── Build node list with attached items ───────────────────────────────
+    nodes: List[Dict[str, Any]] = []
+    for node_def in tree_config["nodes"]:
+        node = dict(node_def)
+        node_id = node["id"]
+        node["items"] = sorted(
+            items_by_node.get(node_id, []),
+            key=lambda x: (x.get("tech_level", 0), x.get("name", "")),
+        )
+        nodes.append(node)
+
+    return {
+        "nodes": nodes,
+        "edges": tree_config["edges"],
+        "style": "unified",
+        "version": "3.0",
+    }
+
+
 def canonical_item_category(raw: Any) -> str:
     text = str(raw or "").strip().lower()
     if not text:
@@ -1856,9 +2156,9 @@ def canonical_item_category(raw: Any) -> str:
 
 def normalize_parts(
     raw_parts: Any,
-    thruster_catalog: Dict[str, Dict[str, Any]],
-    storage_catalog: Dict[str, Dict[str, Any]],
-    canonical_item_category: Callable[[Any], str],
+    thruster_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    storage_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    canonical_item_category: Optional[Callable[[Any], str]] = None,
     reactor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     generator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -1868,6 +2168,16 @@ def normalize_parts(
 ) -> List[Dict[str, Any]]:
     if not isinstance(raw_parts, list):
         return []
+
+    # Backward compatibility for legacy positional form:
+    # normalize_parts(raw_parts, thruster_catalog, canonical_item_category, ...)
+    if callable(storage_catalog) and canonical_item_category is None:
+        canonical_item_category = storage_catalog  # type: ignore[assignment]
+        storage_catalog = None
+
+    _thruster_catalog = thruster_catalog or {}
+    _storage_catalog = storage_catalog or {}
+    _canonical_item_category = canonical_item_category or globals()["canonical_item_category"]
 
     _reactor_catalog = reactor_catalog or {}
     _generator_catalog = generator_catalog or {}
@@ -1882,11 +2192,11 @@ def normalize_parts(
             label = entry.strip()
             if not label:
                 continue
-            if label in thruster_catalog:
-                normalized.append(dict(thruster_catalog[label]))
+            if label in _thruster_catalog:
+                normalized.append(dict(_thruster_catalog[label]))
                 continue
-            if label in storage_catalog:
-                normalized.append(dict(storage_catalog[label]))
+            if label in _storage_catalog:
+                normalized.append(dict(_storage_catalog[label]))
                 continue
             if label in _reactor_catalog:
                 normalized.append(dict(_reactor_catalog[label]))
@@ -1906,18 +2216,18 @@ def normalize_parts(
             if label in _refinery_catalog:
                 normalized.append(dict(_refinery_catalog[label]))
                 continue
-            category_id = canonical_item_category(label)
+            category_id = _canonical_item_category(label)
             normalized.append({"name": label, "type": category_id, "category_id": category_id})
             continue
         if isinstance(entry, dict):
             raw_item_id = str(entry.get("item_id") or entry.get("id") or "").strip()
-            if raw_item_id and raw_item_id in thruster_catalog:
-                merged = dict(thruster_catalog[raw_item_id])
+            if raw_item_id and raw_item_id in _thruster_catalog:
+                merged = dict(_thruster_catalog[raw_item_id])
                 merged.update(entry)
                 normalized.append(merged)
                 continue
-            if raw_item_id and raw_item_id in storage_catalog:
-                merged = dict(storage_catalog[raw_item_id])
+            if raw_item_id and raw_item_id in _storage_catalog:
+                merged = dict(_storage_catalog[raw_item_id])
                 merged.update(entry)
                 normalized.append(merged)
                 continue
@@ -1957,12 +2267,63 @@ def normalize_parts(
                 continue
             item = dict(entry)
             category_input = item.get("category_id") or item.get("type") or item.get("category") or name
-            category_id = canonical_item_category(category_input)
+            category_id = _canonical_item_category(category_input)
             item["name"] = name
             item["type"] = category_id
             item["category_id"] = category_id
             normalized.append(item)
     return normalized
+
+
+def find_incompatible_reactor_thruster_pairs(parts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return incompatible reactor/thruster pairings from normalized parts.
+
+    Compatibility rule (when data exists):
+    - Each thruster may declare ``compatible_reactor_branches``.
+    - If at least one reactor is installed and a thruster declares a non-empty
+      compatibility list, reactor branch must be included.
+    """
+    reactors: List[Dict[str, Any]] = []
+    thrusters: List[Dict[str, Any]] = []
+
+    for part in parts or []:
+        cat = str(part.get("category_id") or part.get("type") or "").strip().lower()
+        if cat == "reactor":
+            reactors.append(part)
+        elif cat == "thruster":
+            thrusters.append(part)
+
+    if not reactors or not thrusters:
+        return []
+
+    incompatible: List[Dict[str, Any]] = []
+    reactor_branches = [str(r.get("branch") or "").strip().lower() for r in reactors]
+
+    for thruster in thrusters:
+        compat = thruster.get("compatible_reactor_branches") or []
+        if isinstance(compat, str):
+            compat = [compat]
+        compat_norm = [str(b or "").strip().lower() for b in compat if str(b or "").strip()]
+        if not compat_norm:
+            branch = str(thruster.get("branch") or "").strip().lower()
+            if branch in ("solid_core", "advanced_solid_core", "pebble_bed", "advanced_pebble_bed"):
+                compat_norm = ["solid_core", "advanced_solid_core", "pebble_bed", "advanced_pebble_bed"]
+            elif branch in ("liquid_core", "advanced_liquid_core", "vapor_core", "closed_cycle_gas_core", "open_cycle_gas_core"):
+                compat_norm = ["liquid_core", "advanced_liquid_core", "vapor_core", "closed_cycle_gas_core", "open_cycle_gas_core"]
+            else:
+                continue
+
+        if not any(branch in compat_norm for branch in reactor_branches if branch):
+            incompatible.append(
+                {
+                    "reactor_branch": next((b for b in reactor_branches if b), "unknown"),
+                    "thruster_name": str(thruster.get("name") or thruster.get("item_id") or "Thruster"),
+                    "thruster_item_id": str(thruster.get("item_id") or ""),
+                    "compatible_reactor_branches": compat_norm,
+                }
+            )
+
+    return incompatible
 
 
 def derive_ship_stats_from_parts(
@@ -1973,52 +2334,117 @@ def derive_ship_stats_from_parts(
     dry_mass_kg = 0.0
     water_mass_kg = 0.0
     isp_values: List[float] = []
+    base_isp_values: List[float] = []
     thrust_total_kn = 0.0
+    base_thrust_total_kn = 0.0
+
+    reactors: List[Dict[str, Any]] = []
+    for part in parts:
+        part_type = str(part.get("type") or "").lower()
+        if part_type == "reactor" or str(part.get("category_id") or "").lower() == "reactor":
+            reactors.append(part)
+
+    primary_reactor = None
+    if reactors:
+        primary_reactor = max(reactors, key=lambda r: float(r.get("thermal_mw") or 0.0))
+
+    incompatible_pairs = find_incompatible_reactor_thruster_pairs(parts)
+    incompatible_thruster_ids = {
+        str(p.get("thruster_item_id") or "").strip() for p in incompatible_pairs if str(p.get("thruster_item_id") or "").strip()
+    }
 
     for part in parts:
         part_type = str(part.get("type") or "").lower()
         dry_mass_kg += max(0.0, float(part.get("mass_kg") or 0.0))
 
-        # Fuel capacity: for water tanks with known capacity_m3 always
-        # use volume * density.  Legacy cargo fields (water_kg, fuel_kg)
-        # represent *fill level*, not tank capacity, and may be stale.
-        capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
-        resource_id = str(part.get("resource_id") or "").strip()
-        if capacity_m3 > 0.0 and resource_id == "water":
-            resource = resource_catalog.get(resource_id) or {}
-            density = max(0.0, float(resource.get("mass_per_m3_kg") or 0.0))
-            if density > 0.0:
-                water_mass_kg += capacity_m3 * density
+        part_fuel_capacity_kg = max(0.0, float(part.get("fuel_capacity_kg") or 0.0))
+        if part_fuel_capacity_kg > 0.0:
+            water_mass_kg += part_fuel_capacity_kg
+            # Explicit fuel capacity represents tank capacity; ignore legacy
+            # fill-level fields for this part to avoid double counting.
+            pass
+        else:
+
+            # Fuel capacity: for water tanks with known capacity_m3 always
+            # use volume * density.  Legacy cargo fields (water_kg, fuel_kg)
+            # represent *fill level*, not tank capacity, and may be stale.
+            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+            resource_id = str(part.get("resource_id") or "").strip()
+            if capacity_m3 > 0.0 and resource_id == "water":
+                resource = resource_catalog.get(resource_id) or {}
+                density = max(0.0, float(resource.get("mass_per_m3_kg") or 0.0))
+                if density > 0.0:
+                    water_mass_kg += capacity_m3 * density
+                else:
+                    # No density info — fall back to legacy fields
+                    part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
+                    water_mass_kg += part_water_kg
             else:
-                # No density info — fall back to legacy fields
+                # Non-water-tank parts (legacy propellant fields)
                 part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
                 water_mass_kg += part_water_kg
-        else:
-            # Non-water-tank parts (legacy propellant fields)
-            part_water_kg = max(0.0, float(part.get("water_kg") or part.get("fuel_kg") or 0.0))
-            water_mass_kg += part_water_kg
 
+        is_thruster = part_type == "thruster" or "thruster" in str(part.get("name", "")).lower()
         part_isp = float(part.get("isp_s") or 0.0)
-        if part_isp > 0.0 and (part_type == "thruster" or "thruster" in str(part.get("name", "")).lower()):
-            isp_values.append(part_isp)
+        part_thrust_kn = max(0.0, float(part.get("thrust_kn") or 0.0))
 
-        thrust_total_kn += max(0.0, float(part.get("thrust_kn") or 0.0))
+        if is_thruster:
+            thruster_item_id = str(part.get("item_id") or "").strip()
+            if thruster_item_id and thruster_item_id in incompatible_thruster_ids:
+                continue
+
+            tuned_isp = part_isp
+            tuned_thrust = part_thrust_kn
+            if primary_reactor:
+                reactor_core_temp_k = max(0.0, float(primary_reactor.get("core_temp_k") or 0.0))
+                thruster_rated_temp_k = max(0.0, float(part.get("rated_temp_k") or 0.0))
+                if reactor_core_temp_k > 0.0 and thruster_rated_temp_k > 0.0:
+                    temp_ratio = math.sqrt(reactor_core_temp_k / thruster_rated_temp_k)
+                    if temp_ratio > 0.0:
+                        tuned_isp = part_isp * temp_ratio
+                        tuned_thrust = part_thrust_kn / temp_ratio
+
+            if tuned_isp > 0.0:
+                isp_values.append(tuned_isp)
+            if part_isp > 0.0:
+                base_isp_values.append(part_isp)
+            thrust_total_kn += tuned_thrust
+            base_thrust_total_kn += part_thrust_kn
+            continue
+
+        thrust_total_kn += part_thrust_kn
+        base_thrust_total_kn += part_thrust_kn
 
     resolved_dry_mass_kg = max(0.0, dry_mass_kg)
     resolved_fuel_capacity_kg = max(0.0, water_mass_kg)
     if current_fuel_kg is None:
         resolved_fuel_kg = resolved_fuel_capacity_kg
     else:
-        resolved_fuel_kg = max(0.0, min(float(current_fuel_kg or 0.0), resolved_fuel_capacity_kg))
+        # Don't clamp to tank capacity — callers (shipyard route, fleet)
+        # enforce their own limits (available water, unlimited boost, etc.).
+        resolved_fuel_kg = max(0.0, float(current_fuel_kg or 0.0))
 
     resolved_isp_s = max(isp_values) if isp_values else 0.0
+    resolved_base_isp_s = max(base_isp_values) if base_isp_values else 0.0
+
+    isp_modifier_pct = 0.0
+    if resolved_base_isp_s > 0.0:
+        isp_modifier_pct = ((resolved_isp_s / resolved_base_isp_s) - 1.0) * 100.0
+
+    thrust_modifier_pct = 0.0
+    if base_thrust_total_kn > 0.0:
+        thrust_modifier_pct = ((thrust_total_kn / base_thrust_total_kn) - 1.0) * 100.0
 
     return {
         "dry_mass_kg": resolved_dry_mass_kg,
         "fuel_kg": resolved_fuel_kg,
         "fuel_capacity_kg": resolved_fuel_capacity_kg,
         "isp_s": resolved_isp_s,
+        "base_isp_s": resolved_base_isp_s,
+        "isp_modifier_pct": isp_modifier_pct,
         "thrust_kn": thrust_total_kn,
+        "base_thrust_kn": base_thrust_total_kn,
+        "thrust_modifier_pct": thrust_modifier_pct,
     }
 
 
@@ -2089,6 +2515,8 @@ def build_ship_stats_payload(
     parts: List[Dict[str, Any]],
     resource_catalog: Dict[str, Dict[str, Any]],
     current_fuel_kg: Optional[float] = None,
+    cargo_mass_kg: float = 0.0,
+    cargo_avg_density: float = 2500.0,
 ) -> Dict[str, float]:
     stats = derive_ship_stats_from_parts(parts, resource_catalog, current_fuel_kg=current_fuel_kg)
     wet_mass_kg = compute_wet_mass_kg(stats["dry_mass_kg"], stats["fuel_kg"])
@@ -2100,7 +2528,11 @@ def build_ship_stats_payload(
         "fuel_capacity_kg": stats["fuel_capacity_kg"],
         "wet_mass_kg": wet_mass_kg,
         "isp_s": stats["isp_s"],
+        "base_isp_s": stats["base_isp_s"],
+        "isp_modifier_pct": stats["isp_modifier_pct"],
         "thrust_kn": stats["thrust_kn"],
+        "base_thrust_kn": stats["base_thrust_kn"],
+        "thrust_modifier_pct": stats["thrust_modifier_pct"],
         "delta_v_remaining_m_s": delta_v_remaining_m_s,
         "accel_g": accel_g,
     }
@@ -2108,8 +2540,8 @@ def build_ship_stats_payload(
 
 def build_shipyard_catalog_payload(
     thruster_catalog: Dict[str, Dict[str, Any]],
-    storage_catalog: Dict[str, Dict[str, Any]],
-    resource_catalog: Dict[str, Dict[str, Any]],
+    storage_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    resource_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     recipe_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     reactor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     generator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -2118,6 +2550,8 @@ def build_shipyard_catalog_payload(
     constructor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     refinery_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    _storage_catalog = storage_catalog or {}
+    _resource_catalog = resource_catalog or {}
     parts: List[Dict[str, Any]] = []
 
     for item in (reactor_catalog or {}).values():
@@ -2129,6 +2563,7 @@ def build_shipyard_catalog_payload(
                 "category_id": "reactor",
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
+                "core_temp_k": float(item.get("core_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
             }
@@ -2145,6 +2580,7 @@ def build_shipyard_catalog_payload(
                 "thrust_kn": float(item.get("thrust_kn") or 0.0),
                 "isp_s": float(item.get("isp_s") or 0.0),
                 "thermal_mw": float(item.get("thermal_mw") or 0.0),
+                "rated_temp_k": float(item.get("rated_temp_k") or 0.0),
                 "family": str(item.get("thruster_family") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
@@ -2188,13 +2624,12 @@ def build_shipyard_catalog_payload(
             {
                 "item_id": item.get("item_id"),
                 "name": item.get("name"),
-                "type": "robonaut",
-                "category_id": "robonaut",
+                "type": "prospector",
+                "category_id": "prospector",
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "electric_mw": float(item.get("electric_mw") or 0.0),
                 "prospect_range_km": float(item.get("prospect_range_km") or 0.0),
                 "scan_rate_km2_per_hr": float(item.get("scan_rate_km2_per_hr") or 0.0),
-                "melt_rate_t_per_hr": float(item.get("melt_rate_t_per_hr") or 0.0),
                 "emission_type": str(item.get("emission_type") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
@@ -2206,8 +2641,8 @@ def build_shipyard_catalog_payload(
             {
                 "item_id": item.get("item_id"),
                 "name": item.get("name"),
-                "type": "constructor",
-                "category_id": "constructor",
+                "type": "miner",
+                "category_id": "miner",
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "electric_mw": float(item.get("electric_mw") or 0.0),
                 "mining_rate_kg_per_hr": float(item.get("mining_rate_kg_per_hr") or 0.0),
@@ -2239,9 +2674,9 @@ def build_shipyard_catalog_payload(
             }
         )
 
-    for item in storage_catalog.values():
+    for item in _storage_catalog.values():
         resource_id = str(item.get("resource_id") or "")
-        density = float((resource_catalog.get(resource_id) or {}).get("mass_per_m3_kg") or 0.0)
+        density = float((_resource_catalog.get(resource_id) or {}).get("mass_per_m3_kg") or 0.0)
         capacity_m3 = float(item.get("capacity_m3") or 0.0)
         parts.append(
             {

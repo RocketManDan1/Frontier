@@ -70,27 +70,17 @@ _REFINERY_BRANCH_TO_SUB = {
 }
 
 
-def _tech_node_id_for_item(loader_name: str, tech_level: float, branch: str = "") -> Optional[str]:
-    """Compute the tech-tree node ID that gates a catalog item.
+def _tech_node_id_for_item(loader_name: str, tech_level: float, branch: str = "", item: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Return the unified research-tree node ID that gates a catalog item.
 
-    Items not on the tech tree (resources, storage) return None.
+    With the unified tree (v3) each item carries its ``research_node`` directly.
+    Items without a node (resources, storage) return ``None``.
     """
-    _LOADER_TO_TREE_PREFIX = {
-        "thruster": "thrusters",
-        "reactor": "reactors",
-        "generator": "generators",
-        "radiator": "radiators",
-        "constructor": "constructors",
-        "robonaut": "robonauts",
-        "refinery": None,  # handled via branch lookup
-    }
-    prefix = _LOADER_TO_TREE_PREFIX.get(loader_name)
-    if prefix is None and loader_name == "refinery":
-        prefix = _REFINERY_BRANCH_TO_SUB.get(branch, "refineries")
-    if prefix is None:
-        return None  # storage / resource — no tech gate
-    lvl_str = str(int(tech_level)) if tech_level == int(tech_level) else str(tech_level)
-    return f"{prefix}_lvl_{lvl_str}"
+    if item is not None:
+        node = str(item.get("research_node") or "").strip()
+        return node if node else None
+    # Fallback for callers that don't pass the item dict
+    return None
 
 
 def _main():
@@ -442,6 +432,8 @@ def ensure_org_for_user(conn: sqlite3.Connection, username: str) -> str:
         "INSERT INTO org_members (username, org_id) VALUES (?, ?)",
         (username, org_id),
     )
+    # Auto-unlock starter_corp on the unified research tree
+    _auto_unlock_starter_corp(conn, org_id, now)
     conn.commit()
     return org_id
 
@@ -455,7 +447,17 @@ def create_org_for_corp(conn: sqlite3.Connection, corp_id: str, corp_name: str) 
            VALUES (?, ?, ?, 20.0, ?, ?)""",
         (org_id, f"{corp_name}", MONTHLY_INCOME_USD, now, now),
     )
+    # Auto-unlock starter_corp on the unified research tree
+    _auto_unlock_starter_corp(conn, org_id, now)
     return org_id
+
+
+def _auto_unlock_starter_corp(conn: sqlite3.Connection, org_id: str, now: float) -> None:
+    """Insert the starter_corp research unlock for a new organization."""
+    conn.execute(
+        "INSERT OR IGNORE INTO research_unlocks (org_id, tech_id, unlocked_at, cost_points) VALUES (?, 'starter_corp', ?, 0.0)",
+        (org_id, now),
+    )
 
 
 def get_org_id_for_corp(conn: sqlite3.Connection, corp_id: str) -> Optional[str]:
@@ -850,6 +852,8 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
         ("generator", catalog_service.load_generator_catalog),
         ("radiator", catalog_service.load_radiator_catalog),
         ("constructor", catalog_service.load_constructor_catalog),
+        ("miner", catalog_service.load_miner_catalog),
+        ("printer", catalog_service.load_printer_catalog),
         ("refinery", catalog_service.load_refinery_catalog),
         ("robonaut", catalog_service.load_robonaut_catalog),
         ("storage", catalog_service.load_storage_catalog),
@@ -860,7 +864,7 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
             if tech_lvl not in BOOSTABLE_TECH_LEVELS:
                 continue
             branch = str(item.get("branch") or "")
-            node_id = _tech_node_id_for_item(loader_name, tech_lvl, branch)
+            node_id = _tech_node_id_for_item(loader_name, tech_lvl, branch, item=item)
             mass = float(item.get("mass_kg") or item.get("dry_mass_kg") or 0.0)
             part_candidates.append({
                 "item_id": iid,
@@ -1119,7 +1123,10 @@ def _resolve_part_dict_for_inventory(item_id: str, name: str, item_type: str, ma
         "generator": catalog_service.load_generator_catalog,
         "radiator": catalog_service.load_radiator_catalog,
         "constructor": catalog_service.load_constructor_catalog,
+        "miner": catalog_service.load_miner_catalog,
+        "printer": catalog_service.load_printer_catalog,
         "refinery": catalog_service.load_refinery_catalog,
+        "prospector": catalog_service.load_robonaut_catalog,
         "robonaut": catalog_service.load_robonaut_catalog,
         "storage": catalog_service.load_storage_catalog,
     }
@@ -1150,7 +1157,10 @@ def _inventory_payload_json_for_item(item_id: str, name: str, item_type: str, ma
         "generator": catalog_service.load_generator_catalog,
         "radiator": catalog_service.load_radiator_catalog,
         "constructor": catalog_service.load_constructor_catalog,
+        "miner": catalog_service.load_miner_catalog,
+        "printer": catalog_service.load_printer_catalog,
         "refinery": catalog_service.load_refinery_catalog,
+        "prospector": catalog_service.load_robonaut_catalog,
         "robonaut": catalog_service.load_robonaut_catalog,
         "storage": catalog_service.load_storage_catalog,
     }
@@ -1287,8 +1297,8 @@ def _distance_km(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 def _get_ship_robonaut_range(parts_json: str) -> float:
     """
-    Return the maximum prospect_range_km from all robonauts on the ship.
-    Returns 0 if no robonaut is equipped.
+    Return the maximum prospect_range_km from all prospectors on the ship.
+    Returns 0 if no prospector is equipped.
     """
     parts = json.loads(parts_json or "[]")
     max_range = 0.0
@@ -1296,7 +1306,7 @@ def _get_ship_robonaut_range(parts_json: str) -> float:
         if not isinstance(p, dict):
             continue
         cat = str(p.get("category") or p.get("category_id") or p.get("type") or "").lower()
-        if cat in ("robonaut", "robonauts"):
+        if cat in ("prospector", "robonaut", "robonauts"):
             rng = float(p.get("prospect_range_km") or 0.0)
             if rng > max_range:
                 max_range = rng
@@ -1309,7 +1319,7 @@ def get_sites_in_range(
     ship_id: str,
 ) -> Dict[str, Any]:
     """
-    Get all surface sites within prospecting range of a ship's robonaut.
+    Get all surface sites within prospecting range of a ship's prospector.
     Returns ship info and list of sites with distance and prospected status.
     """
     ship = conn.execute(
@@ -1322,7 +1332,7 @@ def get_sites_in_range(
     parts_json = ship["parts_json"] or "[]"
     prospect_range = _get_ship_robonaut_range(parts_json)
     if prospect_range <= 0:
-        raise ValueError("Ship has no robonaut equipped for prospecting")
+        raise ValueError("Ship has no prospector equipped for prospecting")
 
     ship_loc_id = str(ship["location_id"] or "")
     ship_pos = _get_location_xy(conn, ship_loc_id)
@@ -1393,8 +1403,8 @@ def prospect_site(
     site_location_id: str,
 ) -> Dict[str, Any]:
     """
-    Prospect a surface site using a ship with a robonaut.
-    The ship must be within the robonaut's prospect_range_km of the site's orbit node.
+    Prospect a surface site using a ship with a prospector.
+    The ship must be within the prospector's prospect_range_km of the site's orbit node.
     Reveals actual resource distribution to the org.
     """
     ship = conn.execute(
@@ -1404,11 +1414,11 @@ def prospect_site(
     if not ship:
         raise ValueError("Ship not found")
 
-    # Check ship has a robonaut and get its range
+    # Check ship has a prospector and get its range
     parts_json = ship["parts_json"] or "[]"
     prospect_range = _get_ship_robonaut_range(parts_json)
     if prospect_range <= 0:
-        raise ValueError("Ship must have a robonaut equipped to prospect")
+        raise ValueError("Ship must have a prospector equipped to prospect")
 
     # Verify it's a surface site
     site = conn.execute(
@@ -1433,7 +1443,7 @@ def prospect_site(
     dist = _distance_km(ship_pos, site_orbit_pos)
     if dist > prospect_range:
         raise ValueError(
-            f"Site is {dist:,.0f} km away but robonaut range is only {prospect_range:,.0f} km"
+            f"Site is {dist:,.0f} km away but prospector range is only {prospect_range:,.0f} km"
         )
 
     # Check if already prospected

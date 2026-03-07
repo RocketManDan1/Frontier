@@ -1,7 +1,7 @@
 {
   "id": "stork_cc_refractory",
   "name": "C/C Refractory Panel \"Stork\"",
-  "research_node": "high_temp_rigid_panel_radiator",
+  "research_node": "rigid_panel_radiators",
   "tech_level": 3,
   "branch": "carbon_composite",
   "mass_t": 27.5,
@@ -16,6 +16,10 @@
   "output": {
     "heat_rejection_mw": 800
   },
-  "description": "A 10,600 m² array of carbon-carbon composite structural panels with refractory oxide surface treatment — a materials combination developed for high-enthalpy atmospheric re-entry structures and adapted for sustained 1100 K space radiation service. The composite's low areal density (2.6 kg/m²) keeps the array lighter than the titanium Heron despite spanning three times the area. Required for vessels running segmented cascade or SP-100 class thermoelectric generators.",
-  "ui_tags": ["rigid_panel", "carbon_composite", "high_temp"]
+  "description": "A 10,600 m\u00b2 array of carbon-carbon composite structural panels with refractory oxide surface treatment \u2014 a materials combination developed for high-enthalpy atmospheric re-entry structures and adapted for sustained 1100 K space radiation service. The composite's low areal density (2.6 kg/m\u00b2) keeps the array lighter than the titanium Heron despite spanning three times the area. Required for vessels running segmented cascade or SP-100 class thermoelectric generators.",
+  "ui_tags": [
+    "rigid_panel",
+    "carbon_composite",
+    "high_temp"
+  ]
 }

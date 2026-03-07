@@ -428,7 +428,7 @@ def api_facility_industry_overview(
     idle_constructors = [
         {"id": e["id"], "name": e["name"], "config": e["config"]}
         for e in equipment
-        if e["category"] in ("constructor", "robonaut") and e.get("mode", "idle") == "idle"
+        if e["category"] in ("constructor", "isru") and e.get("mode", "idle") == "idle"
     ]
 
     refinery_slots = industry_service.get_refinery_slots(conn, location_id, facility_id=facility_id)
@@ -498,7 +498,7 @@ def api_industry_overview(
     idle_constructors = [
         {"id": e["id"], "name": e["name"], "config": e["config"]}
         for e in equipment
-        if e["category"] in ("constructor", "robonaut") and e.get("mode", "idle") == "idle"
+        if e["category"] in ("constructor", "isru") and e.get("mode", "idle") == "idle"
     ]
 
     # Refinery slots

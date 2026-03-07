@@ -1,0 +1,36 @@
+{
+  "id": "lcn_2_cascade",
+  "name": "LCN-2 \"Cascade\"",
+  "research_node": "advanced_liquid_core",
+  "tech_level": 3.0,
+  "branch": "liquid_core",
+  "mass_t": 45.0,
+  "compatible_reactor_branches": [
+    "liquid_core",
+    "vapor_core",
+    "gas_core"
+  ],
+  "performance": {
+    "max_thrust_kN": 750,
+    "isp_s": 1250,
+    "rated_temp_k": 5250,
+    "fuel_capacity_kg": 250000,
+    "cargo_capacity_kg": 175000
+  },
+  "power_requirements": {
+    "thermal_mw": 2400
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "description": "An advanced regeneratively-cooled engine with a film-cooled expansion nozzle, designed for sustained high-temperature operation. Compatible with liquid, vapor, and gas-core reactors \u2014 the versatile workhorse of the mid-tech fleet.",
+  "ui_tags": [
+    "liquid_core"
+  ]
+}

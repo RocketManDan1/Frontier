@@ -1,177 +1,296 @@
 (function () {
-  const typeTabsEl = document.getElementById("researchTypeTabs");
-  const treeTabsEl = document.getElementById("researchTreeTabs");
-  const treeEl = document.getElementById("researchTree");
-  const infoTitleEl = document.getElementById("researchInfoTitle");
-  const infoTreeEl = document.getElementById("researchInfoTree");
-  const infoListEl = document.getElementById("researchInfoList");
-  const unlockSummaryEl = document.getElementById("researchUnlockSummary");
-  const unlockRowsEl = document.getElementById("researchUnlockRows");
+  var treeEl = document.getElementById("researchTree");
+  var viewportEl = document.querySelector(".researchViewport");
+  var infoTitleEl = document.getElementById("researchInfoTitle");
+  var infoTreeEl = document.getElementById("researchInfoTree");
+  var infoListEl = document.getElementById("researchInfoList");
+  var unlockSummaryEl = document.getElementById("researchUnlockSummary");
+  var unlockRowsEl = document.getElementById("researchUnlockRows");
+  var rpIndicatorEl = document.getElementById("researchRpIndicator");
 
-  const NODE_WIDTH = 280;
-  const NODE_HEIGHT = 90;
-  const SUBTREE_COLUMN_WIDTH = 340;
+  var NODE_WIDTH = 280;
+  var NODE_HEIGHT = 90;
 
-  let techTree = null;
-  let unlockedIds = new Set();
-  let activeCategoryId = null;
-  let selectedNodeId = null;
-  let orgResearchPoints = 0;
+  var treeData = null;
+  var unlockedIds = new Set();
+  var selectedNodeId = null;
+  var orgResearchPoints = 0;
 
+  /* ── Zoom / pan state ─────────────────────────────────────────── */
+  var _zoom = 1;
+  var _panX = 0;
+  var _panY = 0;
+  var MIN_ZOOM = 0.10;
+  var MAX_ZOOM = 2.5;
+  var WHEEL_SENSITIVITY = 0.0015;
+  var _isPanning = false;
+  var _lastPtr = { x: 0, y: 0 };
+  var _didDrag = false;
+  var DRAG_THRESHOLD = 5;
+  var _treeBounds = { w: 0, h: 0 };
+  var _initialFitDone = false;
+
+  function applyTransform() {
+    treeEl.style.transform =
+      "translate(" + _panX + "px," + _panY + "px) scale(" + _zoom + ")";
+  }
+
+  function fitToView() {
+    if (!_treeBounds.w || !_treeBounds.h) return;
+    var rect = viewportEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var scX = rect.width / _treeBounds.w;
+    var scY = rect.height / _treeBounds.h;
+    _zoom = Math.min(scX, scY) * 0.92;
+    _zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, _zoom));
+    _panX = (rect.width - _treeBounds.w * _zoom) / 2;
+    _panY = (rect.height - _treeBounds.h * _zoom) / 2;
+    applyTransform();
+  }
+
+  /* ── Zoom-toward-cursor (scroll wheel) ──────────────────────── */
+  viewportEl.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var dy = Number(e.deltaY) || 0;
+    if (dy === 0) return;
+
+    var oldZ = _zoom;
+    var factor = Math.exp(-dy * WHEEL_SENSITIVITY);
+    var newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, oldZ * factor));
+    if (Math.abs(newZ - oldZ) < 1e-9) return;
+
+    var rect = viewportEl.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+
+    var wx = (mx - _panX) / oldZ;
+    var wy = (my - _panY) / oldZ;
+
+    _zoom = newZ;
+    _panX = mx - wx * newZ;
+    _panY = my - wy * newZ;
+    applyTransform();
+  }, { passive: false });
+
+  /* ── Pointer-drag panning ─────────────────────────────────────── */
+  viewportEl.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest(".kspTechNode")) return;
+    _isPanning = true;
+    _didDrag = false;
+    _lastPtr = { x: e.clientX, y: e.clientY };
+    viewportEl.setPointerCapture(e.pointerId);
+    viewportEl.style.cursor = "grabbing";
+  });
+
+  viewportEl.addEventListener("pointermove", function (e) {
+    if (!_isPanning) return;
+    var dx = e.clientX - _lastPtr.x;
+    var dy = e.clientY - _lastPtr.y;
+    if (!_didDrag && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) _didDrag = true;
+    if (_didDrag) { _panX += dx; _panY += dy; applyTransform(); }
+    _lastPtr = { x: e.clientX, y: e.clientY };
+  });
+
+  viewportEl.addEventListener("pointerup", function () {
+    _isPanning = false;
+    viewportEl.style.cursor = "";
+    /* Reset _didDrag after a short delay so the click handler
+       on the node still sees it for THIS event cycle, but future
+       clicks are not blocked. */
+    setTimeout(function () { _didDrag = false; }, 0);
+  });
+
+  viewportEl.addEventListener("lostpointercapture", function () {
+    _isPanning = false;
+    viewportEl.style.cursor = "";
+    setTimeout(function () { _didDrag = false; }, 0);
+  });
+
+  /* ── Fit button (bottom-right of viewport) ──────────────────── */
+  var fitBtn = document.createElement("button");
+  fitBtn.type = "button";
+  fitBtn.className = "researchFitBtn";
+  fitBtn.textContent = "Fit";
+  fitBtn.title = "Fit entire tree in view";
+  fitBtn.addEventListener("click", function (ev) { ev.stopPropagation(); fitToView(); });
+  viewportEl.appendChild(fitBtn);
+
+  // ── Helpers ──────────────────────────────────────────────────────
   function fmtMass(kg) {
     if (kg == null || kg === 0) return "";
     if (kg >= 1000) return (kg / 1000).toFixed(2) + " t";
     return kg.toFixed(1) + " kg";
   }
-
   function fmtNum(n, unit) {
     if (n == null || n === 0) return "";
     return n.toLocaleString() + (unit ? " " + unit : "");
   }
-
+  function itemSubtitle(item) {
+    return String((item && (item.category_id || item.type || item.category)) || "module")
+      .trim()
+      .toLowerCase() || "module";
+  }
   function redirectToLogin() {
-    try {
-      if (window.top && window.top !== window) { window.top.location.href = "/login"; return; }
-    } catch { /* noop */ }
+    try { if (window.top && window.top !== window) { window.top.location.href = "/login"; return; } } catch (e) { /* noop */ }
     window.location.href = "/login";
   }
 
+  // ── Load data ────────────────────────────────────────────────────
   async function loadTree() {
-    const resp = await fetch("/api/research/tree", { cache: "no-store" });
+    var resp = await fetch("/api/research/tree", { cache: "no-store" });
     if (!resp.ok) {
       if (resp.status === 401) { redirectToLogin(); return; }
       treeEl.textContent = "Failed to load research tree.";
       return;
     }
-    const data = await resp.json();
-    techTree = data;
+    var data = await resp.json();
+    treeData = data;
     unlockedIds = new Set(data.unlocked || []);
 
     try {
-      const orgResp = await fetch("/api/org", { cache: "no-store" });
+      var orgResp = await fetch("/api/org", { cache: "no-store" });
       if (orgResp.ok) {
-        const orgData = await orgResp.json();
+        var orgData = await orgResp.json();
         orgResearchPoints = (orgData.org && orgData.org.research_points) || 0;
       }
-    } catch { /* ignore */ }
+    } catch (e) { /* ignore */ }
 
-    if (!activeCategoryId && data.categories && data.categories.length) {
-      activeCategoryId = data.categories[0].id;
+    if (!selectedNodeId && data.nodes && data.nodes.length) {
+      var starter = data.nodes.find(function (n) { return n.auto_unlock; });
+      selectedNodeId = starter ? starter.id : data.nodes[0].id;
     }
 
-    renderCategoryTabs();
+    renderRpIndicator();
     renderTree();
     renderInfo();
   }
 
-  function renderCategoryTabs() {
-    typeTabsEl.innerHTML = "";
-    treeTabsEl.innerHTML = "";
-    treeTabsEl.style.display = "none";
-
-    if (!techTree || !techTree.categories) return;
-
-    for (const cat of techTree.categories) {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = "tab researchSubtab" + (cat.id === activeCategoryId ? " active" : "");
-      tab.textContent = cat.label;
-      tab.setAttribute("role", "tab");
-
-      const total = cat.nodes.length;
-      const unlocked = cat.nodes.filter(n => unlockedIds.has(n.id)).length;
-      if (total > 0) {
-        const badge = document.createElement("span");
-        badge.className = "researchBadge";
-        badge.textContent = " " + unlocked + "/" + total;
-        tab.appendChild(badge);
-      }
-
-      tab.addEventListener("click", function () {
-        activeCategoryId = cat.id;
-        selectedNodeId = null;
-        renderCategoryTabs();
-        renderTree();
-        renderInfo();
-      });
-      typeTabsEl.appendChild(tab);
+  function renderRpIndicator() {
+    if (rpIndicatorEl) {
+      rpIndicatorEl.textContent = orgResearchPoints.toFixed(1) + " RP available";
     }
-
-    var rpEl = document.createElement("div");
-    rpEl.className = "researchRpIndicator";
-    rpEl.textContent = orgResearchPoints.toFixed(1) + " RP available";
-    typeTabsEl.appendChild(rpEl);
   }
 
-  function getActiveCategory() {
-    if (!techTree) return null;
-    return techTree.categories.find(function (c) { return c.id === activeCategoryId; }) || techTree.categories[0] || null;
+  // ── Prerequisite helpers ──────────────────────────────────────────
+  function getPrereqs(nodeId) {
+    var edges = (treeData && treeData.edges) || [];
+    var prereqs = [];
+    for (var i = 0; i < edges.length; i++) {
+      if (edges[i][1] === nodeId) prereqs.push(edges[i][0]);
+    }
+    return prereqs;
   }
 
+  function canUnlock(nodeId) {
+    var prereqs = getPrereqs(nodeId);
+    if (prereqs.length === 0) return true;
+    for (var j = 0; j < prereqs.length; j++) {
+      if (!unlockedIds.has(prereqs[j])) return false;
+    }
+    return true;
+  }
+
+  // ── Render tree ──────────────────────────────────────────────────
   function renderTree() {
     treeEl.innerHTML = "";
-    var cat = getActiveCategory();
-    if (!cat || !cat.nodes || !cat.nodes.length) {
-      treeEl.innerHTML = '<div class="muted" style="padding:20px;">No tech nodes defined for this category yet.</div>';
+    if (!treeData || !treeData.nodes || !treeData.nodes.length) {
+      treeEl.innerHTML = '<div class="muted" style="padding:20px;">No tech nodes loaded.</div>';
       return;
     }
 
-    var nodes = cat.nodes;
-    var edges = cat.edges || [];
-    var subtrees = cat.subtrees || null;
+    var nodes = treeData.nodes;
+    var edges = treeData.edges || [];
 
-    // Calculate bounding box
-    var maxY = 0;
-    var maxX = 0;
+    // Build node lookup and bounding box
+    var nodeMap = {};
+    var minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
     for (var i = 0; i < nodes.length; i++) {
-      if ((nodes[i].y || 0) > maxY) maxY = nodes[i].y || 0;
-      if ((nodes[i].x || 0) > maxX) maxX = nodes[i].x || 0;
-    }
-    treeEl.style.width = (maxX + NODE_WIDTH + 100) + "px";
-    treeEl.style.height = (maxY + NODE_HEIGHT + 80) + "px";
-
-    // Render subtree column headers if present
-    if (subtrees && subtrees.length > 1) {
-      for (var si = 0; si < subtrees.length; si++) {
-        var sub = subtrees[si];
-        var headerEl = document.createElement("div");
-        headerEl.className = "kspSubtreeHeader";
-        headerEl.textContent = sub.label;
-        headerEl.style.left = (sub.x_offset || (60 + si * SUBTREE_COLUMN_WIDTH)) + "px";
-        headerEl.style.top = "-30px";
-        headerEl.style.width = NODE_WIDTH + "px";
-        treeEl.appendChild(headerEl);
-      }
-      // Shift the tree container down to make room for headers
-      treeEl.style.paddingTop = "40px";
-    } else {
-      treeEl.style.paddingTop = "0";
+      var nx = Number(nodes[i].x) || 0;
+      var ny = Number(nodes[i].y) || 0;
+      nodeMap[nodes[i].id] = nodes[i];
+      if (nx < minX) minX = nx;
+      if (ny < minY) minY = ny;
+      if (nx + NODE_WIDTH > maxX) maxX = nx + NODE_WIDTH;
+      if (ny + NODE_HEIGHT > maxY) maxY = ny + NODE_HEIGHT;
     }
 
-    // Draw edges
+    if (!isFinite(minX)) minX = 0;
+    if (!isFinite(minY)) minY = 0;
+    var treePad = 40;
+    var offsetX = treePad - minX;
+    var offsetY = treePad - minY;
+
+    _treeBounds = {
+      w: (maxX - minX) + treePad * 2,
+      h: (maxY - minY) + treePad * 2,
+    };
+    treeEl.style.width = _treeBounds.w + "px";
+    treeEl.style.height = _treeBounds.h + "px";
+
+    // Draw edges as SVG
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "researchEdgeSvg");
+    svg.setAttribute("width", _treeBounds.w);
+    svg.setAttribute("height", _treeBounds.h);
+    svg.style.position = "absolute";
+    svg.style.top = "0";
+    svg.style.left = "0";
+    svg.style.pointerEvents = "none";
+    svg.style.zIndex = "0";
+
     for (var e = 0; e < edges.length; e++) {
       var fromId = edges[e][0], toId = edges[e][1];
-      var fromNode = nodes.find(function (n) { return n.id === fromId; });
-      var toNode = nodes.find(function (n) { return n.id === toId; });
+      var fromNode = nodeMap[fromId], toNode = nodeMap[toId];
       if (!fromNode || !toNode) continue;
 
-      var edgeLine = document.createElement("div");
-      edgeLine.className = "kspTreeEdge";
-      var x = (fromNode.x || 60) + NODE_WIDTH / 2;
-      var y1 = (fromNode.y || 0) + NODE_HEIGHT;
-      var y2 = (toNode.y || 0);
-      if (unlockedIds.has(fromId)) edgeLine.classList.add("isUnlocked");
-      edgeLine.style.left = (x - 1) + "px";
-      edgeLine.style.top = y1 + "px";
-      edgeLine.style.height = Math.max(0, y2 - y1) + "px";
-      treeEl.appendChild(edgeLine);
+      var fx = (Number(fromNode.x) || 0) + offsetX;
+      var fy = (Number(fromNode.y) || 0) + offsetY;
+      var tx = (Number(toNode.x) || 0) + offsetX;
+      var ty = (Number(toNode.y) || 0) + offsetY;
+
+      var fromCy = fy + NODE_HEIGHT / 2;
+      var toCy = ty + NODE_HEIGHT / 2;
+
+      /* ── Orthogonal (right-angle) edge routing ────────────────
+         Always connect side-to-side for a cleaner tree look that
+         better matches draw.io layouts. */
+      var pts = [];
+      var fromCenterX = fx + NODE_WIDTH / 2;
+      var toCenterX = tx + NODE_WIDTH / 2;
+      var toRight = toCenterX >= fromCenterX;
+
+      var exitX = toRight ? (fx + NODE_WIDTH) : fx;
+      var enterX = toRight ? tx : (tx + NODE_WIDTH);
+      var midX = (exitX + enterX) / 2;
+
+      pts = [
+        exitX, fromCy,
+        midX, fromCy,
+        midX, toCy,
+        enterX, toCy
+      ];
+
+      var polyline = document.createElementNS(svgNS, "polyline");
+      var pointStr = "";
+      for (var pi = 0; pi < pts.length; pi += 2) {
+        if (pi > 0) pointStr += " ";
+        pointStr += pts[pi] + "," + pts[pi + 1];
+      }
+      polyline.setAttribute("points", pointStr);
+      polyline.setAttribute("fill", "none");
+      polyline.setAttribute("stroke", unlockedIds.has(fromId) ? "#40c860" : "#334");
+      polyline.setAttribute("stroke-width", "2");
+      svg.appendChild(polyline);
     }
+    treeEl.appendChild(svg);
 
     // Draw nodes
     for (var ni = 0; ni < nodes.length; ni++) {
       var node = nodes[ni];
       var isUnlocked = unlockedIds.has(node.id);
-      var prerequisitesMet = canUnlock(cat, node);
+      var prerequisitesMet = canUnlock(node.id);
       var isSelected = selectedNodeId === node.id;
 
       var card = document.createElement("button");
@@ -182,12 +301,13 @@
       if (!isUnlocked && prerequisitesMet) card.classList.add("isAvailable");
       if (!isUnlocked && !prerequisitesMet) card.classList.add("isLocked");
 
-      card.style.left = (node.x || 60) + "px";
-      card.style.top = (node.y || 0) + "px";
+      card.style.left = ((Number(node.x) || 0) + offsetX) + "px";
+      card.style.top = ((Number(node.y) || 0) + offsetY) + "px";
       card.style.width = NODE_WIDTH + "px";
 
       (function (n) {
         card.addEventListener("click", function () {
+          if (_didDrag) return;
           selectedNodeId = n.id;
           renderTree();
           renderInfo();
@@ -204,6 +324,8 @@
       if (isUnlocked) {
         costLine.textContent = "\u2713 Unlocked";
         costLine.classList.add("unlocked");
+      } else if (node.auto_unlock) {
+        costLine.textContent = "Free";
       } else {
         costLine.textContent = node.cost_rp + " RP";
       }
@@ -212,40 +334,25 @@
       var itemCount = document.createElement("div");
       itemCount.className = "kspNodeItemCount";
       var ic = (node.items || []).length;
-      itemCount.textContent = ic > 0 ? ic + " item" + (ic !== 1 ? "s" : "") : "No items yet";
+      itemCount.textContent = ic > 0 ? ic + " item" + (ic !== 1 ? "s" : "") : "";
       card.appendChild(itemCount);
 
       treeEl.appendChild(card);
     }
+
+    /* Fit on first paint, preserve camera on re-paints */
+    if (!_initialFitDone) {
+      _initialFitDone = true;
+      fitToView();
+    } else {
+      applyTransform();
+    }
   }
 
-  function canUnlock(cat, node) {
-    var edges = cat.edges || [];
-    var prereqs = [];
-    for (var i = 0; i < edges.length; i++) {
-      if (edges[i][1] === node.id) prereqs.push(edges[i][0]);
-    }
-    if (prereqs.length === 0) return true;
-    for (var j = 0; j < prereqs.length; j++) {
-      if (!unlockedIds.has(prereqs[j])) return false;
-    }
-    return true;
-  }
-
-  function getSubtreeLabel(cat, node) {
-    if (!cat.subtrees || cat.subtrees.length <= 1) return "";
-    for (var s = 0; s < cat.subtrees.length; s++) {
-      for (var n = 0; n < cat.subtrees[s].nodes.length; n++) {
-        if (cat.subtrees[s].nodes[n].id === node.id) return cat.subtrees[s].label;
-      }
-    }
-    return "";
-  }
-
+  // ── Render sidebar info ───────────────────────────────────────────
   function renderInfo() {
-    var cat = getActiveCategory();
-    if (!cat) {
-      infoTitleEl.textContent = "Select a category";
+    if (!treeData || !treeData.nodes) {
+      infoTitleEl.textContent = "Loading...";
       infoTreeEl.textContent = "";
       infoListEl.innerHTML = "";
       unlockRowsEl.innerHTML = "";
@@ -255,12 +362,12 @@
 
     var node = null;
     if (selectedNodeId) {
-      node = cat.nodes.find(function (n) { return n.id === selectedNodeId; });
+      node = treeData.nodes.find(function (n) { return n.id === selectedNodeId; });
     }
-    if (!node && cat.nodes.length) node = cat.nodes[0];
+    if (!node && treeData.nodes.length) node = treeData.nodes[0];
     if (!node) {
       infoTitleEl.textContent = "No node selected";
-      infoTreeEl.textContent = cat.label;
+      infoTreeEl.textContent = "";
       infoListEl.innerHTML = "";
       unlockRowsEl.innerHTML = "";
       return;
@@ -268,20 +375,28 @@
 
     selectedNodeId = node.id;
     var isUnlocked = unlockedIds.has(node.id);
-    var prerequisitesMet = canUnlock(cat, node);
+    var prerequisitesMet = canUnlock(node.id);
 
     infoTitleEl.textContent = node.name;
-    var subLabel = getSubtreeLabel(cat, node);
-    var breadcrumb = cat.label;
-    if (subLabel) breadcrumb += " \u203a " + subLabel;
-    infoTreeEl.textContent = breadcrumb + " \u00b7 Tech Level " + node.tech_level;
+    infoTreeEl.textContent = "Cost: " + (node.auto_unlock ? "Free" : node.cost_rp + " RP");
 
     infoListEl.innerHTML = "";
     var infos = [
-      "Cost: " + node.cost_rp + " Research Points",
       "Status: " + (isUnlocked ? "Unlocked \u2713" : prerequisitesMet ? "Available" : "Locked (prerequisites needed)"),
       "Your RP: " + orgResearchPoints.toFixed(1),
     ];
+
+    var prereqs = getPrereqs(node.id);
+    if (prereqs.length > 0) {
+      var prereqNames = prereqs.map(function (pid) {
+        var pn = treeData.nodes.find(function (n) { return n.id === pid; });
+        var name = pn ? pn.name : pid;
+        var met = unlockedIds.has(pid);
+        return name + (met ? " \u2713" : " \u2717");
+      });
+      infos.push("Prerequisites: " + prereqNames.join(", "));
+    }
+
     for (var ii = 0; ii < infos.length; ii++) {
       var li = document.createElement("li");
       li.textContent = infos[ii];
@@ -289,7 +404,7 @@
     }
 
     unlockSummaryEl.innerHTML = "";
-    if (!isUnlocked) {
+    if (!isUnlocked && !node.auto_unlock) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btnPrimary";
@@ -302,9 +417,9 @@
       } else {
         btn.textContent = "Need " + node.cost_rp + " RP (have " + orgResearchPoints.toFixed(1) + ")";
       }
-      (function (c, n) {
-        btn.addEventListener("click", function () { doUnlock(c, n); });
-      })(cat, node);
+      (function (n) {
+        btn.addEventListener("click", function () { doUnlock(n); });
+      })(node);
       unlockSummaryEl.appendChild(btn);
     } else {
       unlockSummaryEl.textContent = "Technology unlocked \u2713";
@@ -313,27 +428,30 @@
     unlockRowsEl.innerHTML = "";
     var items = node.items || [];
     if (items.length === 0) {
-      unlockRowsEl.innerHTML = '<div class="muted small">No items at this tier yet (placeholder).</div>';
+      unlockRowsEl.innerHTML = '<div class="muted small">No items on this node.</div>';
       return;
     }
 
-    // Render as item grid cells if ItemDisplay is available
     if (window.ItemDisplay) {
       var grid = document.createElement("div");
       grid.className = "researchUnlockGrid";
       for (var ix = 0; ix < items.length; ix++) {
         var item = items[ix];
-        var catName = item.category || "";
-        // Map research category to item display category
+        var catName = item.category_id || item.category || "";
         if (catName.startsWith("refineries_")) catName = "refinery";
+        var subtitle = itemSubtitle(item);
 
         var tooltipLines = [];
         if (item.thrust_kn) tooltipLines.push(["Thrust", fmtNum(item.thrust_kn, "kN")]);
         if (item.isp_s) tooltipLines.push(["ISP", fmtNum(item.isp_s, "s")]);
-        if (item.thermal_mw) tooltipLines.push(["Thermal", fmtNum(item.thermal_mw, "MW")]);
-        if (item.electric_mw) tooltipLines.push(["Electric", fmtNum(item.electric_mw, "MW")]);
-        if (item.heat_rejection_mw) tooltipLines.push(["Heat Reject", fmtNum(item.heat_rejection_mw, "MW")]);
-        if (item.water_extraction_kg_per_hr) tooltipLines.push(["Water Extraction", fmtNum(item.water_extraction_kg_per_hr, "kg/hr")]);
+        if (item.thermal_mw) tooltipLines.push(["Power", fmtNum(item.thermal_mw, "MWth")]);
+        if (item.core_temp_k) tooltipLines.push(["Core Temp", fmtNum(item.core_temp_k, "K")]);
+        if (item.rated_temp_k) tooltipLines.push(["Core Temp Req", fmtNum(item.rated_temp_k, "K")]);
+        if (item.electric_mw) tooltipLines.push(["Electric", fmtNum(item.electric_mw, "MWe")]);
+        if (item.heat_rejection_mw) tooltipLines.push(["Rejection", fmtNum(item.heat_rejection_mw, "MWth")]);
+        if (item.scan_rate_km2_per_hr) tooltipLines.push(["Scan Rate", fmtNum(item.scan_rate_km2_per_hr, "km²/hr")]);
+        if (item.mining_rate_kg_per_hr) tooltipLines.push(["Mining Rate", fmtNum(item.mining_rate_kg_per_hr, "kg/hr")]);
+        if (item.construction_rate_kg_per_hr) tooltipLines.push(["Build Rate", fmtNum(item.construction_rate_kg_per_hr, "kg/hr")]);
 
         var cell = window.ItemDisplay.createGridCell({
           label: item.name,
@@ -341,9 +459,13 @@
           itemId: item.item_id,
           category: catName,
           mass_kg: item.mass_kg || 0,
-          subtitle: catName,
+          subtitle: subtitle,
           branch: item.branch || "",
+          family: item.family || "",
           techLevel: String(item.tech_level || ""),
+          water_extraction_kg_per_hr: item.water_extraction_kg_per_hr,
+          min_water_ice_fraction: item.min_water_ice_fraction,
+          max_water_ice_fraction: item.max_water_ice_fraction,
           tooltipLines: tooltipLines,
         });
 
@@ -352,28 +474,25 @@
       }
       unlockRowsEl.appendChild(grid);
     } else {
-      // Fallback: plain text rows
-      for (var ix = 0; ix < items.length; ix++) {
-        var item = items[ix];
+      for (var ix2 = 0; ix2 < items.length; ix2++) {
+        var item2 = items[ix2];
         var row = document.createElement("div");
         row.className = "kspUnlockRow" + (isUnlocked ? " isUnlocked" : "");
 
         var nameSpan = document.createElement("div");
         nameSpan.className = "kspUnlockName";
-        nameSpan.textContent = item.name;
+        nameSpan.textContent = item2.name;
         row.appendChild(nameSpan);
 
         var statsSpan = document.createElement("div");
         statsSpan.className = "kspUnlockStats muted small";
-        var stats = [];
-        if (item.mass_kg) stats.push(fmtMass(item.mass_kg));
-        if (item.thrust_kn) stats.push(fmtNum(item.thrust_kn, "kN"));
-        if (item.isp_s) stats.push(fmtNum(item.isp_s, "s ISP"));
-        if (item.thermal_mw) stats.push(fmtNum(item.thermal_mw, "MWth"));
-        if (item.electric_mw) stats.push(fmtNum(item.electric_mw, "MWe"));
-        if (item.heat_rejection_mw) stats.push(fmtNum(item.heat_rejection_mw, "MW reject"));
-        if (item.water_extraction_kg_per_hr) stats.push(fmtNum(item.water_extraction_kg_per_hr, "kg/hr water"));
-        statsSpan.textContent = stats.join(" \u00b7 ") || "\u2014";
+        var stats2 = [];
+        if (item2.mass_kg) stats2.push(fmtMass(item2.mass_kg));
+        if (item2.thrust_kn) stats2.push(fmtNum(item2.thrust_kn, "kN"));
+        if (item2.isp_s) stats2.push(fmtNum(item2.isp_s, "s ISP"));
+        if (item2.thermal_mw) stats2.push(fmtNum(item2.thermal_mw, "MWth"));
+        if (item2.electric_mw) stats2.push(fmtNum(item2.electric_mw, "MWe"));
+        statsSpan.textContent = stats2.join(" \u00b7 ") || "\u2014";
         row.appendChild(statsSpan);
 
         unlockRowsEl.appendChild(row);
@@ -381,12 +500,9 @@
     }
   }
 
-  async function doUnlock(cat, node) {
-    var edges = cat.edges || [];
-    var prereqs = [];
-    for (var i = 0; i < edges.length; i++) {
-      if (edges[i][1] === node.id) prereqs.push(edges[i][0]);
-    }
+  // ── Unlock action ─────────────────────────────────────────────────
+  async function doUnlock(node) {
+    var prereqs = getPrereqs(node.id);
 
     try {
       var resp = await fetch("/api/org/research/unlock", {
@@ -404,8 +520,8 @@
         return;
       }
       await loadTree();
-    } catch (e) {
-      alert("Error: " + e.message);
+    } catch (er) {
+      alert("Error: " + er.message);
     }
   }
 

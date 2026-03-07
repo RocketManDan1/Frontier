@@ -1,0 +1,21 @@
+{
+  "id": "twr75_firebrand",
+  "name": "TWR-75 \"Firebrand\"",
+  "research_node": "advanced_pebble_bed",
+  "tech_level": 2.5,
+  "branch": "pebble_bed",
+  "mass_t": 1.25,
+  "output": {
+    "thermal_mw": 2800,
+    "core_temp_k": 3200
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "particle_bed_coated_microspheres"
+  },
+  "description": "The scaled-up Timberwind variant. Enough thermal output to push any solid-core engine to full throttle with headroom to spare. Popular with freight operators willing to eat the maintenance costs for faster transits.",
+  "ui_tags": [
+    "pebble_bed",
+    "advanced"
+  ]
+}

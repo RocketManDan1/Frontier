@@ -95,6 +95,11 @@ class InventoryContainerReq(BaseModel):
     container_index: int
 
 
+class JettisonCargoReq(BaseModel):
+    resource_id: str
+    mass_kg: float
+
+
 class ShipDeconstructReq(BaseModel):
     keep_ship_record: bool = False
 
@@ -889,14 +894,9 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
         is_admin = user.get("is_admin") if hasattr(user, "get") else user["is_admin"]
         is_own = (my_corp_id is not None and ship_corp_id == my_corp_id) or (my_corp_id is None and is_admin)
 
-        parts = m.normalize_parts(json.loads(r["parts_json"] or "[]"))
+        raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(r["parts_json"] or "[]")
+        parts = m.normalize_parts(raw_parts)
         fuel_kg = max(0.0, float(r["fuel_kg"] or 0.0))
-        parts, hardened_changed = m._harden_ship_parts(parts, fuel_kg)
-        if hardened_changed:
-            conn.execute(
-                "UPDATE ships SET parts_json=? WHERE id=?",
-                (json.dumps(parts), r["id"]),
-            )
         stats = m.derive_ship_stats_from_parts(
             parts,
             current_fuel_kg=fuel_kg,
@@ -997,17 +997,18 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
 
         # Only include detailed data for own ships
         if is_own:
-            inventory_containers = m.compute_ship_inventory_containers(parts, stats["fuel_kg"])
-            inventory_items = m.compute_ship_inventory_resources(str(r["id"]), inventory_containers)
-            inventory_capacity_summary = m.compute_ship_capacity_summary(inventory_containers)
+            cargo_stacks = m.get_ship_cargo_stacks(conn, str(r["id"]))
+            resource_catalog = catalog_service.load_resource_catalog()
+            cargo_summary = m.compute_ship_cargo_summary(parts, cargo_stacks, resource_catalog)
+            inventory_items = m.compute_ship_inventory_resources(str(r["id"]), cargo_stacks)
             ship_data.update({
                 "notes": json.loads(r["notes_json"] or "[]"),
                 "dv_planned_m_s": r["dv_planned_m_s"],
                 "dock_slot": r["dock_slot"],
                 "parts": parts,
-                "inventory_containers": inventory_containers,
+                "cargo_stacks": cargo_stacks,
                 "inventory_items": inventory_items,
-                "inventory_capacity_summary": inventory_capacity_summary,
+                "cargo_summary": cargo_summary,
                 "isp_s": stats["isp_s"],
                 "power_balance": catalog_service.compute_power_balance(parts),
             })
@@ -1079,7 +1080,8 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     dv = float(route_quote["dv_m_s"])
     tof = float(route_quote["tof_s"])
 
-    parts = m.normalize_parts(json.loads(ship["parts_json"] or "[]"))
+    raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(ship["parts_json"] or "[]")
+    parts = m.normalize_parts(raw_parts)
     stats = m.derive_ship_stats_from_parts(
         parts,
         current_fuel_kg=float(ship["fuel_kg"] or 0.0),
@@ -1245,8 +1247,15 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
                 logging.exception("Failed to generate trajectory from predictions for %s", ship_id)
         # Override arrives_at with orbit model's physical TOF so the ETA
         # displayed on the frontend matches the actual burn schedule.
+        # Only for interplanetary transfers where the orbit model provides
+        # a more accurate TOF.  Local and SOI Hohmann transfers use
+        # game-configured transit times from the route quote (Hohmann
+        # periods for local/SOI can be extreme and don't match intended
+        # gameplay pacing — the Lagrange network provides tuned travel
+        # times for cislunar and similar transfers).
         model_tof = burn_plan.get("total_tof_s")
-        if model_tof and model_tof > 0:
+        transfer_type = burn_plan.get("transfer_type", "")
+        if model_tof and model_tof > 0 and transfer_type not in ("local_hohmann", "soi_hohmann"):
             arr = dep + model_tof
 
     conn.execute(
@@ -1300,7 +1309,7 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
 
 
 @router.post("/api/ships/{ship_id}/inventory/jettison")
-def api_ship_inventory_jettison(ship_id: str, req: InventoryContainerReq, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+def api_ship_inventory_jettison(ship_id: str, req: JettisonCargoReq, request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
     m = _main()
     sid = (ship_id or "").strip()
     if not sid:
@@ -1310,68 +1319,31 @@ def api_ship_inventory_jettison(ship_id: str, req: InventoryContainerReq, reques
     _require_ship_ownership(conn, request, sid)
 
     row = conn.execute(
-        """
-        SELECT id,name,parts_json,fuel_kg
-        FROM ships
-        WHERE id=?
-        """,
+        "SELECT id, name FROM ships WHERE id=?",
         (sid,),
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Ship not found")
 
-    parts = m.normalize_parts(json.loads(row["parts_json"] or "[]"))
-    current_fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
-    inventory = m.compute_ship_inventory_containers(parts, current_fuel_kg)
-    target = next((c for c in inventory if int(c["container_index"]) == int(req.container_index)), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Container not found")
+    resource_id = (req.resource_id or "").strip()
+    mass_kg = max(0.0, req.mass_kg)
+    if not resource_id or mass_kg <= 0:
+        raise HTTPException(status_code=400, detail="resource_id and positive mass_kg are required")
 
-    target_idx = int(target["container_index"])
-
-    # Determine water mass from cargo_manifest (container rows don't have top-level resource_id)
-    manifest = target.get("cargo_manifest") or []
-    water_mass_in_container = sum(
-        max(0.0, float(e.get("mass_kg") or 0.0))
-        for e in manifest
-        if str(e.get("resource_id") or "").lower() == "water"
-    )
-    if water_mass_in_container > 0:
-        current_fuel_kg = max(0.0, current_fuel_kg - water_mass_in_container)
-
-    if 0 <= target_idx < len(parts):
-        part = dict(parts[target_idx] or {})
-        for key in (
-            "cargo_used_m3",
-            "used_m3",
-            "fill_m3",
-            "stored_m3",
-            "current_m3",
-            "cargo_mass_kg",
-            "contents_mass_kg",
-            "stored_mass_kg",
-            "current_mass_kg",
-            "water_kg",
-            "fuel_kg",
-        ):
-            if key in part:
-                part[key] = 0.0
-        # Clear the cargo manifest on the part itself
-        part["cargo_manifest"] = []
-        parts[target_idx] = part
-
-    m._persist_ship_inventory_state(
-        conn,
-        ship_id=sid,
-        parts=parts,
-        fuel_kg=current_fuel_kg,
-    )
+    mass_removed = m.remove_cargo_from_ship(conn, sid, resource_id, mass_kg)
+    stack_row = conn.execute(
+        "SELECT mass_kg FROM ship_cargo_stacks WHERE ship_id=? AND resource_id=?",
+        (sid, resource_id),
+    ).fetchone()
+    remaining_kg = max(0.0, float(stack_row["mass_kg"])) if stack_row else 0.0
     conn.commit()
 
     return {
         "ok": True,
         "ship_id": sid,
-        "container_index": target_idx,
+        "resource_id": resource_id,
+        "mass_kg_removed": mass_removed,
+        "remaining_kg": remaining_kg,
         "action": "jettison",
     }
 
@@ -1405,55 +1377,35 @@ def api_ship_deconstruct(ship_id: str, req: ShipDeconstructReq, request: Request
     if not location_id or row["arrives_at"] is not None:
         raise HTTPException(status_code=400, detail="Ship must be docked at a location to deconstruct")
 
-    parts = m.normalize_parts(json.loads(row["parts_json"] or "[]"))
+    raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(row["parts_json"] or "[]")
+    parts = m.normalize_parts(raw_parts)
     fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
-    containers = m.compute_ship_inventory_containers(parts, fuel_kg)
-    by_index = {int(c["container_index"]): c for c in containers}
 
-    transferred_fuel_like_kg = 0.0
-    for idx, part in enumerate(parts):
-        clean_part = dict(part)
-        cargo = by_index.get(idx)
-        if cargo:
-            # Transfer ALL cargo manifest entries to location inventory
-            manifest = cargo.get("cargo_manifest") or []
-            for entry in manifest:
-                resource_id = str(entry.get("resource_id") or "").strip()
-                mass_kg = max(0.0, float(entry.get("mass_kg") or 0.0))
-                if resource_id and mass_kg > 0.0:
-                    m.add_resource_to_location_inventory(conn, location_id, resource_id, mass_kg, corp_id=corp_id)
-                    if resource_id.lower() == "water":
-                        transferred_fuel_like_kg += mass_kg
-            for key in (
-                "cargo_used_m3",
-                "used_m3",
-                "fill_m3",
-                "stored_m3",
-                "current_m3",
-                "cargo_mass_kg",
-                "contents_mass_kg",
-                "stored_mass_kg",
-                "current_mass_kg",
-                "water_kg",
-                "fuel_kg",
-            ):
-                clean_part.pop(key, None)
-            # Clear manifest on the part
-            clean_part.pop("cargo_manifest", None)
+    # Transfer cargo stacks to location inventory
+    cargo_stacks = m.get_ship_cargo_stacks(conn, sid)
+    for stack in cargo_stacks:
+        resource_id = str(stack.get("resource_id") or "").strip()
+        stack_mass = max(0.0, float(stack.get("mass_kg") or 0.0))
+        if resource_id and stack_mass > 0.0:
+            m.add_resource_to_location_inventory(conn, location_id, resource_id, stack_mass, corp_id=corp_id)
+    m.wipe_ship_cargo(conn, sid)
 
-        m.add_part_to_location_inventory(conn, location_id, clean_part, corp_id=corp_id)
+    # Transfer parts to location inventory
+    for part in parts:
+        m.add_part_to_location_inventory(conn, location_id, dict(part), corp_id=corp_id)
 
-    if fuel_kg > transferred_fuel_like_kg + 1e-6:
-        m.add_resource_to_location_inventory(conn, location_id, "water", fuel_kg - transferred_fuel_like_kg, corp_id=corp_id)
+    # Transfer remaining fuel as water
+    if fuel_kg > 1e-6:
+        m.add_resource_to_location_inventory(conn, location_id, "water", fuel_kg, corp_id=corp_id)
 
     if req.keep_ship_record:
         conn.execute(
             """
             UPDATE ships
-            SET parts_json='[]', fuel_kg=0, fuel_capacity_kg=0, dry_mass_kg=0, isp_s=0
+            SET parts_json=?, fuel_kg=0, fuel_capacity_kg=0, dry_mass_kg=0, isp_s=0
             WHERE id=?
             """,
-            (sid,),
+            (m.merge_ship_parts_and_cargo([]), sid),
         )
     else:
         conn.execute("DELETE FROM ships WHERE id=?", (sid,))
@@ -1498,40 +1450,15 @@ def api_ship_inventory_deploy(ship_id: str, req: InventoryContainerReq, request:
     if not location_id or row["arrives_at"] is not None:
         raise HTTPException(status_code=400, detail="Ship must be docked to deploy a container")
 
-    parts = m.normalize_parts(json.loads(row["parts_json"] or "[]"))
+    raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(row["parts_json"] or "[]")
+    parts = m.normalize_parts(raw_parts)
     current_fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
-    inventory = m.compute_ship_inventory_containers(parts, current_fuel_kg)
-    target = next((c for c in inventory if int(c["container_index"]) == int(req.container_index)), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Container not found")
 
-    target_idx = int(target["container_index"])
-
-    # Determine water mass from cargo_manifest (container rows don't have top-level resource_id)
-    manifest = target.get("cargo_manifest") or []
-    water_mass_in_container = sum(
-        max(0.0, float(e.get("mass_kg") or 0.0))
-        for e in manifest
-        if str(e.get("resource_id") or "").lower() == "water"
-    )
-    if water_mass_in_container > 0:
-        current_fuel_kg = max(0.0, current_fuel_kg - water_mass_in_container)
-
+    target_idx = int(req.container_index)
     if not (0 <= target_idx < len(parts)):
-        raise HTTPException(status_code=404, detail="Container not found")
+        raise HTTPException(status_code=404, detail="Part not found at given index")
 
     deployed_part = dict(parts.pop(target_idx) or {})
-    # Preserve cargo manifest data on the deployed part for location inventory
-    total_cargo_mass = max(0.0, float(target.get("cargo_mass_kg") or 0.0))
-    total_used_m3 = max(0.0, float(target.get("used_m3") or 0.0))
-    if total_cargo_mass > 0.0:
-        deployed_part["cargo_mass_kg"] = total_cargo_mass
-        deployed_part["cargo_used_m3"] = total_used_m3
-        # Set resource_id from first manifest entry for backward compatibility
-        if manifest:
-            deployed_part["resource_id"] = str(manifest[0].get("resource_id") or deployed_part.get("resource_id") or "")
-        # Preserve the manifest itself
-        deployed_part["cargo_manifest"] = manifest
 
     m.add_part_to_location_inventory(conn, location_id, deployed_part, corp_id=corp_id)
 

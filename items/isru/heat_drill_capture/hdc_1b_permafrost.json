@@ -1,7 +1,7 @@
 {
   "id": "hdc_1b_permafrost",
   "name": "HDC-1B \"Permafrost\"",
-  "research_node": "basic_thermal_drilling",
+  "research_node": "heat_drill_capture",
   "tech_level": 1.5,
   "branch": "resistive_thermal_drill",
   "mass_t": 4.0,
@@ -16,6 +16,12 @@
     "min_water_ice_fraction": 0.08,
     "max_water_ice_fraction": 1.0
   },
-  "description": "The Permafrost upgrades the single-drill Frostbite to a dual-head configuration mounted on a laterally traversing rail. While one drill string sublimates ice at depth, the other relocates to a fresh borehole, enabling near-continuous extraction without downtime for repositioning. The deeper 5-metre reach accesses ice deposits below the desiccated surface lag layer common at crater rim sites. Both drills share a common capture hood and an enlarged cryocondenser with twice the cooling capacity. Mass rises modestly to 4 tonnes — the traversing rail and second drill string are lightweight — but power doubles to 3.0 MW to supply both heating elements simultaneously. Water output climbs to 208 kg/hr, establishing the Permafrost as the standard early-game ice extraction workhorse for polar crater operations.",
-  "ui_tags": ["resistive_thermal_drill", "dual_head", "tier_1", "light", "high_power"]
+  "description": "The Permafrost upgrades the single-drill Frostbite to a dual-head configuration mounted on a laterally traversing rail. While one drill string sublimates ice at depth, the other relocates to a fresh borehole, enabling near-continuous extraction without downtime for repositioning. The deeper 5-metre reach accesses ice deposits below the desiccated surface lag layer common at crater rim sites. Both drills share a common capture hood and an enlarged cryocondenser with twice the cooling capacity. Mass rises modestly to 4 tonnes \u2014 the traversing rail and second drill string are lightweight \u2014 but power doubles to 3.0 MW to supply both heating elements simultaneously. Water output climbs to 208 kg/hr, establishing the Permafrost as the standard early-game ice extraction workhorse for polar crater operations.",
+  "ui_tags": [
+    "resistive_thermal_drill",
+    "dual_head",
+    "tier_1",
+    "light",
+    "high_power"
+  ]
 }

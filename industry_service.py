@@ -24,8 +24,11 @@ _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY = {
     "reactor": "reactors",
     "generator": "generators",
     "radiator": "radiators",
+    "prospector": "robonauts",
     "robonaut": "robonauts",
     "constructor": "constructors",
+    "miner": "miners",
+    "printer": "printers",
     "isru": "isru",
     "refinery": "refineries",
 }
@@ -76,6 +79,19 @@ def _is_recipe_compatible_with_refinery_specialization(recipe_category: str, spe
 # ── Settle Jobs (on-access pattern) ───────────────────────────────────────────
 
 
+def _is_facility_powered(conn: sqlite3.Connection, facility_id: str) -> bool:
+    """Check if a facility has non-negative electric surplus (power_ok).
+
+    Returns True if there are no electric consumers or if supply >= demand.
+    Facilities with zero equipment are considered powered (nothing to gate).
+    """
+    equipment = get_deployed_equipment(conn, "", facility_id=facility_id)
+    if not equipment:
+        return True
+    pb = compute_site_power_balance(equipment)
+    return bool(pb.get("power_ok", True))
+
+
 def settle_industry(conn: sqlite3.Connection, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
     """
     Settle all industry systems:
@@ -85,6 +101,10 @@ def settle_industry(conn: sqlite3.Connection, location_id: Optional[str] = None,
       4. Settle & auto-advance the construction queue
     If facility_id is given, only settle for that facility (preferred).
     If location_id is given, only settle for that location (performance).
+
+    Power enforcement: mining, refinery auto-start, and construction auto-start
+    are gated on the facility having non-negative electric surplus.  Already-
+    running jobs (inputs consumed) still complete on their timer.
     """
     now = game_now_s()
     _settle_production_jobs(conn, now, location_id, facility_id=facility_id)
@@ -127,7 +147,8 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
     # Build a lookup of all known part catalogs so we can distinguish parts from resources
     part_catalogs = {}
     for loader in (
-        catalog_service.load_constructor_catalog,
+        catalog_service.load_miner_catalog,
+        catalog_service.load_printer_catalog,
         catalog_service.load_refinery_catalog,
         catalog_service.load_thruster_main_catalog,
         catalog_service.load_reactor_catalog,
@@ -182,7 +203,7 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
     Uses deployed_equipment.mode = 'mine' instead of production_jobs.
     Tracks last_settled in config_json of the equipment.
     """
-    where = "WHERE de.category IN ('constructor', 'robonaut', 'isru') AND de.mode = 'mine'"
+    where = "WHERE de.category IN ('miner', 'constructor', 'isru') AND de.mode = 'mine'"
     params: list = []
     if facility_id:
         where += " AND de.facility_id = ?"
@@ -211,6 +232,9 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
         loc_id = m["location_id"]
         by_location.setdefault(loc_id, []).append(m)
 
+    # Pre-compute power status per facility to avoid repeated queries
+    _power_cache: Dict[str, bool] = {}
+
     for loc_id, loc_miners in by_location.items():
         # Get site resource distribution
         site_resources = conn.execute(
@@ -236,19 +260,20 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
             if total_mined_kg < 0.01:
                 continue
 
-            # Robonauts: special handling — mine water_ice → water
-            if miner["category"] == "robonaut":
-                output_resource_id = str(config.get("mining_output_resource_id") or "water")
-                # Find water_ice fraction
-                ice_fraction = 0.0
-                for sr in site_resources:
-                    if sr["resource_id"] == "water_ice":
-                        ice_fraction = float(sr["mass_fraction"])
-                        break
-                mined_kg = total_mined_kg * ice_fraction
-                if mined_kg > 0.01:
-                    _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, mined_kg, corp_id=corp_id)
-            elif miner["category"] == "isru":
+            # ── Power gate: skip output if facility is unpowered ──
+            if miner_fid:
+                if miner_fid not in _power_cache:
+                    _power_cache[miner_fid] = _is_facility_powered(conn, miner_fid)
+                if not _power_cache[miner_fid]:
+                    # Still advance last_settled so no backlog accumulates
+                    config["mining_last_settled"] = now
+                    conn.execute(
+                        "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
+                        (_json_dumps(config), miner["id"]),
+                    )
+                    continue
+
+            if miner["category"] == "isru":
                 # ISRU: flat-rate water extraction — rate is NOT multiplied by ice fraction.
                 # The ice fraction only gates deployment eligibility; output is the rated water_extraction_kg_per_hr.
                 water_rate = float(config.get("water_extraction_kg_per_hr") or 0.0)
@@ -344,7 +369,8 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     resource_catalog = catalog_service.load_resource_catalog()
     if active_slots:
         for loader in (
-            catalog_service.load_constructor_catalog,
+            catalog_service.load_miner_catalog,
+            catalog_service.load_printer_catalog,
             catalog_service.load_refinery_catalog,
             catalog_service.load_thruster_main_catalog,
             catalog_service.load_reactor_catalog,
@@ -400,6 +426,9 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
 
     all_recipes = catalog_service.load_recipe_catalog()
 
+    # Power cache for facilities encountered during this settle pass
+    _refinery_power_cache: Dict[str, bool] = {}
+
     for slot in idle_slots:
         recipe = all_recipes.get(slot["recipe_id"])
         if not recipe:
@@ -409,6 +438,13 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
         equip_id = slot["equipment_id"]
         corp_id = str(slot["corp_id"] or "")
         slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
+
+        # ── Power gate: don't auto-start if facility is unpowered ──
+        if slot_fid:
+            if slot_fid not in _refinery_power_cache:
+                _refinery_power_cache[slot_fid] = _is_facility_powered(conn, slot_fid)
+            if not _refinery_power_cache[slot_fid]:
+                continue
 
         # Get equipment config for throughput
         equip = conn.execute(
@@ -526,7 +562,8 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
     part_catalogs = {}
     if finished:
         for loader in (
-            catalog_service.load_constructor_catalog,
+            catalog_service.load_miner_catalog,
+            catalog_service.load_printer_catalog,
             catalog_service.load_refinery_catalog,
             catalog_service.load_thruster_main_catalog,
             catalog_service.load_reactor_catalog,
@@ -569,9 +606,19 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
 
     all_recipes = catalog_service.load_recipe_catalog()
 
+    # Power cache for construction queue facilities
+    _cq_power_cache: Dict[str, bool] = {}
+
     for fq_row in facilities_with_queue:
         fq_fid = str(fq_row["facility_id"] or "") if "facility_id" in fq_row.keys() else ""
         loc = fq_row["location_id"]
+
+        # ── Power gate: don't auto-start construction if facility is unpowered ──
+        if fq_fid:
+            if fq_fid not in _cq_power_cache:
+                _cq_power_cache[fq_fid] = _is_facility_powered(conn, fq_fid)
+            if not _cq_power_cache[fq_fid]:
+                continue
 
         # Check if there's already an active job at this facility
         if fq_fid:
@@ -686,15 +733,16 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
 
 
 def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> float:
-    """Sum of construction_rate_kg_per_hr from all constructors in 'construct' mode at a facility (or location)."""
+    """Sum of construction_rate_kg_per_hr from all printers (or legacy constructors) in 'construct' mode."""
+    cat_clause = "category IN ('printer', 'constructor')"
     if facility_id:
         rows = conn.execute(
-            "SELECT config_json FROM deployed_equipment WHERE facility_id = ? AND category = 'constructor' AND mode = 'construct'",
+            f"SELECT config_json FROM deployed_equipment WHERE facility_id = ? AND {cat_clause} AND mode = 'construct'",
             (facility_id,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT config_json FROM deployed_equipment WHERE location_id = ? AND category = 'constructor' AND mode = 'construct'",
+            f"SELECT config_json FROM deployed_equipment WHERE location_id = ? AND {cat_clause} AND mode = 'construct'",
             (location_id,),
         ).fetchall()
     total = 0.0
@@ -709,14 +757,15 @@ def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str, *, 
 # ── Deploy / Undeploy ──────────────────────────────────────────────────────────
 
 
-DEPLOYABLE_CATEGORIES = ("refinery", "constructor", "robonaut", "isru", "reactor", "generator", "radiator")
+DEPLOYABLE_CATEGORIES = ("refinery", "miner", "printer", "constructor", "prospector", "robonaut", "isru", "reactor", "generator", "radiator")
 
 
 def _resolve_deployable_catalog_entry(item_id: str) -> Optional[Dict[str, Any]]:
     """Look up an item across all deployable catalogs."""
     for loader in (
         catalog_service.load_refinery_catalog,
-        catalog_service.load_constructor_catalog,
+        catalog_service.load_miner_catalog,
+        catalog_service.load_printer_catalog,
         catalog_service.load_robonaut_catalog,
         catalog_service.load_isru_catalog,
         catalog_service.load_reactor_catalog,
@@ -755,26 +804,70 @@ def deploy_equipment(
     if category not in DEPLOYABLE_CATEGORIES:
         raise ValueError(f"Item '{item_id}' is not deployable (category: {category})")
 
-    # Constructors, robonauts, and ISRU require surface deployment.
-    if category in ("constructor", "robonaut", "isru"):
+    # Miners, printers, prospectors, and ISRU require surface deployment.
+    if category in ("miner", "printer", "constructor", "prospector", "robonaut", "isru"):
         site = conn.execute(
             "SELECT gravity_m_s2 FROM surface_sites WHERE location_id = ?",
             (location_id,),
         ).fetchone()
         if not site:
-            if category == "constructor":
+            if category == "miner":
+                raise ValueError("Miners can only be deployed at surface sites")
+            elif category == "printer":
+                raise ValueError("Printers can only be deployed at surface sites")
+            elif category == "constructor":
                 raise ValueError("Constructors can only be deployed at surface sites")
             elif category == "isru":
                 raise ValueError("ISRU modules can only be deployed at surface sites")
-            raise ValueError("Robonauts can only be deployed at surface sites")
-        if category == "constructor":
+            raise ValueError("Prospectors can only be deployed at surface sites")
+
+        site_grav = float(site["gravity_m_s2"])
+
+        if category == "miner":
+            miner_type = str(catalog_entry.get("miner_type") or "large_body")
+            if miner_type == "large_body":
+                min_grav = float(catalog_entry.get("min_surface_gravity_ms2") or 0.0)
+                if site_grav < min_grav:
+                    raise ValueError(
+                        f"Large-body miner requires surface gravity >= {min_grav:.2f} m/s²; "
+                        f"site has {site_grav:.2f} m/s²"
+                    )
+            elif miner_type == "microgravity":
+                max_grav = float(catalog_entry.get("max_surface_gravity_ms2") or 1.0)
+                if max_grav <= 0.0:
+                    max_grav = 1.0
+                if site_grav >= max_grav:
+                    raise ValueError(
+                        f"Microgravity miner requires surface gravity < {max_grav:.2f} m/s²; "
+                        f"site has {site_grav:.2f} m/s²"
+                    )
+            elif miner_type == "cryovolatile":
+                # Check that volatile + water ice mass fraction > 50%
+                _VOLATILE_RESOURCE_IDS = {"water_ice", "carbon_volatiles", "nitrogen_volatiles"}
+                vol_rows = conn.execute(
+                    "SELECT resource_id, mass_fraction FROM surface_site_resources WHERE site_location_id = ?",
+                    (location_id,),
+                ).fetchall()
+                volatile_fraction = sum(
+                    float(r["mass_fraction"]) for r in vol_rows
+                    if r["resource_id"] in _VOLATILE_RESOURCE_IDS
+                )
+                min_vol = float(catalog_entry.get("min_volatile_mass_fraction") or 0.5)
+                if volatile_fraction < min_vol:
+                    raise ValueError(
+                        f"Cryovolatile miner requires site volatile mass fraction >= {min_vol:.0%}; "
+                        f"site has {volatile_fraction:.0%} (water_ice + carbon/nitrogen volatiles)"
+                    )
+
+        elif category == "constructor":
+            # Legacy: keep gravity check for backward-compat deployed items
             min_grav = float(catalog_entry.get("min_surface_gravity_ms2") or 0.0)
-            site_grav = float(site["gravity_m_s2"])
-            if site_grav < min_grav:
+            if min_grav > 0.0 and site_grav < min_grav:
                 raise ValueError(
                     f"Surface gravity {site_grav:.2f} m/s² is below minimum {min_grav:.2f} m/s²"
                 )
-        if category == "isru":
+
+        elif category == "isru":
             # Validate water ice fraction is within the ISRU module's operating range
             ice_row = conn.execute(
                 "SELECT mass_fraction FROM surface_site_resources WHERE site_location_id = ? AND resource_id = 'water_ice'",
@@ -812,17 +905,32 @@ def deploy_equipment(
             "max_recipe_tier": catalog_entry.get("max_recipe_tier", 1),
             "max_concurrent_recipes": catalog_entry.get("max_concurrent_recipes", 1),
         })
+    elif category == "miner":
+        config.update({
+            "miner_type": catalog_entry.get("miner_type", "large_body"),
+            "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
+            "excavation_type": catalog_entry.get("excavation_type", ""),
+            "min_surface_gravity_ms2": catalog_entry.get("min_surface_gravity_ms2", 0.0),
+            "max_surface_gravity_ms2": catalog_entry.get("max_surface_gravity_ms2", 0.0),
+        })
+    elif category == "printer":
+        config.update({
+            "printer_type": catalog_entry.get("printer_type", "industrial"),
+            "construction_rate_kg_per_hr": catalog_entry.get("construction_rate_kg_per_hr", 0),
+            "fabrication_type": catalog_entry.get("fabrication_type", ""),
+        })
     elif category == "constructor":
+        # Legacy constructor — keep both fields for backward compat
         config.update({
             "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
             "construction_rate_kg_per_hr": catalog_entry.get("construction_rate_kg_per_hr", 0),
             "excavation_type": catalog_entry.get("excavation_type", ""),
         })
-    elif category == "robonaut":
+    elif category in ("robonaut", "prospector"):
         config.update({
-            "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
-            "allowed_mining_resources": ["water_ice"],
-            "mining_output_resource_id": "water",
+            "prospect_range_km": catalog_entry.get("prospect_range_km", 0),
+            "scan_rate_km2_per_hr": catalog_entry.get("scan_rate_km2_per_hr", 0),
+            "emission_type": catalog_entry.get("emission_type", ""),
         })
     elif category == "isru":
         config.update({
@@ -1031,7 +1139,7 @@ def compute_site_power_balance(equipment: List[Dict[str, Any]]) -> Dict[str, Any
                 "name": eq["name"], "heat_rejection_mw": rejection,
             })
 
-        elif cat in ("refinery", "constructor", "robonaut"):
+        elif cat in ("refinery", "miner", "printer", "constructor", "robonaut", "prospector"):
             demand = float(cfg.get("electric_mw") or 0)
             is_active = eq.get("status") == "active"
             if is_active:
@@ -1103,8 +1211,8 @@ def start_production_job(
         raise ValueError("Equipment not found")
     if equip["status"] != "idle":
         raise ValueError(f"Equipment is currently {equip['status']}, not idle")
-    if equip["category"] not in ("refinery", "constructor"):
-        raise ValueError("Production jobs require a refinery or constructor")
+    if equip["category"] not in ("refinery", "printer", "constructor"):
+        raise ValueError("Production jobs require a refinery or printer")
 
     # Verify corp ownership — non-admin callers can only use their own equipment
     equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
@@ -1134,15 +1242,50 @@ def start_production_job(
     facility_type = str(recipe.get("facility_type") or "")
     equip_category = equip["category"]
 
-    if equip_category == "constructor":
-        # Constructors can only run shipyard recipes (construction)
+    if equip_category in ("printer", "constructor"):
+        # Printers can only run shipyard recipes (construction)
         if facility_type != "shipyard":
-            raise ValueError("Constructors can only run construction (shipyard) recipes")
+            raise ValueError("Printers can only run construction (shipyard) recipes")
         job_type = "construct"
+
+        # Validate printer_type specialization (only for new 'printer' category)
+        if equip_category == "printer":
+            printer_type = str(config.get("printer_type") or "industrial")
+            out_check_id = str(recipe.get("output_item_id") or "").strip()
+            if out_check_id:
+                _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer"}
+                _SHIP_CATS = {"thruster", "reactor", "generator", "radiator", "isru"}
+                # Determine output category by searching all catalogs
+                _out_cat = ""
+                for _ldr in (
+                    catalog_service.load_thruster_main_catalog,
+                    catalog_service.load_reactor_catalog,
+                    catalog_service.load_generator_catalog,
+                    catalog_service.load_radiator_catalog,
+                    catalog_service.load_miner_catalog,
+                    catalog_service.load_printer_catalog,
+                    catalog_service.load_robonaut_catalog,
+                    catalog_service.load_isru_catalog,
+                    catalog_service.load_refinery_catalog,
+                ):
+                    _hit = _ldr().get(out_check_id)
+                    if _hit:
+                        _out_cat = str(_hit.get("category_id") or _hit.get("type") or "")
+                        break
+                if printer_type == "industrial" and _out_cat and _out_cat not in _INDUSTRIAL_CATS:
+                    raise ValueError(
+                        f"Industrial printer cannot build output category '{_out_cat}'. "
+                        f"Use a Ship Printer for thrusters, reactors, generators, radiators, and ISRU."
+                    )
+                elif printer_type == "ship" and _out_cat and _out_cat not in _SHIP_CATS:
+                    raise ValueError(
+                        f"Ship printer cannot build output category '{_out_cat}'. "
+                        f"Use an Industrial Printer for refineries, miners, prospectors, and printers."
+                    )
     else:
         # Refineries run refinery/factory recipes
         if facility_type == "shipyard":
-            raise ValueError("Refineries cannot run construction recipes — use a constructor")
+            raise ValueError("Refineries cannot run construction recipes — use a printer")
         job_type = "refine"
 
         # Check specialization match (refineries only)
@@ -1209,9 +1352,9 @@ def start_production_job(
     # Calculate completion time
     now = game_now_s()
     base_time = float(recipe.get("build_time_s") or 600)
-    if equip_category == "constructor":
-        # Constructors use construction_rate_kg_per_hr as a speed multiplier
-        # Higher rate = faster builds.  Normalize around 50 kg/hr baseline.
+    if equip_category in ("printer", "constructor"):
+        # Printers use construction_rate_kg_per_hr as a speed multiplier.
+        # Higher rate = faster builds. Normalize around 50 kg/hr baseline.
         construction_rate = max(1.0, float(config.get("construction_rate_kg_per_hr") or 50.0))
         throughput_mult = construction_rate / 50.0
     else:
@@ -1339,8 +1482,7 @@ def start_mining_job(
     corp_id: str = "",
 ) -> Dict[str, Any]:
     """
-    Start a continuous mining job on a deployed constructor or robonaut at a surface site.
-    Constructor mines selected resources; robonauts mine water ice and output water.
+    Start a continuous mining job on a deployed constructor or ISRU unit at a surface site.
     """
     equip = conn.execute(
         "SELECT * FROM deployed_equipment WHERE id = ?",
@@ -1351,8 +1493,8 @@ def start_mining_job(
     if equip["status"] != "idle":
         raise ValueError(f"Equipment is currently {equip['status']}, not idle")
     equip_category = str(equip["category"] or "")
-    if equip_category not in ("constructor", "robonaut"):
-        raise ValueError("Mining requires a constructor or robonaut")
+    if equip_category not in ("miner", "constructor", "isru"):
+        raise ValueError("Mining requires a miner or ISRU unit")
 
     # Verify corp ownership — non-admin callers can only use their own equipment
     equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""
@@ -1395,20 +1537,23 @@ def start_mining_job(
         raise ValueError(f"Resource '{resource_id}' not available at this site")
 
     output_resource_id = resource_id
-    if equip_category == "robonaut":
-        allowed_resources = config.get("allowed_mining_resources") or []
-        allowed_resources = [str(v) for v in allowed_resources if str(v).strip()]
-        if allowed_resources and resource_id not in allowed_resources:
-            raise ValueError("Robonaut ISRU can only mine water ice")
+    if equip_category == "isru":
         output_resource_id = str(config.get("mining_output_resource_id") or "water").strip() or "water"
 
-    base_rate = float(config.get("mining_rate_kg_per_hr") or 0.0)
+    if equip_category == "isru":
+        base_rate = float(config.get("water_extraction_kg_per_hr") or 0.0)
+    else:
+        base_rate = float(config.get("mining_rate_kg_per_hr") or 0.0)
     if base_rate <= 0:
-        raise ValueError("Constructor has no mining capability")
+        raise ValueError("Equipment has no mining capability")
 
-    # Effective mining rate = base rate × resource mass fraction at this site
-    mass_fraction = float(site_resource["mass_fraction"])
-    effective_rate = round(base_rate * mass_fraction, 4)
+    # Effective mining rate
+    if equip_category == "isru":
+        effective_rate = round(base_rate, 4)
+    else:
+        # Constructor rate scales with resource abundance
+        mass_fraction = float(site_resource["mass_fraction"])
+        effective_rate = round(base_rate * mass_fraction, 4)
 
     now = game_now_s()
     job_id = str(uuid.uuid4())
@@ -1538,10 +1683,13 @@ def get_deployed_equipment(conn: sqlite3.Connection, location_id: str, *, facili
             "corp_id": str(r["corp_id"] or ""),
             "facility_id": str(r["facility_id"] or "") if "facility_id" in r.keys() else "",
         }
-        # For constructors in mine mode, add mining stats
-        if mode == "mine" and r["category"] in ("constructor", "robonaut"):
+        # For mining-capable equipment in mine mode, add mining stats
+        if mode == "mine" and r["category"] in ("miner", "constructor", "isru"):
             entry["mining_total_kg"] = float(config.get("mining_total_mined_kg") or 0.0)
-            entry["mining_rate_kg_hr"] = float(config.get("mining_rate_kg_per_hr") or 0.0)
+            if r["category"] == "isru":
+                entry["mining_rate_kg_hr"] = float(config.get("water_extraction_kg_per_hr") or 0.0)
+            else:
+                entry["mining_rate_kg_hr"] = float(config.get("mining_rate_kg_per_hr") or 0.0)
         result.append(entry)
     return result
 
@@ -1699,7 +1847,7 @@ def get_available_recipes_for_location(
     """
     equipment = get_deployed_equipment(conn, location_id, facility_id=facility_id)
     refineries = [e for e in equipment if e["category"] == "refinery"]
-    constructors = [e for e in equipment if e["category"] == "constructor"]
+    constructors = [e for e in equipment if e["category"] in ("printer", "constructor")]
 
     if not refineries and not constructors:
         return []
@@ -1722,7 +1870,9 @@ def get_available_recipes_for_location(
         (catalog_service.load_reactor_catalog, "reactor"),
         (catalog_service.load_generator_catalog, "generator"),
         (catalog_service.load_radiator_catalog, "radiator"),
-        (catalog_service.load_robonaut_catalog, "robonaut"),
+        (catalog_service.load_robonaut_catalog, "prospector"),
+        (catalog_service.load_miner_catalog, "miner"),
+        (catalog_service.load_printer_catalog, "printer"),
         (catalog_service.load_constructor_catalog, "constructor"),
         (catalog_service.load_isru_catalog, "isru"),
         (catalog_service.load_refinery_catalog, "refinery"),
@@ -1742,8 +1892,20 @@ def get_available_recipes_for_location(
         compatible_constructors = []
 
         if facility_type == "shipyard":
-            # Shipyard recipes: any constructor can build
-            compatible_constructors = list(constructors)
+            # Shipyard recipes: filter printers by printer_type specialization
+            _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer"}
+            _SHIP_CATS = {"thruster", "reactor", "generator", "radiator", "isru"}
+            out_item_id_r = str(recipe.get("output_item_id") or "")
+            out_cat_r = _output_category_map.get(out_item_id_r, "")
+            for c in constructors:
+                equip_cat = str(c.get("category") or "")
+                if equip_cat == "printer":
+                    ptype = str((c.get("config") or {}).get("printer_type") or "industrial")
+                    if ptype == "industrial" and out_cat_r and out_cat_r not in _INDUSTRIAL_CATS:
+                        continue
+                    if ptype == "ship" and out_cat_r and out_cat_r not in _SHIP_CATS:
+                        continue
+                compatible_constructors.append(c)
         else:
             # Refinery/factory recipes: match by specialization (no tier restriction)
             for ref in refineries:
@@ -1952,12 +2114,18 @@ def set_constructor_mode(
     if not equip:
         raise ValueError("Equipment not found")
 
-    if equip["category"] not in ("constructor", "robonaut"):
-        raise ValueError("Only constructors and robonauts can change mode")
+    if equip["category"] not in ("miner", "printer", "constructor", "isru", "robonaut", "prospector"):
+        raise ValueError("Only miners, printers, ISRU units, and prospectors can change mode")
 
-    # Robonauts can only mine
-    if equip["category"] == "robonaut" and mode == "construct":
-        raise ValueError("Robonauts can only mine, not construct")
+    # Prospectors and ISRU cannot perform mining or construction jobs.
+    if equip["category"] in ("robonaut", "prospector") and mode in ("mine", "construct"):
+        raise ValueError("Prospectors can only be set to idle")
+    # Miners can mine or idle, but not construct.
+    if equip["category"] == "miner" and mode == "construct":
+        raise ValueError("Miners cannot be set to construct mode — use a Printer for fabrication")
+    # Printers can construct or idle, but not mine.
+    if equip["category"] == "printer" and mode == "mine":
+        raise ValueError("Printers cannot be set to mine mode — use a Miner for excavation")
 
     # Verify corp ownership
     equip_corp_id = str(equip["corp_id"] or "") if "corp_id" in equip.keys() else ""

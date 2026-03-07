@@ -1937,6 +1937,33 @@ body.embedMode .pagePanel {
   transition: 120ms ease;
 }
 
+.tab--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab--icon::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  background-image: var(--tab-icon);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.92;
+}
+
+.tab--contracts {
+  --tab-icon: url("/static/img/dock/contractsicon.png");
+}
+
+.tab--missions {
+  --tab-icon: url("/static/img/dock/missions.png");
+}
+
 .tab:hover {
   border-color: rgba(90, 168, 212, 0.72);
   color: rgba(219, 235, 247, 0.98);
@@ -3305,12 +3332,24 @@ details.transferTreeGroup[open] > .transferTreeSummary::before {
 
 .researchPagePanel {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 9px;
   border-radius: 2px;
   border-color: rgba(120, 150, 184, 0.34);
   background:
     linear-gradient(180deg, rgba(17, 23, 32, 0.9), rgba(10, 14, 21, 0.94)),
     rgba(9, 13, 19, 0.94);
+}
+
+.researchPage .app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.researchPage .researchPagePanel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .researchPage .top.panel,
@@ -3360,13 +3399,14 @@ details.transferTreeGroup[open] > .transferTreeSummary::before {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 10px;
+  min-height: 0;
 }
 
 .researchViewport {
-  height: calc(100vh - 200px);
+  height: 100%;
   min-height: 500px;
   border-radius: 2px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid rgba(98, 130, 165, 0.5);
   background:
     linear-gradient(180deg, rgba(14, 19, 27, 0.98), rgba(8, 11, 17, 0.99)),
@@ -3378,13 +3418,15 @@ details.transferTreeGroup[open] > .transferTreeSummary::before {
       transparent 24px
     );
   position: relative;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
 }
 
 .researchSkillTree {
   position: relative;
-  min-width: 100%;
-  min-height: 100%;
-  padding: 0 24px 24px 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .researchSkillEdge {
@@ -4067,6 +4109,12 @@ details.transferTreeGroup[open] > .transferTreeSummary::before {
 .shipyardItemCard.isDisabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.shipyardItemCard.isIncompatible {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: rgba(255, 160, 60, 0.35);
 }
 
 .shipyardCardRemoveBtn {
@@ -4996,6 +5044,21 @@ tr.bodyGroupHeader td {
 
 /* ── Power & Thermal panel ──────────────────────────────── */
 
+.pwrPanelBlock {
+  background: var(--surface-alt, rgba(20, 30, 45, 0.55));
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.pwrPanelTitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent, #66ccff);
+  padding: 8px 14px 4px;
+}
+
 .pwrSection {
   padding: 8px 14px;
   border-bottom: 1px solid var(--border-soft);
@@ -5061,6 +5124,41 @@ tr.bodyGroupHeader td {
 .pwrNote.ok   { color: #5ee89c; }
 .pwrNote.warn { color: #ff9f43; }
 .pwrNote.crit { color: #ff6b7a; font-weight: 600; }
+
+/* Per-consumer breakdown in site power panel */
+.pwrConsumerList {
+  margin: 3px 0 2px 108px;
+  border-left: 2px solid rgba(109, 182, 255, 0.15);
+  padding-left: 8px;
+}
+.pwrConsumerRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 1px 0;
+  color: rgba(163, 184, 203, 0.72);
+}
+.pwrConsumerName { flex: 1; }
+.pwrConsumerVal { font-variant-numeric: tabular-nums; flex-shrink: 0; margin-left: 8px; }
+
+/* Power deficit badge on facility cards */
+.pwrBadBadge { color: #ff6b7a !important; font-weight: 600; }
+
+/* Indented sub-rows in ship power panel */
+.pbRow.pbIndent {
+  padding-left: 12px;
+  font-size: 11px;
+  color: rgba(163, 184, 203, 0.72);
+}
+.pbRow.pbIndent .pbLabel { color: rgba(163, 184, 203, 0.62); }
+
+/* Note line in power balance panel */
+.pbNote {
+  font-size: 10px;
+  padding: 2px 0;
+  line-height: 1.35;
+}
+.pbNote.muted { color: rgba(163, 184, 203, 0.5); }
 
 .eqStatus {
   font-size: 11px;
@@ -6806,6 +6904,26 @@ body.embedMode #orgTabOverview {
 .kspTechNode.isLocked {
   opacity: 0.5;
   border-color: #222;
+}
+
+/* Fit-to-view button */
+.researchFitBtn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 10;
+  padding: 4px 14px;
+  border: 1px solid rgba(98, 130, 165, 0.5);
+  border-radius: 3px;
+  background: rgba(20, 26, 36, 0.85);
+  color: #c0c8d0;
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.researchFitBtn:hover {
+  background: rgba(30, 42, 58, 0.9);
+  border-color: rgba(113, 186, 225, 0.6);
 }
 
 .kspNodeName {

@@ -284,10 +284,14 @@ window.ItemInfo = (function () {
     if (ispS > 0) rows.push(["Specific Impulse", fmtNum(ispS, "s")]);
     const thermalMw = Number(item.thermal_mw) || 0;
     if (thermalMw > 0) rows.push(["Thermal Power", fmtNum(thermalMw, "MW")]);
+    const ratedTempK = Number(item.rated_temp_k) || 0;
+    if (ratedTempK > 0) rows.push(["Core Temp Requirement", fmtNum(ratedTempK, "K")]);
     if (item.reaction_mass) rows.push(["Reaction Mass", titleCase(item.reaction_mass)]);
     if (item.thruster_family) rows.push(["Family", titleCase(item.thruster_family)]);
 
     // Reactor-specific (thermal_mw already handled above)
+    const coreTempK = Number(item.core_temp_k) || 0;
+    if (coreTempK > 0) rows.push(["Core Temp", fmtNum(coreTempK, "K")]);
 
     // Generator-specific
     const thermalInput = Number(item.thermal_mw_input) || 0;
@@ -319,13 +323,11 @@ window.ItemInfo = (function () {
     const maxIce = Number(item.max_water_ice_fraction);
     if (!isNaN(maxIce) && maxIce > 0 && maxIce < 1) rows.push(["Max Ice Fraction", (maxIce * 100).toFixed(1) + "%"]);
 
-    // Robonaut-specific
+    // Prospector-specific
     const prospectRange = Number(item.prospect_range_km) || 0;
     if (prospectRange > 0) rows.push(["Prospect Range", fmtNum(prospectRange, "km")]);
     const scanRate = Number(item.scan_rate_km2_per_hr) || 0;
     if (scanRate > 0) rows.push(["Scan Rate", fmtNum(scanRate, "km²/hr")]);
-    const meltRate = Number(item.melt_rate_t_per_hr) || 0;
-    if (meltRate > 0) rows.push(["Melt Rate", fmtNum(meltRate, "t/hr")]);
     const miningRate = Number(item.mining_rate_kg_per_hr) || 0;
     if (miningRate > 0) rows.push(["Mining Rate", fmtNum(miningRate, "kg/hr")]);
     if (item.emission_type) rows.push(["Emission Type", titleCase(item.emission_type)]);

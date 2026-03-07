@@ -1,0 +1,713 @@
+{
+  "version": "3.0",
+  "style": "unified",
+  "nodes": [
+    {
+      "id": "starter_corp",
+      "name": "Starter Corp",
+      "cost_rp": 0,
+      "auto_unlock": true,
+      "x": 2820,
+      "y": 2216
+    },
+    {
+      "id": "nuclear_fission",
+      "name": "Nuclear Fission",
+      "cost_rp": 16,
+      "x": 3760,
+      "y": 1874
+    },
+    {
+      "id": "advanced_solid_core_ii",
+      "name": "Advanced Solid Core II",
+      "cost_rp": 20,
+      "x": 4180,
+      "y": 1874
+    },
+    {
+      "id": "advanced_solid_core_iii",
+      "name": "Advanced Solid Core III",
+      "cost_rp": 30,
+      "x": 4640,
+      "y": 1874
+    },
+    {
+      "id": "high_power_solid_core",
+      "name": "High Power Solid Core",
+      "cost_rp": 20,
+      "x": 5080,
+      "y": 1874
+    },
+    {
+      "id": "high_power_solid_core_ii",
+      "name": "High Power Solid Core II",
+      "cost_rp": 30,
+      "x": 5500,
+      "y": 1874
+    },
+    {
+      "id": "pebble_bed",
+      "name": "Pebble Bed",
+      "cost_rp": 18,
+      "x": 4180,
+      "y": 1748
+    },
+    {
+      "id": "advanced_pebble_bed",
+      "name": "Advanced Pebble Bed",
+      "cost_rp": 15,
+      "x": 4640,
+      "y": 1748
+    },
+    {
+      "id": "liquid_core",
+      "name": "Liquid Core",
+      "cost_rp": 30,
+      "x": 4640,
+      "y": 2000
+    },
+    {
+      "id": "advanced_liquid_core",
+      "name": "Advanced Liquid Core",
+      "cost_rp": 40,
+      "x": 5080,
+      "y": 2000
+    },
+    {
+      "id": "vapor_core",
+      "name": "Vapor Core",
+      "cost_rp": 20,
+      "x": 5080,
+      "y": 2126
+    },
+    {
+      "id": "vapor_core_ii",
+      "name": "Vapor Core II",
+      "cost_rp": 30,
+      "x": 5920,
+      "y": 2126
+    },
+    {
+      "id": "closed_cycle_gas_core",
+      "name": "Closed Cycle Gas Core",
+      "cost_rp": 90,
+      "x": 6340,
+      "y": 2126
+    },
+    {
+      "id": "open_cycle_gas_core",
+      "name": "Open Cycle Gas Core",
+      "cost_rp": 160,
+      "x": 6760,
+      "y": 2126
+    },
+    {
+      "id": "electrical_thermal_systems",
+      "name": "Electrical and Thermal Systems",
+      "cost_rp": 20,
+      "x": 3640,
+      "y": 3566
+    },
+    {
+      "id": "solid_state_thermoelectrics",
+      "name": "Solid State Thermoelectrics",
+      "cost_rp": 20,
+      "x": 4060,
+      "y": 3503
+    },
+    {
+      "id": "solid_state_thermoelectrics_ii",
+      "name": "Solid State Thermoelectrics II",
+      "cost_rp": 40,
+      "x": 4480,
+      "y": 3503
+    },
+    {
+      "id": "rigid_panel_radiators",
+      "name": "Rigid Panel Radiators",
+      "cost_rp": 20,
+      "x": 4060,
+      "y": 3629
+    },
+    {
+      "id": "high_temp_rigid_panel_radiators",
+      "name": "High Temp Rigid Panel Radiators",
+      "cost_rp": 40,
+      "x": 4480,
+      "y": 3629
+    },
+    {
+      "id": "prospecting_and_mining",
+      "name": "Prospecting and Mining",
+      "cost_rp": 23,
+      "x": 1840,
+      "y": 3602
+    },
+    {
+      "id": "uv_laser_prospecting",
+      "name": "UV Laser Prospecting",
+      "cost_rp": 25,
+      "x": 1440,
+      "y": 3485
+    },
+    {
+      "id": "free_electron_laser_prospecting",
+      "name": "Free Electron Laser Prospecting",
+      "cost_rp": 50,
+      "x": 1040,
+      "y": 3485
+    },
+    {
+      "id": "coherent_gamma_prospecting",
+      "name": "Coherent Gamma Ray Prospecting",
+      "cost_rp": 100,
+      "x": 640,
+      "y": 3485
+    },
+    {
+      "id": "early_gravity_mining",
+      "name": "Early Gravity Mining",
+      "cost_rp": 8,
+      "x": 1440,
+      "y": 3683
+    },
+    {
+      "id": "laser_gravity_mining",
+      "name": "Laser Gravity Mining",
+      "cost_rp": 25,
+      "x": 1040,
+      "y": 3683
+    },
+    {
+      "id": "industrial_plasma_gravity_mining",
+      "name": "Industrial Plasma Gravity Mining",
+      "cost_rp": 50,
+      "x": 640,
+      "y": 3683
+    },
+    {
+      "id": "vibrothermal_gravity_mining",
+      "name": "Vibrothermal Gravity Mining",
+      "cost_rp": 100,
+      "x": 240,
+      "y": 3683
+    },
+    {
+      "id": "advanced_microgravity_mining",
+      "name": "Advanced Microgravity Mining",
+      "cost_rp": 10,
+      "x": 1440,
+      "y": 3809
+    },
+    {
+      "id": "plasma_microgravity_mining",
+      "name": "Plasma Microgravity Mining",
+      "cost_rp": 20,
+      "x": 1040,
+      "y": 3809
+    },
+    {
+      "id": "industrial_microgravity_mining",
+      "name": "Industrial Microgravity Mining",
+      "cost_rp": 40,
+      "x": 640,
+      "y": 3809
+    },
+    {
+      "id": "advanced_cryovolatile_mining",
+      "name": "Advanced Cryovolatile Mining",
+      "cost_rp": 10,
+      "x": 1440,
+      "y": 3935
+    },
+    {
+      "id": "laser_cryovolatile_mining",
+      "name": "Laser Cryovolatile Mining",
+      "cost_rp": 20,
+      "x": 1040,
+      "y": 3935
+    },
+    {
+      "id": "interplanetary_industry",
+      "name": "Interplanetary Industry",
+      "cost_rp": 10,
+      "x": 1680,
+      "y": 740
+    },
+    {
+      "id": "advanced_ceramics_fabrication",
+      "name": "Advanced Ceramics Fabrication",
+      "cost_rp": 10,
+      "x": 1340,
+      "y": 578
+    },
+    {
+      "id": "plasma_synthesis",
+      "name": "Plasma Synthesis",
+      "cost_rp": 20,
+      "x": 960,
+      "y": 578
+    },
+    {
+      "id": "molecular_deposition",
+      "name": "Molecular Deposition",
+      "cost_rp": 40,
+      "x": 580,
+      "y": 578
+    },
+    {
+      "id": "vacuum_metallurgy",
+      "name": "Vacuum Metallurgy",
+      "cost_rp": 10,
+      "x": 1340,
+      "y": 686
+    },
+    {
+      "id": "electron_beam_metallurgy",
+      "name": "Electron Beam Metallurgy",
+      "cost_rp": 20,
+      "x": 960,
+      "y": 686
+    },
+    {
+      "id": "plasma_metallurgy",
+      "name": "Plasma Metallurgy",
+      "cost_rp": 40,
+      "x": 580,
+      "y": 686
+    },
+    {
+      "id": "basic_nuclear_fuels",
+      "name": "Basic Nuclear Fuels",
+      "cost_rp": 5,
+      "x": 1340,
+      "y": 794
+    },
+    {
+      "id": "isotope_separation",
+      "name": "Isotope Separation",
+      "cost_rp": 10,
+      "x": 960,
+      "y": 794
+    },
+    {
+      "id": "centrifuge_enrichment",
+      "name": "Centrifuge Enrichment",
+      "cost_rp": 20,
+      "x": 580,
+      "y": 794
+    },
+    {
+      "id": "plasma_isotope_separation",
+      "name": "Plasma Isotope Separation",
+      "cost_rp": 40,
+      "x": 200,
+      "y": 794
+    },
+    {
+      "id": "basic_chemical_processing",
+      "name": "Basic Chemical Processing",
+      "cost_rp": 5,
+      "x": 1340,
+      "y": 902
+    },
+    {
+      "id": "cryogenic_separation",
+      "name": "Cryogenic Separation",
+      "cost_rp": 10,
+      "x": 960,
+      "y": 902
+    },
+    {
+      "id": "catalytic_reforming",
+      "name": "Catalytic Reforming",
+      "cost_rp": 20,
+      "x": 580,
+      "y": 902
+    },
+    {
+      "id": "thermochemical_cracking",
+      "name": "Thermochemical Cracking",
+      "cost_rp": 40,
+      "x": 200,
+      "y": 902
+    },
+    {
+      "id": "early_aerospace_printing",
+      "name": "Early Aerospace Printing",
+      "cost_rp": 5,
+      "x": 1340,
+      "y": 335
+    },
+    {
+      "id": "advanced_aerospace_printing",
+      "name": "Advanced Aerospace Printing",
+      "cost_rp": 10,
+      "x": 960,
+      "y": 335
+    },
+    {
+      "id": "laser_ship_printing",
+      "name": "Laser Ship Printing",
+      "cost_rp": 20,
+      "x": 580,
+      "y": 335
+    },
+    {
+      "id": "industrial_plasma_ship_printing",
+      "name": "Industrial Plasma Ship Printing",
+      "cost_rp": 40,
+      "x": 200,
+      "y": 335
+    },
+    {
+      "id": "early_industrial_printing",
+      "name": "Early Industrial Printing",
+      "cost_rp": 5,
+      "x": 1340,
+      "y": 200
+    },
+    {
+      "id": "advanced_industrial_printing",
+      "name": "Advanced Industrial Printing",
+      "cost_rp": 10,
+      "x": 960,
+      "y": 200
+    },
+    {
+      "id": "laser_industrial_printing",
+      "name": "Laser Industrial Printing",
+      "cost_rp": 20,
+      "x": 580,
+      "y": 200
+    },
+    {
+      "id": "industrial_plasma_printing",
+      "name": "Industrial Plasma Printing",
+      "cost_rp": 40,
+      "x": 200,
+      "y": 200
+    },
+    {
+      "id": "in_situ_refueling",
+      "name": "In Situ Refueling",
+      "cost_rp": 10,
+      "x": 1840,
+      "y": 3134
+    },
+    {
+      "id": "deep_efficiency_sifting",
+      "name": "Deep Efficiency Sifting",
+      "cost_rp": 8,
+      "x": 1440,
+      "y": 3080
+    },
+    {
+      "id": "electrostatic_regolith_processing",
+      "name": "Electrostatic Regolith Processing",
+      "cost_rp": 25,
+      "x": 1040,
+      "y": 3080
+    },
+    {
+      "id": "magnetic_resonance_sifting",
+      "name": "Magnetic Resonance Sifting",
+      "cost_rp": 50,
+      "x": 640,
+      "y": 3080
+    },
+    {
+      "id": "plasma_sifting_extraction",
+      "name": "Plasma Sifting Extraction",
+      "cost_rp": 100,
+      "x": 240,
+      "y": 3080
+    },
+    {
+      "id": "heat_drill_capture",
+      "name": "Heat Drill Capture",
+      "cost_rp": 8,
+      "x": 1440,
+      "y": 3188
+    },
+    {
+      "id": "microwave_thermal_extraction",
+      "name": "Microwave Thermal Extraction",
+      "cost_rp": 25,
+      "x": 1040,
+      "y": 3188
+    },
+    {
+      "id": "plasma_thermal_drilling",
+      "name": "Plasma Thermal Drilling",
+      "cost_rp": 50,
+      "x": 640,
+      "y": 3188
+    },
+    {
+      "id": "fission_pulse_thermal_extraction",
+      "name": "Fission-Pulse Thermal Extraction",
+      "cost_rp": 100,
+      "x": 240,
+      "y": 3188
+    }
+  ],
+  "edges": [
+    [
+      "starter_corp",
+      "prospecting_and_mining"
+    ],
+    [
+      "starter_corp",
+      "electrical_thermal_systems"
+    ],
+    [
+      "starter_corp",
+      "nuclear_fission"
+    ],
+    [
+      "starter_corp",
+      "interplanetary_industry"
+    ],
+    [
+      "starter_corp",
+      "in_situ_refueling"
+    ],
+    [
+      "interplanetary_industry",
+      "early_aerospace_printing"
+    ],
+    [
+      "interplanetary_industry",
+      "early_industrial_printing"
+    ],
+    [
+      "interplanetary_industry",
+      "advanced_ceramics_fabrication"
+    ],
+    [
+      "interplanetary_industry",
+      "vacuum_metallurgy"
+    ],
+    [
+      "interplanetary_industry",
+      "basic_nuclear_fuels"
+    ],
+    [
+      "interplanetary_industry",
+      "basic_chemical_processing"
+    ],
+    [
+      "nuclear_fission",
+      "pebble_bed"
+    ],
+    [
+      "nuclear_fission",
+      "advanced_solid_core_ii"
+    ],
+    [
+      "nuclear_fission",
+      "liquid_core"
+    ],
+    [
+      "electrical_thermal_systems",
+      "solid_state_thermoelectrics"
+    ],
+    [
+      "electrical_thermal_systems",
+      "rigid_panel_radiators"
+    ],
+    [
+      "prospecting_and_mining",
+      "uv_laser_prospecting"
+    ],
+    [
+      "prospecting_and_mining",
+      "early_gravity_mining"
+    ],
+    [
+      "prospecting_and_mining",
+      "advanced_microgravity_mining"
+    ],
+    [
+      "prospecting_and_mining",
+      "advanced_cryovolatile_mining"
+    ],
+    [
+      "in_situ_refueling",
+      "deep_efficiency_sifting"
+    ],
+    [
+      "in_situ_refueling",
+      "heat_drill_capture"
+    ],
+    [
+      "advanced_solid_core_ii",
+      "advanced_solid_core_iii"
+    ],
+    [
+      "pebble_bed",
+      "advanced_pebble_bed"
+    ],
+    [
+      "liquid_core",
+      "advanced_liquid_core"
+    ],
+    [
+      "liquid_core",
+      "vapor_core"
+    ],
+    [
+      "vapor_core",
+      "vapor_core_ii"
+    ],
+    [
+      "advanced_solid_core_iii",
+      "high_power_solid_core"
+    ],
+    [
+      "high_power_solid_core",
+      "high_power_solid_core_ii"
+    ],
+    [
+      "high_power_solid_core_ii",
+      "closed_cycle_gas_core"
+    ],
+    [
+      "vapor_core_ii",
+      "closed_cycle_gas_core"
+    ],
+    [
+      "closed_cycle_gas_core",
+      "open_cycle_gas_core"
+    ],
+    [
+      "solid_state_thermoelectrics",
+      "solid_state_thermoelectrics_ii"
+    ],
+    [
+      "rigid_panel_radiators",
+      "high_temp_rigid_panel_radiators"
+    ],
+    [
+      "heat_drill_capture",
+      "microwave_thermal_extraction"
+    ],
+    [
+      "deep_efficiency_sifting",
+      "electrostatic_regolith_processing"
+    ],
+    [
+      "microwave_thermal_extraction",
+      "plasma_thermal_drilling"
+    ],
+    [
+      "electrostatic_regolith_processing",
+      "magnetic_resonance_sifting"
+    ],
+    [
+      "magnetic_resonance_sifting",
+      "plasma_sifting_extraction"
+    ],
+    [
+      "plasma_thermal_drilling",
+      "fission_pulse_thermal_extraction"
+    ],
+    [
+      "uv_laser_prospecting",
+      "free_electron_laser_prospecting"
+    ],
+    [
+      "early_gravity_mining",
+      "laser_gravity_mining"
+    ],
+    [
+      "advanced_microgravity_mining",
+      "plasma_microgravity_mining"
+    ],
+    [
+      "advanced_cryovolatile_mining",
+      "laser_cryovolatile_mining"
+    ],
+    [
+      "free_electron_laser_prospecting",
+      "coherent_gamma_prospecting"
+    ],
+    [
+      "laser_gravity_mining",
+      "industrial_plasma_gravity_mining"
+    ],
+    [
+      "plasma_microgravity_mining",
+      "industrial_microgravity_mining"
+    ],
+    [
+      "industrial_plasma_gravity_mining",
+      "vibrothermal_gravity_mining"
+    ],
+    [
+      "basic_nuclear_fuels",
+      "isotope_separation"
+    ],
+    [
+      "basic_chemical_processing",
+      "cryogenic_separation"
+    ],
+    [
+      "vacuum_metallurgy",
+      "electron_beam_metallurgy"
+    ],
+    [
+      "advanced_ceramics_fabrication",
+      "plasma_synthesis"
+    ],
+    [
+      "early_aerospace_printing",
+      "advanced_aerospace_printing"
+    ],
+    [
+      "early_industrial_printing",
+      "advanced_industrial_printing"
+    ],
+    [
+      "advanced_aerospace_printing",
+      "laser_ship_printing"
+    ],
+    [
+      "advanced_industrial_printing",
+      "laser_industrial_printing"
+    ],
+    [
+      "laser_industrial_printing",
+      "industrial_plasma_printing"
+    ],
+    [
+      "laser_ship_printing",
+      "industrial_plasma_ship_printing"
+    ],
+    [
+      "plasma_synthesis",
+      "molecular_deposition"
+    ],
+    [
+      "electron_beam_metallurgy",
+      "plasma_metallurgy"
+    ],
+    [
+      "isotope_separation",
+      "centrifuge_enrichment"
+    ],
+    [
+      "centrifuge_enrichment",
+      "plasma_isotope_separation"
+    ],
+    [
+      "cryogenic_separation",
+      "catalytic_reforming"
+    ],
+    [
+      "catalytic_reforming",
+      "thermochemical_cracking"
+    ]
+  ]
+}

@@ -64,26 +64,6 @@ class TestResourceCatalog:
                 assert float(mass) > 0, f"Resource {item_id} has non-positive mass_per_m3_kg"
 
 
-# ── Storage files ──────────────────────────────────────────────────────────
-
-class TestStorageCatalog:
-    def test_loads_without_error(self, storage_catalog):
-        assert len(storage_catalog) > 0
-
-    def test_required_fields(self, storage_catalog):
-        # Catalog normalizes to item_id (not id)
-        required = {"item_id", "name", "type"}
-        for item_id, item in storage_catalog.items():
-            missing = required - set(item.keys())
-            assert not missing, f"Storage {item_id} missing: {missing}"
-
-    def test_capacity_positive(self, storage_catalog):
-        for item_id, item in storage_catalog.items():
-            cap = item.get("capacity_m3")
-            if cap is not None:
-                assert float(cap) > 0, f"Storage {item_id} has non-positive capacity_m3"
-
-
 # ── Thruster catalog ──────────────────────────────────────────────────────
 
 class TestThrusterCatalog:
@@ -104,6 +84,15 @@ class TestThrusterCatalog:
             if isp is not None:
                 assert float(isp) > 0, f"Thruster {item_id} has non-positive ISP"
 
+    def test_thermal_pairing_fields_present(self, thruster_catalog):
+        for item_id, item in thruster_catalog.items():
+            rated_temp_k = float(item.get("rated_temp_k") or 0.0)
+            compatible = item.get("compatible_reactor_branches") or []
+            assert rated_temp_k > 0.0, f"Thruster {item_id} missing/invalid rated_temp_k"
+            assert isinstance(compatible, list) and compatible, (
+                f"Thruster {item_id} missing compatible_reactor_branches"
+            )
+
 
 # ── Reactor catalog ───────────────────────────────────────────────────────
 
@@ -115,6 +104,11 @@ class TestReactorCatalog:
         for item_id, item in reactor_catalog.items():
             assert "item_id" in item or "id" in item, f"Reactor {item_id} missing id/item_id"
             assert "name" in item, f"Reactor {item_id} missing name"
+
+    def test_core_temp_present(self, reactor_catalog):
+        for item_id, item in reactor_catalog.items():
+            core_temp_k = float(item.get("core_temp_k") or 0.0)
+            assert core_temp_k > 0.0, f"Reactor {item_id} missing/invalid core_temp_k"
 
 
 # ── Generator catalog ─────────────────────────────────────────────────────
@@ -154,9 +148,9 @@ class TestRecipeCatalog:
             if bt is not None:
                 assert float(bt) > 0, f"Recipe {recipe_id} has non-positive build_time_s"
 
-    def test_output_item_exists_somewhere(self, recipe_catalog, resource_catalog, storage_catalog):
+    def test_output_item_exists_somewhere(self, recipe_catalog, resource_catalog):
         """Every recipe output_item_id should exist in some catalog."""
-        all_known_ids = set(resource_catalog.keys()) | set(storage_catalog.keys())
+        all_known_ids = set(resource_catalog.keys())
         # Also include recipe outputs themselves (intermediate goods may only exist as outputs)
         all_known_ids |= {r.get("output_item_id") for r in recipe_catalog.values()}
 
@@ -167,9 +161,9 @@ class TestRecipeCatalog:
                     f"Recipe {recipe_id} output_item_id={out_id} not found in any catalog"
                 )
 
-    def test_input_items_exist_somewhere(self, recipe_catalog, resource_catalog, storage_catalog):
+    def test_input_items_exist_somewhere(self, recipe_catalog, resource_catalog):
         """Every recipe input item_id should be a known resource or catalog item."""
-        all_known_ids = set(resource_catalog.keys()) | set(storage_catalog.keys())
+        all_known_ids = set(resource_catalog.keys())
         all_known_ids |= {r.get("output_item_id") for r in recipe_catalog.values()}
 
         # Exclude the template recipe (it has placeholder values)

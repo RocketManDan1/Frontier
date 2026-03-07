@@ -1,13 +1,20 @@
 {
   "id": "cgn_2_prometheus",
   "name": "CGN-2 \"Prometheus\"",
-  "research_node": "closed_gas_cycle_ntr",
+  "research_node": "closed_cycle_gas_core",
   "tech_level": 3.5,
   "branch": "gas_core_closed",
   "mass_t": 55.0,
+  "compatible_reactor_branches": [
+    "gas_core",
+    "vapor_core"
+  ],
   "performance": {
     "max_thrust_kN": 900,
-    "isp_s": 1600
+    "isp_s": 1600,
+    "rated_temp_k": 12000,
+    "fuel_capacity_kg": 300000,
+    "cargo_capacity_kg": 350000
   },
   "power_requirements": {
     "thermal_mw": 2450
@@ -22,5 +29,7 @@
     }
   },
   "description": "An advanced lightbulb-type gas-core engine with an uprated plasma containment cavity and improved heat exchange jacket. A leap in performance for deep-system transit missions.",
-  "ui_tags": ["gas_core_closed"]
+  "ui_tags": [
+    "gas_core_closed"
+  ]
 }

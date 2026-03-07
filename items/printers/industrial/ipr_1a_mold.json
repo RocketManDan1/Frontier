@@ -1,0 +1,19 @@
+{
+  "id": "ipr_1a_mold",
+  "name": "IPR-1A \"Mold\"",
+  "research_node": "early_industrial_printing",
+  "tech_level": 1,
+  "branch": "regolith_casting",
+  "mass_t": 2.5,
+  "operational_environment": "surface",
+  "printer_type": "industrial",
+  "power_requirements": {
+    "electric_mw": 1.5
+  },
+  "performance": {
+    "construction_rate_kg_per_hr": 40,
+    "fabrication_type": "sand_casting_sintering"
+  },
+  "description": "The IPR-1A Mold is the first-generation industrial surface printer, designed for fabricating heavy equipment from locally-sourced regolith binders and pre-positioned metal feedstock. Its primary process chain is sand casting — pouring regolith-metal slurries into wire-printed ceramic molds — followed by resistive sintering to cure the final part. Though slow by later standards, the Mold can produce large structural frames for refineries and mining equipment with minimal off-world feedstock. Rated for industrial-category output only: refineries, miners, prospectors, and printers.",
+  "ui_tags": ["sand_casting", "industrial_print", "tier_1"]
+}

@@ -1,13 +1,12 @@
 {
   "schema_version": "1.0",
-  "tech_category": "robonauts_raygun",
-  "display_name": "Raygun Robonaut",
+  "tech_category": "prospectors_raygun",
+  "display_name": "Raygun Prospector",
   "notes": [
-    "High-energy emission robonauts for remote prospecting and surface ice melting.",
+    "High-energy emission prospectors for remote prospecting and subsurface characterization.",
     "Use long-range directed-energy beams (microwave, IR/UV/X-ray/gamma) to characterise subsurface composition from orbit or altitude.",
-    "Ice melting (melt_rate_t_per_hr) is only active while surface-deployed.",
     "Prospecting (scan_rate_km2_per_hr, prospect_range_km) operates at orbital standoff.",
-    "Each robonaut draws electric_mw from the ship's generator bus; multiple units may be embarked and their draw sums.",
+    "Each prospector draws electric_mw from the ship's generator bus; multiple units may be embarked and their draw sums.",
     "Higher tiers require superconducting bus systems and dedicated beam-focusing optics."
   ],
   "constraints": {

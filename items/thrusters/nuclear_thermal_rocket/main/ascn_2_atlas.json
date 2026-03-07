@@ -1,13 +1,20 @@
 {
   "id": "ascn_2_atlas",
   "name": "ASCN-2 \"Atlas\"",
-  "research_node": "advanced_solid_core_ntr",
+  "research_node": "advanced_solid_core_iii",
   "tech_level": 2.5,
   "branch": "solid_core",
   "mass_t": 35.0,
+  "compatible_reactor_branches": [
+    "solid_core",
+    "pebble_bed"
+  ],
   "performance": {
     "max_thrust_kN": 600,
-    "isp_s": 1000
+    "isp_s": 1000,
+    "rated_temp_k": 2800,
+    "fuel_capacity_kg": 125000,
+    "cargo_capacity_kg": 100000
   },
   "power_requirements": {
     "thermal_mw": 1250
@@ -22,5 +29,8 @@
     }
   },
   "description": "The pinnacle of solid-core NTR engineering. Dense cermet fuel elements sustain extreme thermal loads, pushing Isp to the practical ceiling for solid-phase reactor cores.",
-  "ui_tags": ["solid_core", "advanced"]
+  "ui_tags": [
+    "solid_core",
+    "advanced"
+  ]
 }

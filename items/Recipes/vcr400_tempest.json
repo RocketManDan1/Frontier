@@ -1,0 +1,46 @@
+{
+  "recipe_id": "vcr400_tempest",
+  "name": "Assemble VCR-400 \"Tempest\"",
+  "output_item_id": "vcr400_tempest",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 1100.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 900.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 750.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 700.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 600.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 500.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 250.0
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 220.0
+    }
+  ],
+  "build_time_s": 1100,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 280,
+  "byproducts": []
+}

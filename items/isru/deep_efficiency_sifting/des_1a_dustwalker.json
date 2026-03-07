@@ -1,7 +1,7 @@
 {
   "id": "des_1a_dustwalker",
   "name": "DES-1A \"Dustwalker\"",
-  "research_node": "basic_regolith_sifting",
+  "research_node": "in_situ_refueling",
   "tech_level": 1,
   "branch": "centrifugal_sifting",
   "mass_t": 10.0,
@@ -16,6 +16,12 @@
     "min_water_ice_fraction": 0.0,
     "max_water_ice_fraction": 0.15
   },
-  "description": "The entry-level deep sifting unit, the Dustwalker is an industrial-scale regolith processor derived from terrestrial mineral separation technology. Twin counter-rotating centrifugal drums accept raw regolith from an intake hopper, spinning at differential speeds to separate fine ice grains and volatile-bearing particles from bulk silicate waste. A modest 400 K bake-out chamber downstream sublimates trapped water molecules from the concentrate, which are captured by a passive radiative cryocondenser. At 10 tonnes dry mass, the Dustwalker is the heaviest T1 equipment in the ISRU family — a consequence of the massive drum assemblies and reinforced intake conveyors needed to process 5 tonnes of raw regolith per hour. Power draw is remarkably low at 0.3 MW, as the drums are spun by mechanical gearing off a single electric motor and the bake-out temperature requires only low-grade waste heat. Designed for the lunar highlands and other dry sites where water ice concentration is minimal but non-zero.",
-  "ui_tags": ["centrifugal_sifting", "tier_1", "early", "heavy", "low_power"]
+  "description": "The entry-level deep sifting unit, the Dustwalker is an industrial-scale regolith processor derived from terrestrial mineral separation technology. Twin counter-rotating centrifugal drums accept raw regolith from an intake hopper, spinning at differential speeds to separate fine ice grains and volatile-bearing particles from bulk silicate waste. A modest 400 K bake-out chamber downstream sublimates trapped water molecules from the concentrate, which are captured by a passive radiative cryocondenser. At 10 tonnes dry mass, the Dustwalker is the heaviest T1 equipment in the ISRU family \u2014 a consequence of the massive drum assemblies and reinforced intake conveyors needed to process 5 tonnes of raw regolith per hour. Power draw is remarkably low at 0.3 MW, as the drums are spun by mechanical gearing off a single electric motor and the bake-out temperature requires only low-grade waste heat. Designed for the lunar highlands and other dry sites where water ice concentration is minimal but non-zero.",
+  "ui_tags": [
+    "centrifugal_sifting",
+    "tier_1",
+    "early",
+    "heavy",
+    "low_power"
+  ]
 }

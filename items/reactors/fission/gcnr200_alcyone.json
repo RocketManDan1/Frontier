@@ -1,17 +1,21 @@
 {
   "id": "gcnr200_alcyone",
   "name": "GCNR-200 \"Alcyone\"",
-  "research_node": "gas_core_fission",
+  "research_node": "closed_cycle_gas_core",
   "tech_level": 4,
   "branch": "gas_core",
   "mass_t": 3.8,
   "output": {
-    "thermal_mw": 5200
+    "thermal_mw": 5200,
+    "core_temp_k": 12000
   },
   "fuel": {
     "type": "high_grade_reactor_pellets",
     "geometry": "vortex_stabilised_fissile_plasma_cavity"
   },
   "description": "Based on Los Alamos gas-core nuclear rocket reactor studies. Fissile plasma is stabilised within a vortex-confined cavity, decoupling the fuel temperature from structural limits. Opens the door to closed gas-core NTR operation.",
-  "ui_tags": ["gas_core", "exotic"]
+  "ui_tags": [
+    "gas_core",
+    "exotic"
+  ]
 }

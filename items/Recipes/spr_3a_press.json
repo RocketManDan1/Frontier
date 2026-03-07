@@ -1,0 +1,20 @@
+{
+  "recipe_id": "spr_3a_press",
+  "name": "Assemble SPR-3A \"Press\"",
+  "output_item_id": "spr_3a_press",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "semiconductor_materials", "qty": 13000.0 },
+    { "item_id": "advanced_aerospace_alloys", "qty": 12000.0 },
+    { "item_id": "structural_alloys", "qty": 8000.0 },
+    { "item_id": "advanced_ceramics", "qty": 6000.0 },
+    { "item_id": "carbon_composites", "qty": 5000.0 },
+    { "item_id": "superconductors", "qty": 4500.0 }
+  ],
+  "build_time_s": 5700,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 880,
+  "byproducts": []
+}

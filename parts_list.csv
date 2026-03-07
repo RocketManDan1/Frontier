@@ -1,0 +1,97 @@
+Category,Subcategory,Tech Level,RP Cost,Item Name,Research Node
+Thrusters,Nuclear Thermal Rocket,1.0,5,SCN-1 "Pioneer",early_solid_core_ntr
+Thrusters,Nuclear Thermal Rocket,1.5,8,SCN-2 "Frontier",early_solid_core_ntr
+Thrusters,Nuclear Thermal Rocket,2.0,10,ASCN-1 "Venture",advanced_solid_core_ntr
+Thrusters,Nuclear Thermal Rocket,2.5,15,ASCN-2 "Atlas",advanced_solid_core_ntr
+Thrusters,Nuclear Thermal Rocket,3.0,20,CGN-1 "Helios",closed_gas_cycle_ntr
+Thrusters,Nuclear Thermal Rocket,3.5,30,CGN-2 "Prometheus",closed_gas_cycle_ntr
+Thrusters,Nuclear Thermal Rocket,2.5,15,LCN-1 "Torrent",liquid_core_ntr
+Thrusters,Nuclear Thermal Rocket,3.0,20,LCN-2 "Cascade",liquid_core_ntr
+Thrusters,Nuclear Thermal Rocket,4.0,40,OGN-1 "Icarus",open_gas_cycle_ntr
+Thrusters,Nuclear Thermal Rocket,4.5,60,OGN-2 "Daedalus",open_gas_cycle_ntr
+Reactors,Fission,1.0,5,RD-0410 "Igrit",early_solid_core_fission
+Reactors,Fission,1.5,8,KIWI-B4E "Bison",early_solid_core_fission
+Reactors,Fission,1.5,8,PBR-40 "Cinder",pebble_bed_fission
+Reactors,Fission,2.0,10,PEWEE-1 "Sparrow",advanced_solid_core_fission
+Reactors,Fission,2.0,10,TWR-45 "Stormwind",pebble_bed_fission
+Reactors,Fission,2.5,15,Phoebus-1B "Titan",advanced_solid_core_fission
+Reactors,Fission,2.5,15,TWR-75 "Firebrand",advanced_pebble_bed_fission
+Reactors,Fission,2.5,15,LARS-1 "Crucible",liquid_core_fission
+Reactors,Fission,3.0,20,NERVA-2 "Aegis",high_power_solid_core_fission
+Reactors,Fission,3.0,20,DCR-200 "Maelstrom",liquid_core_fission
+Reactors,Fission,3.0,20,CCR-1 "Mirage",vapor_core_fission
+Reactors,Fission,3.5,30,Phoebus-2A "Colossus",high_power_solid_core_fission
+Reactors,Fission,3.5,30,VCR-400 "Tempest",vapor_core_fission
+Reactors,Fission,4.0,40,GCNR-200 "Alcyone",gas_core_fission
+Reactors,Fission,4.5,60,GCNR-4000 "Hyperion",gas_core_fission
+Generators,Thermoelectric,1.0,5,SNAP-SiGe "Wren",early_thermoelectric
+Generators,Thermoelectric,2.0,10,SP-100 TE "Ibis",advanced_thermoelectric
+Generators,Thermoelectric,3.0,20,SiGe-Segmented "Crane",advanced_solid_state_thermoelectric
+Generators,Thermoelectric,4.0,40,ASC-Skutterudite "Egret",advanced_solid_state_thermoelectric
+Radiators,Rigid Panels,1.0,5,Al/OSR Panel "Lapwing",early_rigid_panel_radiator
+Radiators,Rigid Panels,2.0,10,Ti-HEC Panel "Heron",advanced_rigid_panel_radiator
+Radiators,Rigid Panels,3.0,20,C/C Refractory Panel "Stork",high_temp_rigid_panel_radiator
+Radiators,Rigid Panels,4.0,40,Adv. C/C Panel "Albatross",high_temp_rigid_panel_radiator
+Prospectors,Raygun,1.0,5,RBN-1A "Argus",early_radar_laser_prospecting
+Prospectors,Raygun,1.5,8,RBN-1B "Cyclops",early_radar_laser_prospecting
+Prospectors,Raygun,2.0,10,RBN-2A "Meridian",uv_laser_xrf_prospecting
+Prospectors,Raygun,2.5,15,RBN-2B "Zenith",uv_laser_xrf_prospecting
+Prospectors,Raygun,3.0,20,RBN-3A "Solaris",free_electron_laser_prospecting
+Prospectors,Raygun,3.5,30,RBN-3B "Helion",free_electron_laser_prospecting
+Prospectors,Raygun,4.0,40,RBN-4A "Quasar",coherent_gamma_prospecting
+Prospectors,Raygun,4.5,60,RBN-4B "Pulsar",coherent_gamma_prospecting
+Miners,Large-Body,1.0,5,GCN-1A "Antaeus",early_gravity_construction
+Miners,Large-Body,1.5,8,GCN-1B "Talpa",early_gravity_construction
+Miners,Large-Body,2.0,10,GCN-2A "Hephaestus",vibrothermal_gravity_construction
+Miners,Large-Body,2.5,15,GCN-2B "Kyklops",vibrothermal_gravity_construction
+Miners,Large-Body,3.0,20,GCN-3A "Golem",laser_plasma_gravity_construction
+Miners,Large-Body,3.5,30,GCN-3B "Archon",laser_plasma_gravity_construction
+Miners,Large-Body,4.0,40,GCN-4A "Titan",industrial_plasma_gravity_construction
+Miners,Large-Body,4.5,60,GCN-4B "Demiurge",industrial_plasma_gravity_construction
+Miners,Microgravity,1.0,5,MGM-1A "Phaethon",early_microgravity_mining
+Miners,Microgravity,2.0,10,MGM-2A "Ixion",advanced_microgravity_mining
+Miners,Microgravity,3.0,20,MGM-3A "Sedna",plasma_microgravity_mining
+Miners,Microgravity,4.0,40,MGM-4A "Quaoar",industrial_microgravity_mining
+Miners,Cryovolatile,1.0,5,CVM-1A "Chione",early_cryovolatile_mining
+Miners,Cryovolatile,2.0,10,CVM-2A "Boreas",advanced_cryovolatile_mining
+Miners,Cryovolatile,3.0,20,CVM-3A "Themis",laser_cryovolatile_mining
+Printers,Industrial,1.0,5,IPR-1A "Mold",early_industrial_printing
+Printers,Industrial,2.0,10,IPR-2A "Forge",advanced_industrial_printing
+Printers,Industrial,3.0,20,IPR-3A "Foundry",laser_industrial_printing
+Printers,Industrial,4.0,40,IPR-4A "Colossus",industrial_plasma_printing
+Printers,Ship,1.0,5,SPR-1A "Lathe",early_ship_printing
+Printers,Ship,2.0,10,SPR-2A "Mill",advanced_ship_printing
+Printers,Ship,3.0,20,SPR-3A "Press",laser_ship_printing
+Printers,Ship,4.0,40,SPR-4A "Fabricator",industrial_plasma_ship_printing
+ISRU,Deep Efficiency Sifting,1.0,5,DES-1A "Dustwalker",basic_regolith_sifting
+ISRU,Deep Efficiency Sifting,1.5,8,DES-1B "Grainmill",basic_regolith_sifting
+ISRU,Deep Efficiency Sifting,2.0,10,DES-2A "Sandstorm",electrostatic_regolith_processing
+ISRU,Deep Efficiency Sifting,2.5,15,DES-2B "Dervish",electrostatic_regolith_processing
+ISRU,Deep Efficiency Sifting,3.0,20,DES-3A "Leviathan",magnetic_resonance_sifting
+ISRU,Deep Efficiency Sifting,3.5,30,DES-3B "Behemoth",magnetic_resonance_sifting
+ISRU,Deep Efficiency Sifting,4.0,40,DES-4A "Colossus",plasma_sifting_extraction
+ISRU,Deep Efficiency Sifting,4.5,60,DES-4B "Worldeater",plasma_sifting_extraction
+ISRU,Heat Drill Capture,1.0,5,HDC-1A "Frostbite",basic_thermal_drilling
+ISRU,Heat Drill Capture,1.5,8,HDC-1B "Permafrost",basic_thermal_drilling
+ISRU,Heat Drill Capture,2.0,10,HDC-2A "Borealis",microwave_thermal_extraction
+ISRU,Heat Drill Capture,2.5,15,HDC-2B "Cryovein",microwave_thermal_extraction
+ISRU,Heat Drill Capture,3.0,20,HDC-3A "Geysir",plasma_thermal_drilling
+ISRU,Heat Drill Capture,3.5,30,HDC-3B "Magmaworm",plasma_thermal_drilling
+ISRU,Heat Drill Capture,4.0,40,HDC-4A "Hellfrost",fusion_thermal_extraction
+ISRU,Heat Drill Capture,4.5,60,HDC-4B "Absolute Zero",fusion_thermal_extraction
+Refineries,Lithic,1.0,5,RFL-1 "Sagger",basic_material_processing
+Refineries,Lithic,2.0,10,RFL-2 "Calciner",advanced_ceramics_fabrication
+Refineries,Lithic,3.0,20,RFL-3 "Plasmatron",plasma_synthesis
+Refineries,Lithic,4.0,40,RFL-4 "Synthesiser",molecular_deposition
+Refineries,Metallurgy,1.0,5,RFM-1 "Bloomery",basic_metallurgy
+Refineries,Metallurgy,2.0,10,RFM-2 "Induction Forge",vacuum_metallurgy
+Refineries,Metallurgy,3.0,20,RFM-3 "Vacuum Arc",electron_beam_metallurgy
+Refineries,Metallurgy,4.0,40,RFM-4 "Plasma Refinery",plasma_metallurgy
+Refineries,Nuclear,1.0,5,RFN-1 "Pelletiser",basic_nuclear_fuels
+Refineries,Nuclear,2.0,10,RFN-2 "Thermal Diffuser",isotope_separation
+Refineries,Nuclear,3.0,20,RFN-3 "Centrifuge Cascade",centrifuge_enrichment
+Refineries,Nuclear,4.0,40,RFN-4 "Ion Plasma Sep",plasma_isotope_separation
+Refineries,Volatiles,1.0,5,RFV-1 "Electrolyser",basic_chemical_processing
+Refineries,Volatiles,2.0,10,RFV-2 "Cryo Separator",cryogenic_separation
+Refineries,Volatiles,3.0,20,RFV-3 "Steam Reformer",catalytic_reforming
+Refineries,Volatiles,4.0,40,RFV-4 "Plasma Cracker",thermochemical_cracking

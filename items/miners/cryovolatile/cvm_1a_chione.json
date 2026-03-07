@@ -1,0 +1,24 @@
+{
+  "id": "cvm_1a_chione",
+  "name": "CVM-1A \"Chione\"",
+  "research_node": "prospecting_and_mining",
+  "tech_level": 1,
+  "branch": "resistive_thermal_drill",
+  "mass_t": 1.8,
+  "operational_environment": "surface_cryo",
+  "miner_type": "cryovolatile",
+  "min_volatile_mass_fraction": 0.5,
+  "power_requirements": {
+    "electric_mw": 1.2
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 80,
+    "excavation_type": "resistive_thermal_probe"
+  },
+  "description": "The Chione is a compact cryovolatile mining probe built around resistive thermal drilling. Nichrome heating elements in the drill tip melt a path through water ice or nitrogen-rich permafrost; the resulting melt or sublimated gas is drawn upward through an insulated riser pipe and captured in a cryogenic tank module attached to the surface unit. Named for the daughter of Boreas, goddess of snow and ice. Suitable for polar caps, icy moon surfaces, and subsurface ice sheets where volatile fraction exceeds 50%.",
+  "ui_tags": [
+    "thermal_drill",
+    "ice_extraction",
+    "tier_1"
+  ]
+}

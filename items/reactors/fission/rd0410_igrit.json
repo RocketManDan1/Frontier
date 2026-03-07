@@ -1,17 +1,21 @@
 {
   "id": "rd0410_igrit",
   "name": "RD-0410 \"Igrit\"",
-  "research_node": "early_solid_core_fission",
+  "research_node": "starter_corp",
   "tech_level": 1,
   "branch": "solid_core",
   "mass_t": 0.52,
   "output": {
-    "thermal_mw": 196
+    "thermal_mw": 196,
+    "core_temp_k": 2800
   },
   "fuel": {
     "type": "low_grade_reactor_pellets",
     "geometry": "twisted_ribbon_fuel_elements"
   },
-  "description": "A compact Soviet fast-spectrum solid-core fission reactor. Modest thermal output but exceptionally light — a practical first step for NTR-powered vessels operating on tight mass budgets.",
-  "ui_tags": ["solid_core", "early"]
+  "description": "A compact Soviet fast-spectrum solid-core fission reactor. Modest thermal output but exceptionally light \u2014 a practical first step for NTR-powered vessels operating on tight mass budgets.",
+  "ui_tags": [
+    "solid_core",
+    "early"
+  ]
 }

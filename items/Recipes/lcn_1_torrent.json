@@ -1,0 +1,42 @@
+{
+  "recipe_id": "lcn_1_torrent",
+  "name": "Assemble LCN-1 \"Torrent\"",
+  "output_item_id": "lcn_1_torrent",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 18000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 11000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 8000
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 6000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 5000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 3000
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 2000
+    }
+  ],
+  "build_time_s": 9000,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 4,
+  "power_kw": 1000,
+  "byproducts": []
+}

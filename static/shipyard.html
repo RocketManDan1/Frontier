@@ -22,8 +22,8 @@
             <a class="tab active" href="/shipyard">Shipyard</a>
             <a class="tab" href="/research">Research</a>
             <a class="tab" href="/organization">Organization</a>
-            <a class="tab" href="/contracts">Contracts</a>
-            <a class="tab" href="/missions">Missions</a>
+            <a class="tab tab--icon tab--contracts" href="/contracts">Contracts</a>
+            <a class="tab tab--icon tab--missions" href="/missions">Missions</a>
             <a class="tab authAdminTab" href="/admin">Admin</a>
           </nav>
         </div>
@@ -99,6 +99,8 @@
                 <div class="shipyardFuelInputRow">
                   <input id="shipyardFuelInput" type="number" min="0" max="0" step="1" value="0" class="shipyardFuelInput" />
                   <span class="shipyardFuelUnit">kg</span>
+                  <button id="shipyardFuelMinus10t" type="button" class="btnSmall" title="−10 tonnes" style="display:none;">−10 t</button>
+                  <button id="shipyardFuelPlus10t" type="button" class="btnSmall" title="+10 tonnes" style="display:none;">+10 t</button>
                   <button id="shipyardFuelFillBtn" type="button" class="btnSmall" title="Fill to max">Fill</button>
                   <button id="shipyardFuelEmptyBtn" type="button" class="btnSmall" title="Empty fuel">Empty</button>
                 </div>

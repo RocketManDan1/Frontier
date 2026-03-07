@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Frontier: Sol 2000 — Research</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout27" />
+    <link rel="stylesheet" href="/static/styles.css?v=layout28" />
   </head>
 
   <body class="researchPage">
@@ -13,7 +13,7 @@
         <div class="topbar">
           <div>
             <div class="title">Research</div>
-            <div class="subtitle">KSP-style tech tree — unlock technology nodes with Research Points</div>
+            <div class="subtitle">Unified tech tree — unlock technology nodes with Research Points</div>
           </div>
 
           <nav class="tabs">
@@ -23,16 +23,15 @@
             <a class="tab" href="/sites">Sites</a>
             <a class="tab active" href="/research">Research</a>
             <a class="tab" href="/organization">Organization</a>
-            <a class="tab" href="/contracts">Contracts</a>
-            <a class="tab" href="/missions">Missions</a>
+            <a class="tab tab--icon tab--contracts" href="/contracts">Contracts</a>
+            <a class="tab tab--icon tab--missions" href="/missions">Missions</a>
             <a class="tab authAdminTab" href="/admin">Admin</a>
           </nav>
         </div>
       </div>
 
       <div class="panel pagePanel researchPagePanel">
-        <div id="researchTypeTabs" class="researchSubtabs" role="tablist" aria-label="Technology types"></div>
-        <div id="researchTreeTabs" class="researchSubtabs" role="tablist" aria-label="Research trees"></div>
+        <div id="researchRpIndicator" class="researchRpIndicator"></div>
 
         <div class="researchLayout">
           <div class="researchViewport" aria-label="Research tree">
@@ -59,6 +58,6 @@
     <script src="/static/js/clock.js?v=ti3"></script>
     <script src="/static/js/item_display.js?v=id4"></script>
     <script src="/static/js/item_info.js?v=ii2"></script>
-    <script src="/static/js/research.js?v=rs3"></script>
+    <script src="/static/js/research.js?v=rs7"></script>
   </body>
 </html>

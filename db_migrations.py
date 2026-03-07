@@ -466,7 +466,6 @@ def _migration_0011_rekey_inventory_stacks(conn: sqlite3.Connection) -> None:
         catalog_service.load_refinery_catalog,
         catalog_service.load_robonaut_catalog,
         catalog_service.load_isru_catalog,
-        catalog_service.load_storage_catalog,
     ):
         part_catalogs.update(loader())
 
@@ -1038,6 +1037,43 @@ def _migration_0026_location_scoped_cargo(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migration_0027_ship_cargo_stacks(conn: sqlite3.Connection) -> None:
+    """Ship cargo stored as one row per (ship, resource) with mass in kg."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS ship_cargo_stacks (
+            ship_id     TEXT NOT NULL REFERENCES ships(id) ON DELETE CASCADE,
+            resource_id TEXT NOT NULL,
+            mass_kg     REAL NOT NULL DEFAULT 0,
+            PRIMARY KEY (ship_id, resource_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ship_cargo_ship ON ship_cargo_stacks(ship_id);
+    """)
+
+
+def _migration_0028_miners_printers(conn: sqlite3.Connection) -> None:
+    """Rename legacy 'constructor' deployed equipment rows to 'miner' category."""
+    conn.execute(
+        "UPDATE deployed_equipment SET category = 'miner' WHERE category = 'constructor'"
+    )
+
+
+def _migration_0029_unified_research_tree(conn: sqlite3.Connection) -> None:
+    """Reset research unlocks for unified research tree and auto-unlock starter_corp."""
+    import time as _time
+
+    # Old per-category node IDs are incompatible with the unified tree.
+    # Clear them and give every existing org the free starter_corp node.
+    conn.execute("DELETE FROM research_unlocks")
+
+    now = _time.time()
+    conn.execute(
+        """INSERT OR IGNORE INTO research_unlocks (org_id, tech_id, unlocked_at, cost_points)
+           SELECT id, 'starter_corp', ?, 0.0
+           FROM organizations""",
+        (now,),
+    )
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -1066,6 +1102,9 @@ def _migrations() -> List[Migration]:
     Migration("0024_facilities", "Facility layer: named multi-tenant sites with per-facility industry", _migration_0024_facilities),
     Migration("0025_mission_guardrails", "Mission guardrails: active uniqueness, payout invariant, power reset metadata", _migration_0025_mission_guardrails),
     Migration("0026_location_scoped_cargo", "Re-key inventory stacks to (location_id, corp_id, stack_type, stack_key); cargo is location-scoped", _migration_0026_location_scoped_cargo),
+    Migration("0027_ship_cargo_stacks", "Ship cargo stored as mass stacks per resource", _migration_0027_ship_cargo_stacks),
+    Migration("0028_miners_printers", "Rename constructor deployed equipment to miner category", _migration_0028_miners_printers),
+    Migration("0029_unified_research_tree", "Reset research unlocks for unified research tree, auto-unlock starter_corp", _migration_0029_unified_research_tree),
     ]
 
 

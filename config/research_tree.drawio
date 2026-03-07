@@ -1,0 +1,399 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0" version="29.6.1">
+  <diagram name="Page-1" id="EvLs4WQQQqEueBhjA-WK">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-13" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xQdA2IkjR3g8c1EsgrKj-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-14" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xQdA2IkjR3g8c1EsgrKj-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-15" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xQdA2IkjR3g8c1EsgrKj-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-17" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xQdA2IkjR3g8c1EsgrKj-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-2" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Starter Corp&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;SCN-1 &quot;Pioneer&quot;&lt;/div&gt;&lt;div&gt;RD-0410 &quot;Igrit&quot;&lt;/div&gt;&lt;div&gt;SNAP-SiGe &quot;Wren&quot;&lt;/div&gt;&lt;div&gt;Al/OSR Panel &quot;Lapwing&quot;&lt;/div&gt;&lt;div&gt;RBN-1A &quot;Argus&quot;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1990" y="1380" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-100" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-101" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-92">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-102" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-90">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-103" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-89">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-104" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-87">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-105" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-88">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Interplanetary Industry&lt;br&gt;&lt;br&gt;RFL-1 &quot;Sagger&quot;&lt;br&gt;RFM-1 &quot;Bloomery&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2560" y="-260" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-132" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-133" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-134" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-6">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-1350" y="1030" />
+              <mxPoint x="-1350" y="1170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Nuclear&amp;nbsp; Fission&lt;br&gt;&lt;br&gt;KIWI-B4E &quot;Bison&quot;&lt;br&gt;SCN-2 &quot;Frontier&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1520" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-43" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-44" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Electrical and Thermal Systems&lt;br&gt;&lt;br&gt;SP-100 TE &quot;Ibis&quot;&lt;br&gt;Ti-HEC Panel &quot;Heron&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1580" y="2880" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-77" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-63">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-78" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-64">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-79" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-65">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-80" edge="1" parent="1" source="xQdA2IkjR3g8c1EsgrKj-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-66">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xQdA2IkjR3g8c1EsgrKj-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Prospecting and Mining&lt;br&gt;&lt;br&gt;RBN-1B &quot;Cyclops&quot;&lt;br&gt;GCN-1A &quot;Antaeus&quot;&lt;br&gt;MGM-1A &quot;Phaethon&quot;&lt;br&gt;CVM-1A &quot;Chione&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2480" y="2920" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-55" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-56" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-47">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="In Situ Refueling&lt;br&gt;&lt;br&gt;DES-1A &quot;Dustwalker&quot;&lt;br&gt;HDC-1A &quot;Frostbite&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2480" y="2400" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-14" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advance Solid Core II&lt;br&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;ASCN-1 &quot;Venture&quot;&lt;/div&gt;PEWEE-1 &quot;Sparrow&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1310" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-22" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Pebble Bed&lt;br&gt;&lt;br&gt;PBR-40 &quot;Cinder&quot;&lt;br&gt;TWR-45 &quot;Stormwind&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1310" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-19" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-24" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Liquid Core&lt;br&gt;&lt;br&gt;LCN-1 &quot;Torrent&quot;&lt;br&gt;LARS-1 &quot;Crucible&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1080" y="1140" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-135" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Vapor Core&lt;br&gt;&lt;br&gt;CCR-1 &quot;Mirage&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-860" y="1280" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-17" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advance Solid Core III&lt;br&gt;&lt;br&gt;ASCN-2 &quot;Atlas&quot;&lt;br&gt;Phoebus-1B &quot;Titan&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1080" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-28" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="High Power Solid Core&lt;br&gt;&lt;br&gt;NERVA-2 &quot;Aegis&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-860" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advanced Liquid Core&lt;br&gt;&lt;br&gt;&lt;div&gt;LCN-2 &quot;Cascade&quot;&lt;/div&gt;&lt;div&gt;DCR-200 &quot;Maelstrom&quot;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-860" y="1140" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-20" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Advanced Pebble Bed&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;TWR-75 &quot;Firebrand&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1080" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-37" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-27" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="High Power Solid Core II&lt;br&gt;&lt;br&gt;Phoebus-2A &quot;Colossus&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-650" y="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-36" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-29" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-29" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Vapor Core II&lt;br&gt;&lt;br&gt;VCR-400 &quot;Tempest&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-440" y="1280" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-38" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-34" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Closed Cycle Gas Core&lt;br&gt;&lt;br&gt;GCNR-200 &quot;Alcyone&quot;&lt;br&gt;CGN-1 &quot;Helios&quot;&lt;br&gt;CGN-2 &quot;Prometheus&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-230" y="1280" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-35" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Open Cycle Gas Core&lt;br&gt;&lt;br&gt;GCNR-4000 &quot;Hyperion&quot;&lt;br&gt;&lt;br&gt;OGN-1 &quot;Icarus&quot;&lt;br&gt;OGN-2 &quot;Daedalus&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-20" y="1280" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-46" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-39" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-41">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-39" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Solid State Thermoelectrics&lt;br&gt;&lt;br&gt;SiGe-Segmented &quot;Crane&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1370" y="2810" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-45" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-40" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-40" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Rigid Panel Radiators&lt;br&gt;&lt;br&gt;C/C Refractory Panel &quot;Stork&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1370" y="2950" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-41" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Solid State Thermoelectrics II&lt;br&gt;&lt;br&gt;ASC-Skutterudite &quot;Egret&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1160" y="2810" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-42" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="High Temp Rigid Panel Radiators&lt;br&gt;&lt;br&gt;Adv. C/C Panel &quot;Albatross&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-1160" y="2950" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-57" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-47" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-49">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-47" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Heat Drill Capture&lt;/div&gt;&lt;div&gt;HDC-1B &quot;Permafrost&quot;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="2460" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-60" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-48" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-48" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Deep Efficiency Sifting&lt;br&gt;DES-1B &quot;Grainmill&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="2340" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-58" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-49" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-49" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Microwave Thermal Extraction&lt;br&gt;&lt;br&gt;HDC-2A &quot;Borealis&quot;&lt;br&gt;HDC-2B &quot;Cryovein&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="2460" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-61" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-50" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-51">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-50" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Electrostatic Regolith Processing&lt;br&gt;&lt;br&gt;DES-2A &quot;Sandstorm&quot;&lt;br&gt;DES-2B &quot;Dervish&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="2340" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-62" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-51" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-53">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-51" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Magnetic Resonance Sifting&lt;br&gt;&lt;br&gt;DES-3A &quot;Leviathan&quot;&lt;br&gt;DES-3B &quot;Behemoth&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3080" y="2340" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-59" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-52" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-54">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-52" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Plasma Thermal Drilling&lt;br&gt;&lt;br&gt;HDC-3A &quot;Geysir&quot;&lt;br&gt;HDC-3B &quot;Magmaworm&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3080" y="2460" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-53" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Plasma Sifting Extraction&lt;br&gt;&lt;br&gt;DES-4A &quot;Colossus&quot;&lt;br&gt;DES-4B &quot;Worldeater&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3280" y="2340" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-54" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Fission-Pulse Thermal Extraction&lt;br&gt;&lt;br&gt;HDC-4A &quot;Hellfrost&quot;&lt;br&gt;HDC-4B &quot;Absolute Zero&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3280" y="2460" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-136" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-63" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-67">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-63" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="UV Laser Prospecting&lt;br&gt;&lt;br&gt;RBN-2A &quot;Meridian&quot;&lt;br&gt;RBN-2B &quot;Zenith&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="2790" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-81" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-64" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-69">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-64" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Early Gravity Mining&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;GCN-1B &quot;Talpa&quot;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="3010" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-83" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-65" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-70">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-65" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advance Microgravity Mining&lt;br&gt;&lt;br&gt;MGM-2A &quot;Ixion&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="3150" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-84" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-66" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-73">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-66" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advanced Cryovolitile Mining&lt;br&gt;&lt;br&gt;CVM-2A &quot;Boreas&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2680" y="3290" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-137" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-68">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-67" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Free Electron Laser Prospecting&lt;br&gt;&lt;br&gt;RBN-3A &quot;Solaris&quot;&lt;br&gt;RBN-3B &quot;Helion&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="2790" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-68" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Coherent Gamma Ray Prospecting&lt;br&gt;&lt;br&gt;RBN-4A &quot;Quasar&quot;&lt;br&gt;RBN-4B &quot;Pulsar&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3080" y="2790" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-82" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-69" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-76">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-69" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Laser Gravity Mining&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;GCN-2A &quot;Hephaestus&quot;&lt;br&gt;&lt;br&gt;GCN-2B &quot;Kyklops&quot;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="3010" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-85" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-70" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-70" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Plasma Microgravuty Mining&lt;br&gt;&lt;br&gt;MGM-3A &quot;Sedna&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="3150" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-71" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Industrial Microgravity Mining&lt;br&gt;&lt;br&gt;MGM-4A &quot;Quaoar&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3080" y="3150" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-72" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Vibrothermal Gravity Mining&lt;br&gt;&lt;br&gt;GCN-4A &quot;Titan&quot;&lt;br&gt;GCN-4B &quot;Demiurge&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3280" y="3010" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-73" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Laser Cryovolitile Mining&lt;br&gt;&lt;br&gt;CVM-3A &quot;Themis&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2880" y="3290" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-86" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-76" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="xMB_-Q_OYCNe7364b9-g-72">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-76" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Industrial Plasma Gravity Mining&lt;br&gt;&lt;br&gt;GCN-3A &quot;Golem&quot;&lt;br&gt;GCN-3B &quot;Archon&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3080" y="3010" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-118" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-87" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-110">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-87" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Basic Nuclear Fuels&lt;br&gt;&lt;br&gt;RFN-1 &quot;Pelletiser&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-200" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-116" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-88" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-112">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-88" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Basic Chemical Processing&lt;br&gt;&lt;br&gt;RFV-1 &quot;Electrolyser&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-80" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-119" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-89" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-89" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Vacuum Metelllurgy&lt;br&gt;&lt;br&gt;RFM-2 &quot;Induction Forge&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-320" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-120" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-90" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-106">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-90" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advanced Ceramics Fabrication&lt;br&gt;RFL-2 &quot;Calciner&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-440" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-126" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-91" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-93">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-91" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Early Aerospace Printing&lt;br&gt;&lt;br&gt;SPR-1A &quot;Lathe&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-710" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-127" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-92" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-94">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-92" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Early Industrial Pringing&lt;br&gt;&lt;br&gt;IPR-1A &quot;Mold&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2730" y="-860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-129" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-93" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-93" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advanced Aerospace Printing&lt;br&gt;SPR-2A &quot;Mill&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-710" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-128" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-94" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-94" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Advanced Industrial Printing&lt;br&gt;IPR-2A &quot;Forge&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-131" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-95" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-98">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-95" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Laser Industrial Printing&lt;br&gt;IPR-3A &quot;Foundry&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-130" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-97" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-99">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-97" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Laser Aerospace Printing&lt;br&gt;SPR-3A &quot;Press&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-710" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-98" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Industrial Plasma Printing&lt;br&gt;IPR-4A &quot;Colossus&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3300" y="-860" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-99" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Aerospace Plasma Printing&lt;br&gt;SPR-4A &quot;Fabricator&quot;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3300" y="-710" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-121" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-106" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-107">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-106" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Plasma Synthesis&lt;br&gt;&lt;br&gt;RFL-3 &quot;Plasmatron&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-440" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-107" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Molecular Deposition&lt;br&gt;&lt;br&gt;RFL-4 &quot;Synthesiser&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-440" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-122" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-108" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-109">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-108" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Electron Beam Metellurgy&lt;br&gt;&lt;br&gt;RFM-3 &quot;Vacuum Arc&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-320" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-109" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Zero G Plasma Metellurgy&lt;br&gt;&lt;br&gt;RFM-4 &quot;Plasma Refinery&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-320" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-123" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-110" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-111">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-110" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Isotope Separation&lt;br&gt;&lt;br&gt;RFN-2 &quot;Thermal Diffuser&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-200" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-125" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-111" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-115">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-111" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Centrifuge Enrichment&lt;br&gt;&lt;br&gt;RFN-3 &quot;Centrifuge Cascade&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-200" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-117" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-112" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-113">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-112" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Cryogenic Seperation&lt;br&gt;&lt;br&gt;RFV-2 &quot;Cryo Separator&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-2920" y="-80" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-124" edge="1" parent="1" source="xMB_-Q_OYCNe7364b9-g-113" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="xMB_-Q_OYCNe7364b9-g-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-113" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Catalytic Reforming&lt;br&gt;&lt;br&gt;RFV-3 &quot;Steam Reformer&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3110" y="-80" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-114" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Thermochemical Cracking&lt;br&gt;&lt;br&gt;RFV-4 &quot;Plasma Cracker&quot;&lt;div&gt;&lt;br/&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3300" y="-80" as="geometry" />
+        </mxCell>
+        <mxCell id="xMB_-Q_OYCNe7364b9-g-115" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Plasma Isotope Seperation&lt;br&gt;&lt;br&gt;RFN-4 &quot;Ion Plasma Sep&quot;" vertex="1">
+          <mxGeometry height="60" width="120" x="-3300" y="-200" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

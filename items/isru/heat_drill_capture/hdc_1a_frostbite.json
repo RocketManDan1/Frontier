@@ -1,7 +1,7 @@
 {
   "id": "hdc_1a_frostbite",
   "name": "HDC-1A \"Frostbite\"",
-  "research_node": "basic_thermal_drilling",
+  "research_node": "in_situ_refueling",
   "tech_level": 1,
   "branch": "resistive_thermal_drill",
   "mass_t": 2.5,
@@ -16,6 +16,12 @@
     "min_water_ice_fraction": 0.08,
     "max_water_ice_fraction": 1.0
   },
-  "description": "The baseline heat drill capture unit, the Frostbite is a compact thermal penetrator system that drives a resistive heating element directly into ice-bearing regolith. A nichrome alloy coil at the drill tip reaches 600 K, sublimating water ice on contact. The resulting vapor rises through an annular gap between the drill shaft and a sealed borehole sleeve into an umbrella-shaped capture hood, where a Stirling-cycle cryocondenser chills it back to liquid water for collection in an insulated sump tank. At 2.5 tonnes, the Frostbite is light enough to fit in any medium cargo bay — the drill assembly, capture hood, and condenser together mass less than a single centrifugal drum from the sifting line. The tradeoff is power: 1.5 MW of continuous electrical draw feeds the heating element, and that energy must come from somewhere. Designed for permanently shadowed craters and other ice-rich sites where water concentration exceeds 8%.",
-  "ui_tags": ["resistive_thermal_drill", "tier_1", "early", "light", "high_power"]
+  "description": "The baseline heat drill capture unit, the Frostbite is a compact thermal penetrator system that drives a resistive heating element directly into ice-bearing regolith. A nichrome alloy coil at the drill tip reaches 600 K, sublimating water ice on contact. The resulting vapor rises through an annular gap between the drill shaft and a sealed borehole sleeve into an umbrella-shaped capture hood, where a Stirling-cycle cryocondenser chills it back to liquid water for collection in an insulated sump tank. At 2.5 tonnes, the Frostbite is light enough to fit in any medium cargo bay \u2014 the drill assembly, capture hood, and condenser together mass less than a single centrifugal drum from the sifting line. The tradeoff is power: 1.5 MW of continuous electrical draw feeds the heating element, and that energy must come from somewhere. Designed for permanently shadowed craters and other ice-rich sites where water concentration exceeds 8%.",
+  "ui_tags": [
+    "resistive_thermal_drill",
+    "tier_1",
+    "early",
+    "light",
+    "high_power"
+  ]
 }

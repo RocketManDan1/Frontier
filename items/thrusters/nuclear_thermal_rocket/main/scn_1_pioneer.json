@@ -1,13 +1,20 @@
 {
   "id": "scn_1_pioneer",
   "name": "SCN-1 \"Pioneer\"",
-  "research_node": "early_solid_core_ntr",
+  "research_node": "starter_corp",
   "tech_level": 1,
   "branch": "solid_core",
   "mass_t": 20.0,
+  "compatible_reactor_branches": [
+    "solid_core",
+    "pebble_bed"
+  ],
   "performance": {
     "max_thrust_kN": 250,
-    "isp_s": 850
+    "isp_s": 850,
+    "rated_temp_k": 2800,
+    "fuel_capacity_kg": 50000,
+    "cargo_capacity_kg": 25000
   },
   "power_requirements": {
     "thermal_mw": 200
@@ -22,5 +29,8 @@
     }
   },
   "description": "A first-generation solid-core NTR derived from early fission reactor programs. Reliable and simple, but heavy for its thrust output. The workhorse of early interplanetary missions.",
-  "ui_tags": ["solid_core", "early"]
+  "ui_tags": [
+    "solid_core",
+    "early"
+  ]
 }

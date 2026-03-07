@@ -99,6 +99,7 @@ def list_facilities_at_location(
     location_id: str,
     *,
     viewer_corp_id: str = "",
+    viewer_is_admin: bool = False,
 ) -> List[Dict[str, Any]]:
     """List all facilities at a location with summary stats."""
     rows = conn.execute(
@@ -138,7 +139,7 @@ def list_facilities_at_location(
         # Power balance (only compute for own facilities to limit cost)
         power_mwe = 0.0
         power_used_mwe = 0.0
-        if viewer_corp_id and fcorp == viewer_corp_id:
+        if viewer_is_admin or (viewer_corp_id and fcorp == viewer_corp_id):
             equipment = conn.execute(
                 """SELECT id, location_id, item_id, name, category, status, config_json, mode, corp_id
                    FROM deployed_equipment WHERE facility_id = ?""",
@@ -169,7 +170,7 @@ def list_facilities_at_location(
             "name": r["name"],
             "corp_id": fcorp,
             "corp_name": corp_name,
-            "is_mine": bool(viewer_corp_id and fcorp == viewer_corp_id),
+            "is_mine": bool(viewer_is_admin or (viewer_corp_id and fcorp == viewer_corp_id)),
             "stats": {
                 "equipment_count": eq_count,
                 "power_mwe": round(power_mwe, 2),

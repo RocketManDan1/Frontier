@@ -698,7 +698,6 @@ class TestShipTransferLifecycle:
             "ship_id": ship_id,
             "parts": [
                 {"item_id": "scn_1_pioneer"},
-                {"item_id": "water_tank_10_m3"},
             ],
         }
         if fuel_kg is not None:
@@ -922,25 +921,14 @@ class TestShipTransferLifecycle:
             self._delete_ship(client, ship_id)
 
     def test_long_range_transfer_needs_more_dv(self, client):
-        """LEO → LLO requires high dv — a small ship should be rejected."""
+        """LEO → LLO requires high dv — a ship with minimal fuel should be rejected."""
         ship_id = "test_long_range_reject"
         try:
-            self._spawn_ship(client, ship_id)
-            self._refuel_ship(client, ship_id)
+            # Spawn with very little fuel so delta-v is insufficient for LLO
+            self._spawn_ship(client, ship_id, fuel_kg=100)
 
-            # Get quote to verify it requires more dv than available
-            quote = client.get("/api/transfer_quote", params={
-                "from_id": "LEO",
-                "to_id": "LLO",
-            }).json()
-
-            # Ship has ~3184 m/s with scn_1_pioneer + water_tank_10_m3
-            # If LEO→LLO needs more, transfer should fail
             r = client.post(f"/api/ships/{ship_id}/transfer", json={"to_location_id": "LLO"})
-            if quote["dv_m_s"] > 3200:
-                assert r.status_code == 400, "Should be rejected for insufficient fuel"
-            else:
-                assert r.status_code == 200, "Should succeed if dv is sufficient"
+            assert r.status_code == 400, "Should be rejected for insufficient fuel"
         finally:
             self._delete_ship(client, ship_id)
 
@@ -1087,7 +1075,6 @@ class TestAdminShipOps:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             assert r.status_code == 200
@@ -1112,7 +1099,6 @@ class TestAdminShipOps:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             client.post(f"/api/admin/ships/{ship_id}/refuel")
@@ -1157,7 +1143,6 @@ class TestAdminShipOps:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
                 "fuel_kg": 1.0,  # Nearly empty
             })
@@ -1179,7 +1164,6 @@ class TestAdminShipOps:
             "ship_id": ship_id,
             "parts": [
                 {"item_id": "scn_1_pioneer"},
-                {"item_id": "water_tank_10_m3"},
             ],
         })
 
@@ -1210,7 +1194,6 @@ class TestAdminShipOps:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             r = client.post(f"/api/admin/ships/{ship_id}/teleport", json={
@@ -1240,7 +1223,6 @@ class TestFuelDvPipelineConsistency:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             client.post(f"/api/admin/ships/{ship_id}/refuel")
@@ -1271,7 +1253,6 @@ class TestFuelDvPipelineConsistency:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             }).json()
             client.post(f"/api/admin/ships/{ship_id}/refuel")
@@ -1320,7 +1301,6 @@ class TestTransferEdgeCases:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
                 "fuel_kg": 0.0,
             })
@@ -1337,14 +1317,12 @@ class TestTransferEdgeCases:
         """A ship with empty parts should have 0 dv and fail transfers."""
         ship_id = "test_no_parts"
         try:
-            # Spawn with non-thruster parts only — 0 ISP, 0 dv
+            # Spawn with empty parts — 0 ISP, 0 dv
             client.post("/api/admin/spawn_ship", json={
                 "name": "Empty Ship",
                 "location_id": "LEO",
                 "ship_id": ship_id,
-                "parts": [
-                    {"item_id": "water_tank_10_m3"},
-                ],
+                "parts": [],
             })
 
             r = client.post(f"/api/ships/{ship_id}/transfer", json={
@@ -1385,7 +1363,6 @@ class TestTransferEdgeCases:
                     "ship_id": sid,
                     "parts": [
                         {"item_id": "scn_1_pioneer"},
-                        {"item_id": "water_tank_10_m3"},
                     ],
                 })
                 client.post(f"/api/admin/ships/{sid}/refuel")
@@ -1410,7 +1387,6 @@ class TestTransferEdgeCases:
                     "ship_id": sid,
                     "parts": [
                         {"item_id": "scn_1_pioneer"},
-                        {"item_id": "water_tank_10_m3"},
                     ],
                 })
                 assert r.status_code == 200, f"Failed to spawn at {loc}: {r.text}"
@@ -1429,7 +1405,6 @@ class TestTransferEdgeCases:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             r = client.post(f"/api/ships/{ship_id}/transfer")
@@ -1447,7 +1422,6 @@ class TestTransferEdgeCases:
                 "ship_id": ship_id,
                 "parts": [
                     {"item_id": "scn_1_pioneer"},
-                    {"item_id": "water_tank_10_m3"},
                 ],
             })
             r = client.post(f"/api/ships/{ship_id}/transfer", json={

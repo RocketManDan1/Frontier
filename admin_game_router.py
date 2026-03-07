@@ -315,7 +315,8 @@ def api_admin_refuel_ship(ship_id: str, request: Request, conn: sqlite3.Connecti
     if not row:
         raise HTTPException(status_code=404, detail="Ship not found")
 
-    parts = m.normalize_parts(json.loads(row["parts_json"] or "[]"))
+    raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(row["parts_json"] or "[]")
+    parts = m.normalize_parts(raw_parts)
     stats = m.derive_ship_stats_from_parts(
         parts,
         current_fuel_kg=float(row["fuel_kg"] or 0.0),

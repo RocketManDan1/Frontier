@@ -1,0 +1,38 @@
+{
+  "recipe_id": "lars1_crucible",
+  "name": "Assemble LARS-1 \"Crucible\"",
+  "output_item_id": "lars1_crucible",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 540.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 470.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 400.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 350.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 290.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 200.0
+    }
+  ],
+  "build_time_s": 700,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 3,
+  "power_kw": 150,
+  "byproducts": []
+}

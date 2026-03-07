@@ -1,0 +1,20 @@
+{
+  "id": "cvm_3a_themis",
+  "name": "CVM-3A \"Themis\"",
+  "research_node": "laser_cryovolatile_mining",
+  "tech_level": 3,
+  "branch": "pulsed_laser_ablation_cryo",
+  "mass_t": 35.0,
+  "operational_environment": "surface_cryo",
+  "miner_type": "cryovolatile",
+  "min_volatile_mass_fraction": 0.5,
+  "power_requirements": {
+    "electric_mw": 30.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 550,
+    "excavation_type": "pulsed_laser_sublimation_cascade"
+  },
+  "description": "The Themis scales cryovolatile extraction to industrial throughput using a pulsed Nd:YAG laser array operating at 1064 nm. High-peak-power pulses of 20 ns duration ablate and sublimate volatiles from a 4 m² working face simultaneously; each pulse cycle liberates a depth of approximately 0.3 mm of ice. A wide-aperture gas capture shroud and 3-stage cryogenic compression train condense the product stream into dense liquid or slush form for storage. The system handles mixed-volatile ices (water, CO₂, methane, ammonia, nitrogen) without retuning. Named for the Titaness of divine law and order.",
+  "ui_tags": ["pulsed_laser", "mixed_volatile", "industrial", "tier_3"]
+}

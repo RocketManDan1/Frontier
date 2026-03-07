@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "printers_ship",
+  "display_name": "Ship Printer",
+  "notes": [
+    "Surface-deployed fabrication printers specialized for propulsion and power components: thrusters, reactors, generators, radiators, and ISRU modules.",
+    "printer_type: ship — can only build recipes whose output category is one of: thruster, reactor, generator, radiator, isru.",
+    "construction_rate_kg_per_hr increases with tech level, scaling build speed.",
+    "Multiple printers in 'construct' mode at the same facility pool their rates.",
+    "Draws electric_mw from the surface power bus during active operations."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "spr_1a_lathe.json",
+    "spr_2a_mill.json",
+    "spr_3a_press.json",
+    "spr_4a_fabricator.json"
+  ]
+}

@@ -253,14 +253,14 @@
       });
     }
 
-    // Prospect (docked + has robonaut)
+    // Prospect (docked + has prospector)
     const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
-    const hasRobonaut = shipParts.some((p) => {
+    const hasProspector = shipParts.some((p) => {
       if (!p || typeof p !== "object") return false;
       const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
-      return cat === "robonaut" || cat === "robonauts";
+      return cat === "prospector" || cat === "robonaut" || cat === "robonauts";
     });
-    if (hasRobonaut && isDocked) {
+    if (hasProspector && isDocked) {
       actions.push({
         label: "Prospect\u2026",
         onClick: () => openProspectDialog(ship),
@@ -444,16 +444,16 @@
     hideContextMenu();
 
     const shipParts = Array.isArray(ship.parts) ? ship.parts : [];
-    const robonauts = shipParts.filter((p) => {
+    const prospectors = shipParts.filter((p) => {
       if (!p || typeof p !== "object") return false;
       const cat = String(p.category_id || p.type || p.category || "").toLowerCase();
-      return cat === "robonaut" || cat === "robonauts";
+      return cat === "prospector" || cat === "robonaut" || cat === "robonauts";
     });
-    const bestRobonaut = robonauts.reduce((best, r) => {
+    const bestProspector = prospectors.reduce((best, r) => {
       const range = Number(r.prospect_range_km || 0);
       return range > (Number(best?.prospect_range_km) || 0) ? r : best;
-    }, robonauts[0] || {});
-    const rangeKm = Number(bestRobonaut.prospect_range_km || 0);
+    }, prospectors[0] || {});
+    const rangeKm = Number(bestProspector.prospect_range_km || 0);
 
     function fmtDist(km) {
       km = Math.max(0, Number(km) || 0);
@@ -471,7 +471,7 @@
         <div class="prospectHeader">
           <div class="prospectHeaderLeft">
             <div class="prospectTitle">Prospecting</div>
-            <div class="prospectSubtitle">${escapeHtml(ship.name)} &bull; ${escapeHtml(bestRobonaut.name || "Robonaut")} &bull; Range ${fmtDist(rangeKm)}</div>
+            <div class="prospectSubtitle">${escapeHtml(ship.name)} &bull; ${escapeHtml(bestProspector.name || "Prospector")} &bull; Range ${fmtDist(rangeKm)}</div>
           </div>
           <button class="iconBtn btnSecondary" id="prospectClose">✕</button>
         </div>
@@ -502,7 +502,7 @@
 
       const sites = Array.isArray(data.sites) ? data.sites : [];
       if (!sites.length) {
-        bodyEl.innerHTML = '<div class="prospectEmpty">No surface sites within range of this ship\'s robonaut.</div>';
+        bodyEl.innerHTML = '<div class="prospectEmpty">No surface sites within range of this ship\'s prospector.</div>';
         return;
       }
 
@@ -779,6 +779,7 @@
       if (Number(p.mass_kg) > 0) tooltipLines.push(["Mass", fmtKg(Number(p.mass_kg))]);
       if (Number(p.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
       if (Number(p.heat_rejection_mw) > 0) tooltipLines.push(["Rad. rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MWth`]);
+      if (Number(p.scan_rate_km2_per_hr) > 0) tooltipLines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
 
       const cell = itemDisplay.createGridCell({
         label: name,
@@ -790,6 +791,9 @@
         branch: p.branch || "",
         family: p.thruster_family || "",
         techLevel: p.tech_level || "",
+        water_extraction_kg_per_hr: p.water_extraction_kg_per_hr,
+        min_water_ice_fraction: p.min_water_ice_fraction,
+        max_water_ice_fraction: p.max_water_ice_fraction,
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
 
@@ -924,7 +928,6 @@
             <div class="pbSectionHead">Mass Budget</div>
             <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
             <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
-            <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
           </div>
           <div class="pbSection">
@@ -958,6 +961,17 @@
     const radRejection = Number(pb.radiator_heat_rejection_mw || 0);
     const wasteSurplus = Math.max(0, Number(pb.waste_heat_surplus_mw || 0));
     const maxThrottle = Number(pb.max_throttle || 0);
+    // Ship-active equipment (draws power in flight)
+    const prospectorMw = Number(pb.prospector_electric_mw || 0);
+    const isruMw = Number(pb.isru_electric_mw || 0);
+    const shipActiveMw = prospectorMw + isruMw;
+    // Site-only equipment (dormant in flight, active when deployed)
+    const constructorMw = Number(pb.constructor_electric_mw || 0);
+    const refineryMw = Number(pb.refinery_electric_mw || 0);
+    const siteOnlyMw = Number(pb.site_only_electric_mw || 0);
+    const electricSurplus = Number(pb.electric_surplus_mw || 0);
+    const electricSurplusDep = Number(pb.electric_surplus_deployed_mw || 0);
+
     const hasAny = reactorMw > 0 || thrusterMw > 0 || genInputMw > 0 || radRejection > 0;
     if (!hasAny) return "";
 
@@ -970,10 +984,31 @@
       : "";
     const genThrottled = genThrottle < 1 && electricRated > 0;
 
+    // Build site-only consumer section
+    let siteOnlyHtml = "";
+    if (siteOnlyMw > 0) {
+      const items = [];
+      if (constructorMw > 0) items.push(`<div class="pbRow pbIndent"><span class="pbLabel">Miners / Printers / Constructors</span><span class="pbVal">${fmtMwE(constructorMw)}</span></div>`);
+      if (refineryMw > 0) items.push(`<div class="pbRow pbIndent"><span class="pbLabel">Refineries</span><span class="pbVal">${fmtMwE(refineryMw)}</span></div>`);
+
+      const deployedPwrCls = electricSurplusDep >= 0 ? "pbPositive" : "pbNegative";
+      siteOnlyHtml = `
+          <div class="pbSection">
+            <div class="pbSectionHead">⚡ Electric — When Deployed (MWe)</div>
+            <div class="pbRow"><span class="pbLabel">Generator output</span><span class="pbVal">${fmtMwE(electricMw)}</span></div>
+            ${prospectorMw > 0 ? `<div class="pbRow pbIndent"><span class="pbLabel">Prospectors</span><span class="pbVal">−${fmtMwE(prospectorMw)}</span></div>` : ""}
+            ${isruMw > 0 ? `<div class="pbRow pbIndent"><span class="pbLabel">ISRU</span><span class="pbVal">−${fmtMwE(isruMw)}</span></div>` : ""}
+            ${items.join("")}
+            <div class="pbRow pbDivider"><span class="pbLabel"><b>Site surplus</b></span><span class="pbVal ${deployedPwrCls}"><b>${electricSurplusDep >= 0 ? "+" : ""}${electricSurplusDep.toFixed(1)}<span class="pbUnit">MWe</span></b></span></div>
+            ${electricSurplusDep < 0 ? `<div class="pbNote pbNegative">⚠ Insufficient power — equipment will be unpowered at site</div>` : ""}
+            <div class="pbNote muted">Site equipment (constructors, refineries) is dormant during flight.</div>
+          </div>`;
+    }
+
     return `
       <div class="fleetSection">
         <div class="powerBalancePanel powerBalanceFleet${isOverheating ? ' pbOverheating' : ''}">
-          <div class="pbTitle">Power &amp; Thermal Balance</div>
+          <div class="pbTitle">Thermal Balance</div>
           <div class="pbSection">
             <div class="pbSectionHead">Thermal Budget (MWth)</div>
             <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
@@ -981,10 +1016,6 @@
             <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMwTh(genInputMw)}</span></div>
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
             ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
-          </div>
-          <div class="pbSection">
-            <div class="pbSectionHead">Electric (MWe)</div>
-            <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
           </div>
           <div class="pbSection">
             <div class="pbSectionHead">Waste Heat (MWth)</div>
@@ -995,6 +1026,20 @@
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Unradiated</b></span><span class="pbVal ${wasteCls}"><b>${wasteSurplus >= 0 ? "+" : ""}${wasteSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
           </div>
           ${overheatBanner}
+        </div>
+      </div>
+      <div class="fleetSection">
+        <div class="powerBalancePanel powerBalanceFleet">
+          <div class="pbTitle">Power Balance</div>
+          <div class="pbSection">
+            <div class="pbSectionHead">⚡ Electric — In Flight (MWe)</div>
+            <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
+            ${prospectorMw > 0 ? `<div class="pbRow"><span class="pbLabel">Prospectors</span><span class="pbVal">−${fmtMwE(prospectorMw)}</span></div>` : ""}
+            ${isruMw > 0 ? `<div class="pbRow"><span class="pbLabel">ISRU</span><span class="pbVal">−${fmtMwE(isruMw)}</span></div>` : ""}
+            ${shipActiveMw > 0 ? `<div class="pbRow pbDivider"><span class="pbLabel"><b>Flight surplus</b></span><span class="pbVal ${electricSurplus >= 0 ? 'pbPositive' : 'pbNegative'}"><b>${electricSurplus >= 0 ? '+' : ''}${electricSurplus.toFixed(1)}<span class="pbUnit">MWe</span></b></span></div>` : ""}
+            ${siteOnlyMw > 0 ? `<div class="pbRow"><span class="pbLabel">Site equipment</span><span class="pbVal muted">dormant</span></div>` : ""}
+          </div>
+          ${siteOnlyHtml}
         </div>
       </div>
     `;

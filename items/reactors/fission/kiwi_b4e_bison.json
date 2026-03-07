@@ -1,17 +1,21 @@
 {
   "id": "kiwi_b4e_bison",
   "name": "KIWI-B4E \"Bison\"",
-  "research_node": "early_solid_core_fission",
+  "research_node": "nuclear_fission",
   "tech_level": 1.5,
   "branch": "solid_core",
   "mass_t": 0.95,
   "output": {
-    "thermal_mw": 937
+    "thermal_mw": 937,
+    "core_temp_k": 2800
   },
   "fuel": {
     "type": "low_grade_reactor_pellets",
     "geometry": "graphite_matrix_uc_zrc_elements"
   },
-  "description": "The proven workhorse of early US NTR development. Graphite-moderated with uranium carbide–zirconium carbide fuel elements, its design was extensively ground-tested and is well understood by engineering crews.",
-  "ui_tags": ["solid_core", "early"]
+  "description": "The proven workhorse of early US NTR development. Graphite-moderated with uranium carbide\u2013zirconium carbide fuel elements, its design was extensively ground-tested and is well understood by engineering crews.",
+  "ui_tags": [
+    "solid_core",
+    "early"
+  ]
 }

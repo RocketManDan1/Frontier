@@ -78,12 +78,22 @@ def api_list_facilities(
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
 
+    # Check if user is admin
+    is_admin = False
+    if hasattr(user, "get"):
+        is_admin = bool(user.get("is_admin"))
+    elif hasattr(user, "__getitem__"):
+        try:
+            is_admin = bool(user["is_admin"])
+        except (KeyError, IndexError):
+            pass
+
     loc = conn.execute("SELECT id, name FROM locations WHERE id = ?", (location_id,)).fetchone()
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
     facilities = facility_service.list_facilities_at_location(
-        conn, location_id, viewer_corp_id=corp_id
+        conn, location_id, viewer_corp_id=corp_id, viewer_is_admin=is_admin
     )
 
     return {
@@ -103,7 +113,21 @@ def api_create_facility(
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
     if not corp_id:
-        raise HTTPException(status_code=400, detail="Corporation session required")
+        # Allow admins to create facilities using the first available corporation
+        is_admin = False
+        if hasattr(user, "get"):
+            is_admin = bool(user.get("is_admin"))
+        elif hasattr(user, "__getitem__"):
+            try:
+                is_admin = bool(user["is_admin"])
+            except (KeyError, IndexError):
+                pass
+        if is_admin:
+            fallback = conn.execute("SELECT id FROM corporations ORDER BY created_at LIMIT 1").fetchone()
+            if fallback:
+                corp_id = str(fallback["id"])
+        if not corp_id:
+            raise HTTPException(status_code=400, detail="Corporation session required")
 
     loc = conn.execute("SELECT id, name FROM locations WHERE id = ?", (body.location_id,)).fetchone()
     if not loc:

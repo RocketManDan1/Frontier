@@ -98,6 +98,13 @@ def _consume_water_from_location(conn: sqlite3.Connection, location_id: str, amo
     return amount
 
 
+def _first_incompatibility(parts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    incompatible = catalog_service.find_incompatible_reactor_thruster_pairs(parts)
+    if not incompatible:
+        return None
+    return incompatible[0]
+
+
 # ── Pydantic models ────────────────────────────────────────
 
 class ShipyardPreviewReq(BaseModel):
@@ -132,32 +139,38 @@ def api_shipyard_preview(req: ShipyardPreviewReq, request: Request, conn: sqlite
     item_ids = m.normalize_shipyard_item_ids(req.parts)
     parts = m.shipyard_parts_from_item_ids(item_ids)
 
-    # Compute stats with 0 fuel first to get fuel_capacity_kg
-    base_stats = m.build_ship_stats_payload(parts, current_fuel_kg=0.0)
-    fuel_capacity_kg = base_stats.get("fuel_capacity_kg", 0.0)
-
     # Determine available water at location
     if req.unlimited_fuel:
         # Boost mode: unlimited water (will be boosted from Earth)
-        available_fuel_kg = fuel_capacity_kg
+        available_fuel_kg = 1e12
     else:
         available_fuel_kg = _get_available_water_kg(conn, source_location_id, corp_id=corp_id or "")
 
-    # Apply requested fuel level
+    # Apply requested fuel level (no hard cap — only limited by available water)
     requested_fuel = req.fuel_kg
     if requested_fuel is not None:
-        fuel_kg = max(0.0, min(float(requested_fuel), fuel_capacity_kg, available_fuel_kg))
+        fuel_kg = max(0.0, min(float(requested_fuel), available_fuel_kg))
     else:
         fuel_kg = 0.0
 
     stats = m.build_ship_stats_payload(parts, current_fuel_kg=fuel_kg)
     power_balance = catalog_service.compute_power_balance(parts)
+    incompatibility = _first_incompatibility(parts)
     return {
         "build_location_id": source_location_id,
         "parts": parts,
         "stats": stats,
         "power_balance": power_balance,
         "available_fuel_kg": available_fuel_kg,
+        "compatibility": {
+            "ok": incompatibility is None,
+            "error": (
+                None
+                if incompatibility is None
+                else f"Engine {incompatibility['thruster_name']} is not compatible with {incompatibility['reactor_branch']} reactors"
+            ),
+            "incompatible_pairs": [] if incompatibility is None else [incompatibility],
+        },
     }
 
 
@@ -173,6 +186,14 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     item_ids = m.normalize_shipyard_item_ids(req.parts)
     if not item_ids:
         raise HTTPException(status_code=400, detail="At least one part is required")
+
+    requested_parts = m.shipyard_parts_from_item_ids(item_ids)
+    incompatibility = _first_incompatibility(requested_parts)
+    if incompatibility is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine {incompatibility['thruster_name']} is not compatible with {incompatibility['reactor_branch']} reactors",
+        )
 
     user = require_login(conn, request)
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
@@ -190,15 +211,18 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
     if not parts:
         raise HTTPException(status_code=400, detail="No valid parts found for build")
 
-    # Compute stats with 0 fuel first to get fuel_capacity_kg
-    base_stats = m.build_ship_stats_payload(parts, current_fuel_kg=0.0)
-    fuel_capacity_kg = base_stats.get("fuel_capacity_kg", 0.0)
+    incompatibility = _first_incompatibility(parts)
+    if incompatibility is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Engine {incompatibility['thruster_name']} is not compatible with {incompatibility['reactor_branch']} reactors",
+        )
 
-    # Determine how much fuel to load
+    # Determine how much fuel to load (no hard cap — only limited by available water)
     requested_fuel = req.fuel_kg
-    if requested_fuel is not None and requested_fuel > 0 and fuel_capacity_kg > 0:
+    if requested_fuel is not None and requested_fuel > 0:
         available_fuel_kg = _get_available_water_kg(conn, source_location_id, corp_id=corp_id or "")
-        fuel_to_load = max(0.0, min(float(requested_fuel), fuel_capacity_kg, available_fuel_kg))
+        fuel_to_load = max(0.0, min(float(requested_fuel), available_fuel_kg))
         if fuel_to_load > 0:
             _consume_water_from_location(conn, source_location_id, fuel_to_load, corp_id=corp_id or "")
     else:
@@ -235,7 +259,7 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
             None,
             None,
             None,
-            json.dumps(parts),
+            m.merge_ship_parts_and_cargo(parts),
             stats["fuel_kg"],
             stats["fuel_capacity_kg"],
             stats["dry_mass_kg"],

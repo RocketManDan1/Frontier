@@ -386,6 +386,41 @@ def mission_module_stack_key(mission_id: str) -> str:
     return f"mission_module_{mission_id}"
 
 
+def _mission_module_id_from_payload(payload_json: str) -> str:
+    try:
+        payload = json.loads(payload_json or "{}")
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return ""
+    mission_id = payload.get("mission_id")
+    if mission_id:
+        return str(mission_id)
+    part = payload.get("part")
+    if isinstance(part, dict):
+        mission_id = part.get("_mission_id") or part.get("mission_id")
+        if mission_id:
+            return str(mission_id)
+    return ""
+
+
+def _module_stack_matches_mission(stack_key: str, payload_json: str, mission_id: str) -> bool:
+    if str(stack_key or "") == mission_module_stack_key(mission_id):
+        return True
+    return _mission_module_id_from_payload(payload_json) == str(mission_id)
+
+
+def _mission_owner_corp_ids(conn: sqlite3.Connection, mission_id: str) -> List[str]:
+    row = conn.execute("SELECT org_id FROM missions WHERE id = ?", (mission_id,)).fetchone()
+    if not row:
+        return []
+    org_id = str(row["org_id"] or "")
+    if not org_id:
+        return []
+    corp_rows = conn.execute("SELECT id FROM corporations WHERE org_id = ?", (org_id,)).fetchall()
+    return [str(r["id"] or "") for r in corp_rows if str(r["id"] or "")]
+
+
 def mint_mission_module(conn: sqlite3.Connection, mission_id: str, location_id: str, org_id: str) -> None:
     """Place 1× Mission Materials Module into a location's inventory for the org."""
     from main import _upsert_inventory_stack
@@ -416,19 +451,26 @@ def mint_mission_module(conn: sqlite3.Connection, mission_id: str, location_id: 
 
 
 def remove_mission_module(conn: sqlite3.Connection, mission_id: str) -> None:
-    """Remove the mission module from wherever it exists (location inventory or ship cargo)."""
+    """Remove the mission module from wherever it exists (location inventory, facilities, or ship cargo)."""
     stack_key = mission_module_stack_key(mission_id)
 
-    # Remove from location inventory
+    # Remove from location inventory (includes ship cargo stacks)
     conn.execute(
         "DELETE FROM location_inventory_stacks WHERE stack_key = ? AND item_id = ?",
         (stack_key, MISSION_MODULE_ITEM_ID),
     )
 
+    # Remove from deployed equipment at facilities
+    conn.execute(
+        "DELETE FROM deployed_equipment WHERE item_id = ?",
+        (MISSION_MODULE_ITEM_ID,),
+    )
+
     # Remove from ship cargo (parts_json) — search all ships
     rows = conn.execute("SELECT id, parts_json FROM ships WHERE parts_json LIKE '%mission_materials_module%'").fetchall()
     for row in rows:
-        parts = json.loads(row["parts_json"] or "[]")
+        import main as m
+        parts, _cargo = m.split_ship_parts_and_cargo(row["parts_json"] or "[]")
         filtered = [p for p in parts if not (
             isinstance(p, dict) and
             p.get("item_id") == MISSION_MODULE_ITEM_ID and
@@ -437,79 +479,213 @@ def remove_mission_module(conn: sqlite3.Connection, mission_id: str) -> None:
         if len(filtered) != len(parts):
             conn.execute(
                 "UPDATE ships SET parts_json = ? WHERE id = ?",
-                (json.dumps(filtered), row["id"]),
+                (m.merge_ship_parts_and_cargo(filtered), row["id"]),
             )
 
 
 def find_mission_module(conn: sqlite3.Connection, mission_id: str, target_location_id: str) -> Optional[str]:
     """Check if the mission module is at the target location.
-    Searches location inventory and docked ships.
-    Returns 'location' or 'ship:<ship_id>' or None."""
+    Searches location inventory, deployed facility equipment, and docked ships.
+    Returns 'location' or 'facility:<facility_id>' or 'ship:<ship_id>' or None."""
     stack_key = mission_module_stack_key(mission_id)
 
-    # Check location inventory (any facility at this location)
-    row = conn.execute(
-        """SELECT 1 FROM location_inventory_stacks
-           WHERE location_id = ? AND stack_key = ? AND item_id = ? AND quantity >= 1""",
-        (target_location_id, stack_key, MISSION_MODULE_ITEM_ID),
-    ).fetchone()
-    if row:
-        return "location"
+    # Check location inventory (location-scoped cargo)
+    stack_rows = conn.execute(
+        """SELECT stack_key, payload_json FROM location_inventory_stacks
+           WHERE location_id = ? AND item_id = ? AND quantity >= 1""",
+        (target_location_id, MISSION_MODULE_ITEM_ID),
+    ).fetchall()
+    for row in stack_rows:
+        if _module_stack_matches_mission(str(row["stack_key"] or ""), str(row["payload_json"] or "{}"), mission_id):
+            return "location"
 
-    # Check docked ships at this location
+    # Check deployed equipment at facilities for this location
+    facility_eq = conn.execute(
+        """SELECT de.id, de.facility_id FROM deployed_equipment de
+           JOIN facilities f ON f.id = de.facility_id
+           WHERE f.location_id = ? AND de.item_id = ?""",
+        (target_location_id, MISSION_MODULE_ITEM_ID),
+    ).fetchone()
+    if facility_eq:
+        return f"facility:{facility_eq['facility_id']}"
+
+    # Check ALL docked ships at this location (not just those with module in parts_json)
     ships = conn.execute(
         """SELECT id, parts_json FROM ships
-           WHERE location_id = ? AND arrives_at IS NULL
-           AND parts_json LIKE '%mission_materials_module%'""",
+           WHERE location_id = ? AND arrives_at IS NULL""",
         (target_location_id,),
     ).fetchall()
     for ship in ships:
-        parts = json.loads(ship["parts_json"] or "[]")
+        # Check ship installed parts
+        import main as m
+        parts, _cargo = m.split_ship_parts_and_cargo(ship["parts_json"] or "[]")
         for p in parts:
             if isinstance(p, dict) and p.get("item_id") == MISSION_MODULE_ITEM_ID:
-                # Check if this specific mission's module
-                if p.get("_mission_id") == mission_id:
+                p_mission_id = str(p.get("_mission_id") or p.get("mission_id") or "")
+                if p_mission_id == mission_id:
                     return f"ship:{ship['id']}"
-        # Also check ship resource/cargo containers for the module stack key
-        # (modules stored as inventory stacks on ship)
-        cargo = conn.execute(
-            """SELECT 1 FROM location_inventory_stacks
-               WHERE location_id = ? AND stack_key = ? AND item_id = ?""",
-            (f"ship:{ship['id']}", stack_key, MISSION_MODULE_ITEM_ID),
-        ).fetchone()
-        if cargo:
-            return f"ship:{ship['id']}"
+        # Check ship cargo containers (inventory stacks on ship)
+        cargo_rows = conn.execute(
+            """SELECT stack_key, payload_json FROM location_inventory_stacks
+               WHERE location_id = ? AND item_id = ? AND quantity >= 1""",
+            (f"ship:{ship['id']}", MISSION_MODULE_ITEM_ID),
+        ).fetchall()
+        for cargo in cargo_rows:
+            if _module_stack_matches_mission(str(cargo["stack_key"] or ""), str(cargo["payload_json"] or "{}"), mission_id):
+                return f"ship:{ship['id']}"
 
     return None
 
 
 def find_mission_module_anywhere(conn: sqlite3.Connection, mission_id: str) -> Optional[Dict[str, str]]:
     """Find where the mission module currently is. Returns {location_id, found_in} or None."""
-    stack_key = mission_module_stack_key(mission_id)
+    owner_corp_ids = _mission_owner_corp_ids(conn, mission_id)
+    where_sql = "WHERE item_id = ? AND quantity >= 1"
+    params: List[Any] = [MISSION_MODULE_ITEM_ID]
+    if owner_corp_ids:
+        placeholders = ",".join("?" for _ in owner_corp_ids)
+        where_sql += f" AND corp_id IN ({placeholders})"
+        params.extend(owner_corp_ids)
 
     # Check location inventory
-    row = conn.execute(
-        """SELECT location_id FROM location_inventory_stacks
-           WHERE stack_key = ? AND item_id = ? AND quantity >= 1 LIMIT 1""",
-        (stack_key, MISSION_MODULE_ITEM_ID),
-    ).fetchone()
-    if row:
-        return {"location_id": str(row["location_id"]), "found_in": "location_inventory"}
-
-    # Check ships
-    ships = conn.execute(
-        "SELECT id, name, location_id FROM ships WHERE parts_json LIKE '%mission_materials_module%'"
+    stack_rows = conn.execute(
+        f"""SELECT location_id, stack_key, payload_json FROM location_inventory_stacks
+           {where_sql}""",
+        tuple(params),
     ).fetchall()
-    for ship in ships:
-        parts = json.loads(conn.execute("SELECT parts_json FROM ships WHERE id=?", (ship["id"],)).fetchone()["parts_json"] or "[]")
-        for p in parts:
-            if isinstance(p, dict) and p.get("item_id") == MISSION_MODULE_ITEM_ID and p.get("_mission_id") == mission_id:
-                loc = str(ship["location_id"] or "in_transit")
+    fallback_location_candidates: List[Dict[str, str]] = []
+    fallback_ship_candidates: List[Dict[str, str]] = []
+    for row in stack_rows:
+        loc_id = str(row["location_id"] or "")
+        stack_key = str(row["stack_key"] or "")
+        payload_json = str(row["payload_json"] or "{}")
+        if _module_stack_matches_mission(stack_key, payload_json, mission_id):
+            if loc_id.startswith("ship:"):
+                ship_id = loc_id[5:]
+                ship_row = conn.execute(
+                    "SELECT name, location_id FROM ships WHERE id = ?", (ship_id,)
+                ).fetchone()
                 return {
-                    "location_id": loc,
-                    "found_in": f"ship:{ship['id']}",
-                    "ship_name": str(ship["name"] or ship["id"]),
+                    "location_id": str(ship_row["location_id"] or "in_transit") if ship_row else "unknown",
+                    "found_in": f"ship:{ship_id}",
+                    "ship_name": str(ship_row["name"] or ship_id) if ship_row else ship_id,
                 }
+            return {"location_id": loc_id, "found_in": "location_inventory"}
+
+        if loc_id.startswith("ship:"):
+            ship_id = loc_id[5:]
+            ship_row = conn.execute(
+                "SELECT name, location_id FROM ships WHERE id = ?", (ship_id,)
+            ).fetchone()
+            fallback_ship_candidates.append(
+                {
+                    "location_id": str(ship_row["location_id"] or "in_transit") if ship_row else "unknown",
+                    "found_in": f"ship:{ship_id}",
+                    "ship_name": str(ship_row["name"] or ship_id) if ship_row else ship_id,
+                }
+            )
+        elif loc_id:
+            fallback_location_candidates.append(
+                {"location_id": loc_id, "found_in": "location_inventory"}
+            )
+
+    # Check deployed equipment at facilities
+    eq_params: List[Any] = [MISSION_MODULE_ITEM_ID]
+    eq_filter = ""
+    if owner_corp_ids:
+        placeholders = ",".join("?" for _ in owner_corp_ids)
+        eq_filter = f" AND f.corp_id IN ({placeholders})"
+        eq_params.extend(owner_corp_ids)
+    eq_row = conn.execute(
+        """SELECT de.facility_id, f.location_id, f.name AS facility_name
+           FROM deployed_equipment de
+           JOIN facilities f ON f.id = de.facility_id
+           WHERE de.item_id = ?""" + eq_filter + " LIMIT 1",
+        tuple(eq_params),
+    ).fetchone()
+    if eq_row:
+        return {
+            "location_id": str(eq_row["location_id"]),
+            "found_in": f"facility:{eq_row['facility_id']}",
+            "facility_name": str(eq_row["facility_name"] or eq_row["facility_id"]),
+        }
+
+    # Check ship installed parts
+    ship_filter = "WHERE parts_json LIKE '%mission_materials_module%'"
+    ship_params: List[Any] = []
+    if owner_corp_ids:
+        placeholders = ",".join("?" for _ in owner_corp_ids)
+        ship_filter += f" AND corp_id IN ({placeholders})"
+        ship_params.extend(owner_corp_ids)
+    ships = conn.execute(
+        "SELECT id, name, location_id FROM ships " + ship_filter,
+        tuple(ship_params),
+    ).fetchall()
+    fallback_part_candidates: List[Dict[str, str]] = []
+    for ship in ships:
+        import main as m
+        row = conn.execute("SELECT parts_json FROM ships WHERE id=?", (ship["id"],)).fetchone()
+        parts, _cargo = m.split_ship_parts_and_cargo((row["parts_json"] if row else "") or "[]")
+        for p in parts:
+            if not isinstance(p, dict) or p.get("item_id") != MISSION_MODULE_ITEM_ID:
+                continue
+
+            p_mission_id = str(p.get("_mission_id") or p.get("mission_id") or "")
+            loc = str(ship["location_id"] or "in_transit")
+            candidate = {
+                "location_id": loc,
+                "found_in": f"ship:{ship['id']}",
+                "ship_name": str(ship["name"] or ship["id"]),
+            }
+            if p_mission_id == mission_id:
+                return candidate
+            fallback_part_candidates.append(candidate)
+
+    def _dedupe_candidates(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        seen = set()
+        out: List[Dict[str, str]] = []
+        for row in rows:
+            key = (str(row.get("found_in") or ""), str(row.get("location_id") or ""), str(row.get("ship_name") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(dict(row))
+        return out
+
+    fallback_ship_candidates = _dedupe_candidates(fallback_ship_candidates)
+    fallback_part_candidates = _dedupe_candidates(fallback_part_candidates)
+    fallback_location_candidates = _dedupe_candidates(fallback_location_candidates)
+
+    def _select_ship_candidate(rows: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
+        if not rows:
+            return None
+        ordered = sorted(
+            rows,
+            key=lambda r: (
+                0 if str(r.get("location_id") or "") in {"LEO", "HEO", "GEO"} else 1,
+                str(r.get("ship_name") or "").lower(),
+                str(r.get("found_in") or "").lower(),
+            ),
+        )
+        chosen = dict(ordered[0])
+        if len(ordered) > 1:
+            chosen["ship_name"] = f"{chosen.get('ship_name') or 'ship'} (+{len(ordered) - 1} more)"
+        return chosen
+
+    candidate = _select_ship_candidate(fallback_ship_candidates)
+    if candidate:
+        return candidate
+
+    candidate = _select_ship_candidate(fallback_part_candidates)
+    if candidate:
+        return candidate
+
+    if fallback_location_candidates:
+        ordered_locations = sorted(fallback_location_candidates, key=lambda r: str(r.get("location_id") or "").lower())
+        chosen_loc = dict(ordered_locations[0])
+        if len(ordered_locations) > 1:
+            chosen_loc["location_id"] = f"{chosen_loc.get('location_id') or 'unknown'} (+{len(ordered_locations) - 1} more)"
+        return chosen_loc
 
     return None
 
@@ -604,6 +780,11 @@ def complete_mission(conn: sqlite3.Connection, mission_id: str, org_id: str) -> 
     elif tier == "medium":
         if status != "accepted":
             raise ValueError(f"Cannot complete medium mission in status '{status}' (must be 'accepted')")
+
+        # Medium missions require a facility at the destination surface site
+        if not _org_has_facility(conn, org_id, dest_id):
+            raise ValueError(f"Your organization must have a facility at {dest_id} to complete this mission")
+
         found = find_mission_module(conn, mission_id, dest_id)
         if not found:
             raise ValueError(f"Mission Materials Module not found at destination surface site {dest_id}")
@@ -614,7 +795,10 @@ def complete_mission(conn: sqlite3.Connection, mission_id: str, org_id: str) -> 
 
     elif tier == "hard":
         if status == "accepted":
-            # Step 1: Check module at destination
+            # Step 1: Check module at destination + facility established
+            if not _org_has_facility(conn, org_id, dest_id):
+                raise ValueError(f"Your organization must have a facility at {dest_id} to advance this mission")
+
             found = find_mission_module(conn, mission_id, dest_id)
             if not found:
                 raise ValueError(f"Mission Materials Module not found at destination {dest_id}")
@@ -753,7 +937,22 @@ def abandon_mission(conn: sqlite3.Connection, mission_id: str, org_id: str) -> D
     return _get_mission_dict(conn, mission_id)
 
 
-# ── Power check helper ─────────────────────────────────────────────────────────
+# ── Facility check helpers ──────────────────────────────────────────────────────
+
+def _org_has_facility(conn: sqlite3.Connection, org_id: str, location_id: str) -> bool:
+    """Check if the org (via its corp) has at least one facility at the given location."""
+    corp_row = conn.execute(
+        "SELECT id FROM corporations WHERE org_id = ?", (org_id,)
+    ).fetchone()
+    if not corp_row:
+        return False
+    corp_id = str(corp_row["id"])
+    fac = conn.execute(
+        "SELECT 1 FROM facilities WHERE location_id = ? AND corp_id = ? LIMIT 1",
+        (location_id, corp_id),
+    ).fetchone()
+    return fac is not None
+
 
 def _check_facility_power(conn: sqlite3.Connection, location_id: str) -> bool:
     """Check if any facility at the given location has positive net electric surplus."""

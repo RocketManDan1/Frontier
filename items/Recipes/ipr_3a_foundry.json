@@ -1,0 +1,20 @@
+{
+  "recipe_id": "ipr_3a_foundry",
+  "name": "Assemble IPR-3A \"Foundry\"",
+  "output_item_id": "ipr_3a_foundry",
+  "output_qty": 1,
+  "inputs": [
+    { "item_id": "advanced_aerospace_alloys", "qty": 20000.0 },
+    { "item_id": "structural_alloys", "qty": 18000.0 },
+    { "item_id": "advanced_ceramics", "qty": 12000.0 },
+    { "item_id": "semiconductor_materials", "qty": 10000.0 },
+    { "item_id": "carbon_composites", "qty": 8000.0 },
+    { "item_id": "radiation_composite_armor", "qty": 6000.0 }
+  ],
+  "build_time_s": 5700,
+  "facility_type": "shipyard",
+  "refinery_category": "metallurgy",
+  "min_tech_tier": 3,
+  "power_kw": 880,
+  "byproducts": []
+}

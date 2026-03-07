@@ -1,0 +1,20 @@
+{
+  "id": "cvm_2a_boreas",
+  "name": "CVM-2A \"Boreas\"",
+  "research_node": "advanced_cryovolatile_mining",
+  "tech_level": 2,
+  "branch": "microwave_cryo_sublimation",
+  "mass_t": 7.5,
+  "operational_environment": "surface_cryo",
+  "miner_type": "cryovolatile",
+  "min_volatile_mass_fraction": 0.5,
+  "power_requirements": {
+    "electric_mw": 9.0
+  },
+  "performance": {
+    "mining_rate_kg_per_hr": 220,
+    "excavation_type": "microwave_sublimation_manifold"
+  },
+  "description": "The Boreas is a mid-tier cryovolatile miner employing focused 915 MHz microwave radiation to sublimate near-surface volatiles in bulk. A phased-array antenna panel directs energy into a 2 m² working patch, rapidly heating ice to sublimation temperature; the resulting gas plume is captured by a low-pressure suction shroud and piped to a condensation tank. The microwave approach avoids mechanical contact with the ice surface entirely, allowing higher throughput with less wear than thermal probes. Effective on water ice, CO2 ice, and nitrogen-dominated permafrost.",
+  "ui_tags": ["microwave_sublimation", "bulk_capture", "tier_2"]
+}

@@ -1,0 +1,46 @@
+{
+  "recipe_id": "lcn_2_cascade",
+  "name": "Assemble LCN-2 \"Cascade\"",
+  "output_item_id": "lcn_2_cascade",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 16000
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 15000
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 13000
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 12000
+    },
+    {
+      "item_id": "high_grade_reactor_pellets",
+      "qty": 7000
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 5000
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 2000
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 1500
+    }
+  ],
+  "build_time_s": 16200,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 6,
+  "power_kw": 1800,
+  "byproducts": []
+}

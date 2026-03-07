@@ -1,0 +1,20 @@
+{
+  "id": "dcr200_maelstrom",
+  "name": "DCR-200 \"Maelstrom\"",
+  "research_node": "advanced_liquid_core",
+  "tech_level": 3.0,
+  "branch": "liquid_core",
+  "mass_t": 2.8,
+  "output": {
+    "thermal_mw": 3800,
+    "core_temp_k": 5250
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "droplet_spray_fissile_injection"
+  },
+  "description": "A droplet-core reactor that injects molten uranium as a fine spray through the propellant stream. Maximises fuel surface area for heat transfer at the cost of significant fissile material loss per burn cycle.",
+  "ui_tags": [
+    "liquid_core"
+  ]
+}

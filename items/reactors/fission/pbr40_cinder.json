@@ -1,0 +1,21 @@
+{
+  "id": "pbr40_cinder",
+  "name": "PBR-40 \"Cinder\"",
+  "research_node": "pebble_bed",
+  "tech_level": 1.5,
+  "branch": "pebble_bed",
+  "mass_t": 0.45,
+  "output": {
+    "thermal_mw": 800,
+    "core_temp_k": 3200
+  },
+  "fuel": {
+    "type": "low_grade_reactor_pellets",
+    "geometry": "rotating_pebble_bed"
+  },
+  "description": "A compact rotating pebble-bed reactor. Fuel spheres are centrifuged against the chamber wall at 3,000 rpm while hydrogen flows through the bed. Exceptional power-to-mass, but the tumbling fuel elements wear faster than fixed rods.",
+  "ui_tags": [
+    "pebble_bed",
+    "early"
+  ]
+}

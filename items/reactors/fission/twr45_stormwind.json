@@ -1,0 +1,21 @@
+{
+  "id": "twr45_stormwind",
+  "name": "TWR-45 \"Stormwind\"",
+  "research_node": "pebble_bed",
+  "tech_level": 2.0,
+  "branch": "pebble_bed",
+  "mass_t": 0.75,
+  "output": {
+    "thermal_mw": 1600,
+    "core_temp_k": 3200
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "particle_bed_coated_microspheres"
+  },
+  "description": "Derived from the Timberwind program. Carbide-coated fuel microspheres in a high-flow particle bed deliver enormous thermal output from a remarkably small package. The reactor that made solid-core engines competitive again.",
+  "ui_tags": [
+    "pebble_bed",
+    "advanced"
+  ]
+}

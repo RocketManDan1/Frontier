@@ -1,0 +1,35 @@
+{
+  "id": "lcn_1_torrent",
+  "name": "LCN-1 \"Torrent\"",
+  "research_node": "liquid_core",
+  "tech_level": 2.5,
+  "branch": "liquid_core",
+  "mass_t": 30.0,
+  "compatible_reactor_branches": [
+    "liquid_core",
+    "vapor_core"
+  ],
+  "performance": {
+    "max_thrust_kN": 450,
+    "isp_s": 1100,
+    "rated_temp_k": 5250,
+    "fuel_capacity_kg": 150000,
+    "cargo_capacity_kg": 100000
+  },
+  "power_requirements": {
+    "thermal_mw": 1500
+  },
+  "consumables": {
+    "reaction_mass": "water",
+    "fissiles": {
+      "model": "core_life_years",
+      "properties": {
+        "core_life_years_at_full_power": 5
+      }
+    }
+  },
+  "description": "A transpiration-cooled NTR engine rated for liquid-core thermal flux. Propellant is bled through the porous nozzle throat to prevent melt-through at temperatures no solid-core nozzle could survive. The first engine to break the 1,000-second Isp barrier without going full gas-core.",
+  "ui_tags": [
+    "liquid_core"
+  ]
+}

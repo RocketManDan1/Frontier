@@ -1,0 +1,20 @@
+{
+  "id": "lars1_crucible",
+  "name": "LARS-1 \"Crucible\"",
+  "research_node": "liquid_core",
+  "tech_level": 2.5,
+  "branch": "liquid_core",
+  "mass_t": 1.8,
+  "output": {
+    "thermal_mw": 2200,
+    "core_temp_k": 5250
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "liquid_annular_molten_uranium"
+  },
+  "description": "A Liquid Annular Reactor System. Supercritical uranium is held under high pressure in a rotating annular channel \u2014 propellant flows through the center, absorbing heat directly from the fuel surface. Runs at 5,250K under confinement, far beyond any solid fuel element.",
+  "ui_tags": [
+    "liquid_core"
+  ]
+}

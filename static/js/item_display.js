@@ -60,6 +60,7 @@ window.ItemDisplay = (function () {
     finished_material:  { hueBase: 175, shape: "pallet"  },
     resource:           { hueBase: 130, shape: "drop"    },
     container:          { hueBase: 260, shape: "square"  },
+    prospector:         { hueBase: 310, shape: "gear"    },
     robonaut:           { hueBase: 310, shape: "gear"    },
     refinery:           { hueBase: 340, shape: "gear"    },
     recipe:             { hueBase: 45,  shape: "cube"    },
@@ -217,6 +218,17 @@ window.ItemDisplay = (function () {
     if (o.branch) cell.dataset.tooltipBranch = String(o.branch);
     if (o.techLevel) cell.dataset.tooltipTechLevel = String(o.techLevel);
     if (o.family) cell.dataset.tooltipFamily = String(o.family);
+    if (Number(o.water_extraction_kg_per_hr) > 0) {
+      cell.dataset.tooltipWaterExtractionKgPerHr = String(Number(o.water_extraction_kg_per_hr));
+    }
+    if (!Number.isNaN(Number(o.min_water_ice_fraction))) {
+      cell.dataset.tooltipMinWaterIceFraction = String(Number(o.min_water_ice_fraction));
+    }
+    if (!Number.isNaN(Number(o.max_water_ice_fraction))) {
+      cell.dataset.tooltipMaxWaterIceFraction = String(Number(o.max_water_ice_fraction));
+    }
+    if (Number(o.core_temp_k) > 0) cell.dataset.tooltipCoreTempK = String(Number(o.core_temp_k));
+    if (Number(o.rated_temp_k) > 0) cell.dataset.tooltipRatedTempK = String(Number(o.rated_temp_k));
 
     // Tooltip events
     cell.addEventListener("pointerenter", (e) => showTooltip(cell, e));
@@ -292,6 +304,29 @@ window.ItemDisplay = (function () {
     if (massKg > 0) lines.push(["Mass", fmtKg(massKg)]);
     if (volM3 > 0) lines.push(["Volume", fmtM3(volM3)]);
     if (d.tooltipPhase) lines.push(["Phase", d.tooltipPhase.charAt(0).toUpperCase() + d.tooltipPhase.slice(1)]);
+    const waterExtractionKgPerHr = Number(d.tooltipWaterExtractionKgPerHr) || 0;
+    if (waterExtractionKgPerHr > 0) {
+      lines.push(["Water Extraction", `${waterExtractionKgPerHr.toFixed(0)} kg/hr`]);
+    }
+    const minWaterIce = Number(d.tooltipMinWaterIceFraction);
+    const maxWaterIce = Number(d.tooltipMaxWaterIceFraction);
+    if (!Number.isNaN(minWaterIce) || !Number.isNaN(maxWaterIce)) {
+      const minPct = Math.max(0, Math.min(100, (Number.isNaN(minWaterIce) ? 0 : minWaterIce * 100)));
+      const maxPct = Math.max(0, Math.min(100, (Number.isNaN(maxWaterIce) ? 100 : maxWaterIce * 100)));
+      let waterNeeded = "";
+      if (minPct > 0 && maxPct < 100) {
+        waterNeeded = `${minPct.toFixed(1)}%–${maxPct.toFixed(1)}%`;
+      } else if (minPct > 0) {
+        waterNeeded = `≥ ${minPct.toFixed(1)}%`;
+      } else if (maxPct < 100) {
+        waterNeeded = `≤ ${maxPct.toFixed(1)}%`;
+      }
+      if (waterNeeded) lines.push(["Water Needed", waterNeeded]);
+    }
+    const coreTempK = Number(d.tooltipCoreTempK) || 0;
+    const ratedTempK = Number(d.tooltipRatedTempK) || 0;
+    if (coreTempK > 0) lines.push(["Core Temp", `${coreTempK.toFixed(0)} K`]);
+    if (ratedTempK > 0) lines.push(["Core Temp Req", `${ratedTempK.toFixed(0)} K`]);
     if (d.tooltipStats) lines.push(["Info", d.tooltipStats]);
 
     // Extra lines from data

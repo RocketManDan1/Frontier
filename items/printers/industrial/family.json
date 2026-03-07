@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "printers_industrial",
+  "display_name": "Industrial Printer",
+  "notes": [
+    "Surface-deployed fabrication printers specialized for heavy industrial equipment: refineries, miners, prospectors, and other printers.",
+    "printer_type: industrial — can only build recipes whose output category is one of: refinery, miner, prospector, robonaut, printer.",
+    "construction_rate_kg_per_hr increases with tech level, scaling build speed.",
+    "Multiple printers in 'construct' mode at the same facility pool their rates.",
+    "Draws electric_mw from the surface power bus during active operations."
+  ],
+  "constraints": {
+    "one_per_vessel": false
+  },
+  "input_interface": {
+    "model": "ship_electric",
+    "field": "electric_mw"
+  },
+  "mainline_files": [
+    "ipr_1a_mold.json",
+    "ipr_2a_forge.json",
+    "ipr_3a_foundry.json",
+    "ipr_4a_colossus.json"
+  ]
+}

@@ -141,7 +141,7 @@
       if (currentFilter === "orbital") return !s.is_surface_site;
       if (currentFilter === "active") {
         const eq = s.equipment || {};
-        return (eq.refinery || {}).total > 0 || (eq.constructor || {}).total > 0 || (eq.robonaut || {}).total > 0 || s.active_jobs > 0;
+        return (eq.refinery || {}).total > 0 || (eq.constructor || {}).total > 0 || (eq.miner || {}).total > 0 || (eq.printer || {}).total > 0 || (eq.prospector || {}).total > 0 || (eq.robonaut || {}).total > 0 || s.active_jobs > 0;
       }
       return true;
     });
@@ -154,10 +154,10 @@
     function siteRow(s) {
       const eq = s.equipment || {};
       const refCount = (eq.refinery || {}).total || 0;
-      const conCount = (eq.constructor || {}).total || 0;
-      const roboCount = (eq.robonaut || {}).total || 0;
-      const equipStr = (refCount || conCount || roboCount)
-        ? `<span class="eqBadge ref">${refCount}R</span><span class="eqBadge con">${conCount}C</span><span class="eqBadge con">${roboCount}B</span>`
+      const conCount = (eq.constructor || {}).total || 0 || (eq.miner || {}).total || 0 || (eq.printer || {}).total || 0;
+      const prospectorCount = ((eq.prospector || {}).total || 0) + ((eq.robonaut || {}).total || 0);
+      const equipStr = (refCount || conCount || prospectorCount)
+        ? `<span class="eqBadge ref">${refCount}R</span><span class="eqBadge con">${conCount}C</span><span class="eqBadge con">${prospectorCount}P</span>`
         : '<span class="muted">—</span>';
 
       const invStr = s.inventory.stack_count > 0
@@ -289,6 +289,9 @@
           label: p.name, iconSeed: p.item_id, itemId: p.item_id,
           category: cat,
           mass_kg: p.mass_kg, quantity: p.quantity,
+          water_extraction_kg_per_hr: part.water_extraction_kg_per_hr,
+          min_water_ice_fraction: part.min_water_ice_fraction,
+          max_water_ice_fraction: part.max_water_ice_fraction,
         });
         invGrid.appendChild(cell);
       });
@@ -342,15 +345,15 @@
     const current = sel.value;
 
     const industrial = [];      // deployed constructors or refineries
-    const otherPresence = [];   // ships docked / robonauts / active jobs but no constructor/refinery
+    const otherPresence = [];   // ships docked / prospectors / active jobs but no constructor/refinery
     const prospectedOnly = [];  // prospected but no presence
     allSites.forEach(s => {
       const eq = s.equipment || {};
-      const hasConstructorOrRefinery = ((eq.refinery || {}).total || 0) + ((eq.constructor || {}).total || 0) > 0;
-      const hasRobonaut = ((eq.robonaut || {}).total || 0) > 0;
+      const hasConstructorOrRefinery = ((eq.refinery || {}).total || 0) + ((eq.constructor || {}).total || 0) + ((eq.miner || {}).total || 0) + ((eq.printer || {}).total || 0) > 0;
+      const hasProspector = (((eq.prospector || {}).total || 0) + ((eq.robonaut || {}).total || 0)) > 0;
       const hasShipLanded = Number(s.ships_docked || 0) > 0;
       const hasActivity = Number(s.active_jobs || 0) > 0;
-      const hasPresence = hasConstructorOrRefinery || hasRobonaut || hasShipLanded || hasActivity;
+      const hasPresence = hasConstructorOrRefinery || hasProspector || hasShipLanded || hasActivity;
       const isProspected = !!s.is_prospected;
 
       if (!hasPresence && !isProspected) return;
@@ -452,10 +455,15 @@
 
     for (const f of own) {
       const stats = f.stats || {};
+      const pwrMwe = Number(stats.power_mwe || 0);
+      const pwrUsed = Number(stats.power_used_mwe || 0);
+      const pwrOk = pwrUsed <= 0 || pwrMwe >= pwrUsed;
+      const pwrClass = pwrOk ? "" : " pwrBadBadge";
+      const pwrLabel = pwrOk ? `⚡ ${pwrMwe.toFixed(1)} MWe` : `⚡ ${pwrMwe.toFixed(1)}/${pwrUsed.toFixed(1)} MWe ⚠`;
       html += `<div class="facilityCard facilityOwn" data-facility-id="${esc(f.id)}" data-facility-name="${esc(f.name)}">
         <div class="facilityCardName">${esc(f.name)}</div>
         <div class="facilityCardStats">
-          <span>⚡ ${Number(stats.power_mwe || 0).toFixed(1)} MWe</span>
+          <span class="${pwrClass}">${pwrLabel}</span>
           <span>🏭 ${stats.equipment_count || 0} equipment</span>
           <span>⚙ ${stats.active_jobs || 0} active</span>
         </div>
@@ -568,7 +576,7 @@
     if (!industryData) return;
     const renderers = [
       ["PowerBalance", renderPowerBalance],
-      ["Constructors", renderConstructors],
+      ["MinersAndPrinters", renderConstructors],
       ["Mining", renderMiningSummary],
       ["RefinerySlots", renderRefinerySlots],
       ["ConstructionQueue", renderConstructionQueue],
@@ -580,19 +588,22 @@
     }
   }
 
-  /* ── Constructors (collapsible, toggle switches) ─────── */
+  /* ── Miners & Printers (collapsible, toggle switches) ─────── */
 
   function renderConstructors() {
     const list = document.getElementById("constructorsList");
     const badge = document.getElementById("constructorCountBadge");
     const summary = document.getElementById("constructorSummary");
     const equipment = industryData.equipment || [];
-    const constructors = equipment.filter(e => e.category === "constructor" || e.category === "robonaut");
+    const constructors = equipment.filter(
+      e => e.category === "miner" || e.category === "printer" ||
+           e.category === "constructor" || e.category === "prospector" || e.category === "robonaut"
+    );
 
     badge.textContent = constructors.length;
 
     if (!constructors.length) {
-      list.innerHTML = '<div class="muted" style="padding:12px">No constructors deployed</div>';
+      list.innerHTML = '<div class="muted" style="padding:12px">No miners or printers deployed</div>';
       summary.textContent = "";
       return;
     }
@@ -617,7 +628,9 @@
     list.innerHTML = constructors.map(eq => {
       const cfg = eq.config || {};
       const mode = eq.mode || "idle";
-      const isRobonaut = eq.category === "robonaut";
+      const isMiner = eq.category === "miner";
+      const isPrinter = eq.category === "printer";
+      const isProspector = eq.category === "prospector" || eq.category === "robonaut";
       const mineChecked = mode === "mine" ? "checked" : "";
       const constructChecked = mode === "construct" ? "checked" : "";
       const idleChecked = mode === "idle" ? "checked" : "";
@@ -625,8 +638,16 @@
       const buildRate = cfg.construction_rate_kg_per_hr || 0;
 
       let modeHtml;
-      if (isRobonaut) {
-        // Robonauts: mine/idle toggle only
+      if (isProspector) {
+        // Prospectors: idle only
+        modeHtml = `
+          <div class="constructorModeSwitch">
+            <label class="modeOption ${mode === 'idle' ? 'active' : ''}">
+              <input type="radio" name="mode_${eq.id}" value="idle" ${idleChecked}> ⏸ Idle
+            </label>
+          </div>`;
+      } else if (isMiner) {
+        // Miners: mine + idle only
         modeHtml = `
           <div class="constructorModeSwitch">
             <label class="modeOption ${mode === 'mine' ? 'active' : ''}">
@@ -636,7 +657,21 @@
               <input type="radio" name="mode_${eq.id}" value="idle" ${idleChecked}> ⏸ Idle
             </label>
           </div>`;
+      } else if (isPrinter) {
+        // Printers: construct + idle only
+        const minerType = cfg.printer_type || "";
+        const printerLabel = minerType === "industrial" ? "🏭 Build Industrial" : minerType === "ship" ? "🚀 Build Ship" : "🔧 Build";
+        modeHtml = `
+          <div class="constructorModeSwitch">
+            <label class="modeOption ${mode === 'construct' ? 'active' : ''}">
+              <input type="radio" name="mode_${eq.id}" value="construct" ${constructChecked}> ${printerLabel}
+            </label>
+            <label class="modeOption ${mode === 'idle' ? 'active' : ''}">
+              <input type="radio" name="mode_${eq.id}" value="idle" ${idleChecked}> ⏸ Idle
+            </label>
+          </div>`;
       } else {
+        // Legacy constructor: mine + build + idle
         modeHtml = `
           <div class="constructorModeSwitch">
             <label class="modeOption ${mode === 'mine' ? 'active' : ''}">
@@ -651,15 +686,29 @@
           </div>`;
       }
 
-      const statsHtml = `<span class="eqDetail">${miningRate} kg/hr mine</span>` +
-        (!isRobonaut ? `<span class="eqDetail">${buildRate} kg/hr build</span>` : '') +
-        `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      let statsHtml = "";
+      if (isMiner) {
+        statsHtml = `<span class="eqDetail">${miningRate} kg/hr mine</span>` +
+          `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+        if (cfg.miner_type) statsHtml += `<span class="eqDetail">${cfg.miner_type.replace("_", "-")}</span>`;
+      } else if (isPrinter) {
+        statsHtml = `<span class="eqDetail">${buildRate} kg/hr build</span>` +
+          `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+        if (cfg.printer_type) statsHtml += `<span class="eqDetail">${cfg.printer_type}</span>`;
+      } else if (!isProspector) {
+        statsHtml = `<span class="eqDetail">${miningRate} kg/hr mine</span>` +
+          `<span class="eqDetail">${buildRate} kg/hr build</span>` +
+          `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      } else {
+        statsHtml = `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+      }
 
       const totalMinedHtml = eq.mining_total_kg > 0 ? `<span class="muted">Total mined: ${fmtKg(eq.mining_total_kg)}</span>` : '';
+      const icon = isProspector ? '📡' : isMiner ? '⛏' : isPrinter ? '🖨' : '⛏';
 
       return `<div class="constructorRow" data-equip-id="${eq.id}">
         <div class="constructorInfo">
-          <span class="constructorIcon">${isRobonaut ? '🤖' : '⛏'}</span>
+          <span class="constructorIcon">${icon}</span>
           <div class="constructorDetails">
             <div class="constructorName">${esc(eq.name)}</div>
             <div class="constructorStats">${statsHtml}</div>
@@ -718,19 +767,22 @@
     panel.style.display = "";
 
     const equipment = industryData.equipment || [];
-    const miners = equipment.filter(e => e.mode === "mine" && (e.category === "constructor" || e.category === "robonaut"));
+    const miners = equipment.filter(e => e.mode === "mine" && (e.category === "miner" || e.category === "constructor" || e.category === "isru"));
     const minable = industryData.minable_resources || [];
 
     if (!miners.length) {
       if (!industryData.is_prospected) {
         content.innerHTML = '<div class="muted" style="padding:8px">⚠ Site not yet prospected</div>';
       } else {
-        content.innerHTML = '<div class="muted" style="padding:8px">No constructors set to mine mode</div>';
+        content.innerHTML = '<div class="muted" style="padding:8px">No miners set to mine mode</div>';
       }
       return;
     }
 
-    const totalRate = miners.reduce((s, m) => s + (m.config?.mining_rate_kg_per_hr || 0), 0);
+    const totalRate = miners.reduce(
+      (s, m) => s + (m.config?.mining_rate_kg_per_hr || m.config?.water_extraction_kg_per_hr || 0),
+      0
+    );
 
     let html = `<div class="miningSummaryHeader">Total mining rate: <strong>${totalRate} kg/hr</strong> (${miners.length} units)</div>`;
     html += '<div class="miningDistribution">';
@@ -886,7 +938,7 @@
 
     poolInfo.textContent = poolSpeed > 0
       ? `Pool: ${poolSpeed} kg/hr (${poolMult.toFixed(2)}× speed)`
-      : "No constructors in build mode";
+      : "No printers in build mode";
 
     // Wire add-to-queue button (must be before early return)
     const addBtn = document.getElementById("btnAddConstruction");
@@ -1057,10 +1109,11 @@
 
       const categoryLabels = {
         thruster: "Thrusters", reactor: "Reactors", generator: "Generators",
-        radiator: "Radiators", refinery: "Refineries", constructor: "Constructors",
-        robonaut: "Robonauts", other: "Other",
+        radiator: "Radiators", refinery: "Refineries", constructor: "Legacy Constructors",
+        miner: "Miners", printer: "Printers",
+        prospector: "Prospectors", robonaut: "Prospectors", other: "Other",
       };
-      const catOrder = ["thruster", "reactor", "generator", "radiator", "refinery", "constructor", "robonaut", "other"];
+      const catOrder = ["thruster", "reactor", "generator", "radiator", "refinery", "miner", "printer", "constructor", "prospector", "robonaut", "other"];
       const sortedCats = catOrder.filter(c => groups[c]);
       Object.keys(groups).forEach(c => { if (!sortedCats.includes(c)) sortedCats.push(c); });
 
@@ -1142,47 +1195,71 @@
       </div>`;
     }
 
+    // ── Thermal Balance block ──
+    let thermalHtml = '<div class="pwrPanelBlock">';
+    thermalHtml += '<div class="pwrPanelTitle">Thermal Balance</div>';
+
     // Thermal section
     const thMax = Math.max(pb.thermal_mw_supply, pb.thermal_mw_consumed, 1);
-    let html = '<div class="pwrSection">';
-    html += '<div class="pwrSectionTitle">☢ Thermal</div>';
-    html += bar("Reactor Output", pb.thermal_mw_supply, thMax, "MWth", "pwrFillThermal");
-    html += bar("Generator Demand", pb.thermal_mw_consumed, thMax, "MWth", "pwrFillDemand");
+    thermalHtml += '<div class="pwrSection">';
+    thermalHtml += '<div class="pwrSectionTitle">☢ Thermal</div>';
+    thermalHtml += bar("Reactor Output", pb.thermal_mw_supply, thMax, "MWth", "pwrFillThermal");
+    thermalHtml += bar("Generator Demand", pb.thermal_mw_consumed, thMax, "MWth", "pwrFillDemand");
     if (pb.thermal_mw_surplus > 0) {
-      html += `<div class="pwrNote ok">+${pb.thermal_mw_surplus.toFixed(1)} MWth surplus (absorbed by surface)</div>`;
+      thermalHtml += `<div class="pwrNote ok">+${pb.thermal_mw_surplus.toFixed(1)} MWth surplus (absorbed by surface)</div>`;
     }
     if (pb.gen_throttle < 1) {
-      html += `<div class="pwrNote warn">Generators throttled to ${(pb.gen_throttle * 100).toFixed(0)}% — insufficient thermal</div>`;
+      thermalHtml += `<div class="pwrNote warn">Generators throttled to ${(pb.gen_throttle * 100).toFixed(0)}% — insufficient thermal</div>`;
     }
-    html += '</div>';
-
-    // Electric section
-    const elMax = Math.max(pb.electric_mw_supply, pb.electric_mw_demand, 1);
-    html += '<div class="pwrSection">';
-    html += '<div class="pwrSectionTitle">⚡ Electric</div>';
-    html += bar("Generator Output", pb.electric_mw_supply, elMax, "MWe", "pwrFillElectric");
-    html += bar("Equipment Demand", pb.electric_mw_demand, elMax, "MWe", "pwrFillDemand");
-    if (pb.electric_mw_surplus >= 0) {
-      html += `<div class="pwrNote ok">+${pb.electric_mw_surplus.toFixed(1)} MWe surplus</div>`;
-    } else {
-      html += `<div class="pwrNote crit">⚠ ${pb.electric_mw_surplus.toFixed(1)} MWe — POWER DEFICIT</div>`;
-    }
-    html += '</div>';
+    thermalHtml += '</div>';
 
     // Waste heat section
     const whMax = Math.max(pb.waste_heat_mw, pb.heat_rejection_mw, 1);
-    html += '<div class="pwrSection">';
-    html += '<div class="pwrSectionTitle">🌡 Waste Heat</div>';
-    html += bar("Generated", pb.waste_heat_mw, whMax, "MWth", "pwrFillWaste");
-    html += bar("Radiator Capacity", pb.heat_rejection_mw, whMax, "MWth", "pwrFillRadiator");
+    thermalHtml += '<div class="pwrSection">';
+    thermalHtml += '<div class="pwrSectionTitle">🌡 Waste Heat</div>';
+    thermalHtml += bar("Generated", pb.waste_heat_mw, whMax, "MWth", "pwrFillWaste");
+    thermalHtml += bar("Radiator Capacity", pb.heat_rejection_mw, whMax, "MWth", "pwrFillRadiator");
     if (pb.waste_heat_surplus_mw > 0) {
-      html += `<div class="pwrNote ok">${pb.waste_heat_surplus_mw.toFixed(1)} MWth excess — absorbed by surface</div>`;
+      thermalHtml += `<div class="pwrNote ok">${pb.waste_heat_surplus_mw.toFixed(1)} MWth excess — absorbed by surface</div>`;
     } else {
-      html += `<div class="pwrNote ok">Heat balanced</div>`;
+      thermalHtml += `<div class="pwrNote ok">Heat balanced</div>`;
     }
-    html += '</div>';
+    thermalHtml += '</div>';
+    thermalHtml += '</div>';
 
-    el.innerHTML = html;
+    // ── Power Balance block ──
+    let powerHtml = '<div class="pwrPanelBlock">';
+    powerHtml += '<div class="pwrPanelTitle">Power Balance</div>';
+
+    // Electric section
+    const elMax = Math.max(pb.electric_mw_supply, pb.electric_mw_demand, 1);
+    powerHtml += '<div class="pwrSection">';
+    powerHtml += '<div class="pwrSectionTitle">⚡ Electric</div>';
+    powerHtml += bar("Generator Output", pb.electric_mw_supply, elMax, "MWe", "pwrFillElectric");
+    powerHtml += bar("Equipment Demand", pb.electric_mw_demand, elMax, "MWe", "pwrFillDemand");
+
+    // Per-consumer breakdown
+    if (pb.consumers && pb.consumers.length > 0) {
+      const activeConsumers = pb.consumers.filter(c => c.active && c.electric_mw > 0);
+      if (activeConsumers.length > 0) {
+        powerHtml += '<div class="pwrConsumerList">';
+        for (const c of activeConsumers) {
+          powerHtml += `<div class="pwrConsumerRow"><span class="pwrConsumerName">${c.name}</span><span class="pwrConsumerVal">${Number(c.electric_mw).toFixed(1)} MWe</span></div>`;
+        }
+        powerHtml += '</div>';
+      }
+    }
+
+    if (pb.electric_mw_surplus >= 0) {
+      powerHtml += `<div class="pwrNote ok">+${pb.electric_mw_surplus.toFixed(1)} MWe surplus</div>`;
+    } else {
+      powerHtml += `<div class="pwrNote crit">⚠ ${pb.electric_mw_surplus.toFixed(1)} MWe — POWER DEFICIT</div>`;
+      powerHtml += `<div class="pwrNote crit">Mining, refining, and construction are <b>halted</b> until power is restored.</div>`;
+    }
+    powerHtml += '</div>';
+    powerHtml += '</div>';
+
+    el.innerHTML = thermalHtml + powerHtml;
   }
 
   /* ── Production chain flow ───────────────────────────────── */
@@ -1300,6 +1377,8 @@
       case "finished_material": return "◇";
       case "resource": return "●";
       case "constructor": return "⚙";
+      case "miner": return "⛏";
+      case "printer": return "🖨";
       case "refinery": return "⚗";
       default: return "■";
     }
@@ -1371,17 +1450,20 @@
         // Use Object.create(null) to avoid prototype keys like 'constructor'
         const aliases = Object.create(null);
         Object.assign(aliases, {
+          prospectors: "prospector", prospector: "prospector",
           robonauts: "robonaut", robots: "robonaut", robot: "robonaut",
           constructors: "constructor", builders: "constructor", builder: "constructor",
+          miners: "miner", miner: "miner",
+          printers: "printer", printer: "printer",
           refineries: "refinery", reactors: "reactor", generators: "generator", radiators: "radiator",
         });
         return aliases[value] || value;
       };
-      const deployableCategories = new Set(["refinery", "constructor", "robonaut", "reactor", "generator", "radiator"]);
-      const catOrder = ["reactor", "generator", "radiator", "refinery", "constructor", "robonaut"];
+      const deployableCategories = new Set(["refinery", "miner", "printer", "constructor", "prospector", "robonaut", "reactor", "generator", "radiator"]);
+      const catOrder = ["reactor", "generator", "radiator", "refinery", "miner", "printer", "constructor", "prospector", "robonaut"];
       const catLabels = Object.create(null);
       Object.assign(catLabels, { reactor: "Reactors", generator: "Generators", radiator: "Radiators",
-        refinery: "Refineries", constructor: "Constructors", robonaut: "Robonauts" });
+        refinery: "Refineries", miner: "Miners", printer: "Printers", constructor: "Legacy Constructors", prospector: "Prospectors", robonaut: "Prospectors" });
 
       // Fetch cargo context and industry data in parallel
       const [context, indData] = await Promise.all([
@@ -1439,8 +1521,13 @@
             heatRejectionMw: Number(item.heat_rejection_mw || 0),
             miningRate: Number(item.mining_rate_kg_per_hr || 0),
             constructionRate: Number(item.construction_rate_kg_per_hr || 0),
+            prospectRangeKm: Number(item.prospect_range_km || 0),
+            scanRateKm2PerHr: Number(item.scan_rate_km2_per_hr || 0),
             conversionEff: Number(item.conversion_efficiency || 0),
             excavationType: String(item.excavation_type || ""),
+            minerType: String(item.miner_type || ""),
+            printerType: String(item.printer_type || ""),
+            fabricationType: String(item.fabrication_type || ""),
             specialization: String(item.specialization || ""),
             maxRecipeTier: Number(item.max_recipe_tier || 0),
             throughputMult: Number(item.throughput_mult || 0),
@@ -1485,13 +1572,25 @@
           if (item.specialization) chips.push(item.specialization.replace(/_/g, " "));
           if (item.maxRecipeTier) chips.push(`Tier ${item.maxRecipeTier}`);
           if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+        } else if (cat === "miner") {
+          if (item.miningRate) chips.push(`<b>${item.miningRate}</b> kg/hr mine`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+          if (item.minerType) chips.push(item.minerType.replace(/_/g, " "));
+          if (item.excavationType) chips.push(item.excavationType.replace(/_/g, " "));
+          if (item.minGravity) chips.push(`≥${item.minGravity} m/s²`);
+        } else if (cat === "printer") {
+          if (item.constructionRate) chips.push(`<b>${item.constructionRate}</b> kg/hr build`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+          if (item.printerType) chips.push(item.printerType.replace(/_/g, " "));
+          if (item.fabricationType) chips.push(item.fabricationType.replace(/_/g, " "));
         } else if (cat === "constructor") {
           if (item.miningRate) chips.push(`<b>${item.miningRate}</b> kg/hr mine`);
           if (item.constructionRate) chips.push(`<b>${item.constructionRate}</b> kg/hr build`);
           if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
           if (item.minGravity) chips.push(`≥${item.minGravity} m/s²`);
-        } else if (cat === "robonaut") {
-          if (item.miningRate) chips.push(`<b>${item.miningRate}</b> kg/hr ISRU`);
+        } else if (cat === "prospector" || cat === "robonaut") {
+          if (item.prospectRangeKm) chips.push(`Range <b>${item.prospectRangeKm}</b> km`);
+          if (item.scanRateKm2PerHr) chips.push(`<b>${item.scanRateKm2PerHr}</b> km²/hr scan`);
           if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
         }
         if (item.massKg > 0) chips.push(`${(item.massKg / 1000).toFixed(1)}t`);
@@ -1966,6 +2065,9 @@
       mass_kg: item.mass_kg,
       volume_m3: item.volume_m3,
       subtitle: item.subtitle || item.category_id,
+      water_extraction_kg_per_hr: item.water_extraction_kg_per_hr,
+      min_water_ice_fraction: item.min_water_ice_fraction,
+      max_water_ice_fraction: item.max_water_ice_fraction,
       tooltipLines: item.tooltip_lines,
     });
 

@@ -238,7 +238,12 @@
 
       if (ml) {
         var locText = ml.location_id || "Unknown";
-        if (ml.ship_name) locText = ml.ship_name + " @ " + ml.location_id;
+        if (ml.ship_name) {
+          locText = "loaded on " + ml.ship_name + (ml.location_id ? " @ " + ml.location_id : "");
+        } else if (ml.found_in && String(ml.found_in).indexOf("ship:") === 0) {
+          var shipId = String(ml.found_in).slice(5);
+          locText = "loaded on " + shipId + (ml.location_id ? " @ " + ml.location_id : "");
+        }
         else if (ml.found_in === "location_inventory") locText = ml.location_id + " (station)";
         renderMissionModuleCell(activeModule, locText, powerText);
       } else {

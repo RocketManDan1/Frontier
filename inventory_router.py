@@ -13,7 +13,7 @@ Extracted from main.py — handles:
 
 import json
 import sqlite3
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -107,9 +107,7 @@ def api_ship_inventory(ship_id: str, request: Request, conn: sqlite3.Connection 
         "location_id": state["location_id"],
         "is_docked": bool(state["is_docked"]),
         "items": _main()._inventory_items_for_ship(state),
-        "container_groups": _main()._inventory_container_groups_for_ship(state),
-        "capacity_summary": state["capacity_summary"],
-        "containers": state["containers"],
+        "cargo_summary": state.get("cargo_summary", {}),
     }
     conn.commit()
     return payload
@@ -155,7 +153,7 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
                 "id": location_id,
                 "name": f"{location_name} Site Inventory",
                 "location_id": location_id,
-                "capacity_summary": None,
+                "cargo_summary": None,
                 "items": _main()._inventory_items_for_location(location_payload),
             }
         )
@@ -190,9 +188,8 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
                     "id": str(ship_row["id"]),
                     "name": str(ship_row["name"]),
                     "location_id": location_id,
-                    "capacity_summary": ship_state.get("capacity_summary"),
+                    "cargo_summary": ship_state.get("cargo_summary", {}),
                     "items": _main()._inventory_items_for_ship(ship_state),
-                    "container_groups": _main()._inventory_container_groups_for_ship(ship_state),
                 }
             )
     elif inventory_kind == "ship":
@@ -203,9 +200,8 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
                 "id": str(ship_state["row"]["id"]),
                 "name": str(ship_state["row"]["name"]),
                 "location_id": "",
-                "capacity_summary": ship_state.get("capacity_summary"),
+                "cargo_summary": ship_state.get("cargo_summary", {}),
                 "items": _main()._inventory_items_for_ship(ship_state),
-                "container_groups": _main()._inventory_container_groups_for_ship(ship_state),
             }
         )
 
@@ -299,10 +295,10 @@ def api_stack_context_ship(ship_id: str, request: Request, conn: sqlite3.Connect
 
 
 class InventoryTransferReq(BaseModel):
-    source_kind: Literal["ship_container", "ship_resource", "location_resource"]
+    source_kind: Literal["ship_resource", "location_resource"]
     source_id: str
     source_key: str
-    target_kind: Literal["ship", "location", "ship_container"]
+    target_kind: Literal["ship", "location"]
     target_id: str
     target_key: Optional[str] = None
     amount: Optional[float] = None
@@ -326,119 +322,73 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     source_key = str(req.source_key or "").strip()
     target_kind = str(req.target_kind or "").strip().lower()
     target_id = str(req.target_id or "").strip()
-    target_key = str(req.target_key or "").strip()
 
-    if source_kind not in {"ship_container", "ship_resource", "location_resource"}:
-        raise HTTPException(status_code=400, detail="source_kind must be ship_container, ship_resource, or location_resource")
-    if target_kind not in {"ship", "location", "ship_container"}:
-        raise HTTPException(status_code=400, detail="target_kind must be ship, location, or ship_container")
+    if source_kind not in {"ship_resource", "location_resource"}:
+        raise HTTPException(status_code=400, detail="source_kind must be ship_resource or location_resource")
+    if target_kind not in {"ship", "location"}:
+        raise HTTPException(status_code=400, detail="target_kind must be ship or location")
     if not source_id or not source_key:
         raise HTTPException(status_code=400, detail="source_id and source_key are required")
     if not target_id:
         raise HTTPException(status_code=400, detail="target_id is required")
-    if target_kind == "ship_container" and not target_key:
-        raise HTTPException(status_code=400, detail="target_key is required for target_kind=ship_container")
 
     user = require_login(conn, request)
     corp_id = user.get("corp_id") if hasattr(user, "get") else None
 
     # Verify ownership of referenced ships
-    if source_kind in {"ship_container", "ship_resource"}:
+    if source_kind == "ship_resource":
         _check_ship_ownership(conn, user, source_id)
-    if target_kind in {"ship", "ship_container"}:
+    if target_kind == "ship":
         _check_ship_ownership(conn, user, target_id)
 
-    _main().settle_arrivals(conn, game_now_s())
+    m = _main()
+    m.settle_arrivals(conn, game_now_s())
 
-    resources = _main().load_resource_catalog()
-
+    # ── Resolve target location ──
     target_location_id = ""
     target_ship_state: Optional[Dict[str, Any]] = None
-    target_container_idx: Optional[int] = None
     if target_kind == "location":
-        loc = _main()._get_location_row(conn, target_id)
+        loc = m._get_location_row(conn, target_id)
         target_location_id = str(loc["id"])
     else:
-        target_ship_state = _main()._load_ship_inventory_state(conn, target_id)
+        target_ship_state = m._load_ship_inventory_state(conn, target_id)
         if not target_ship_state["is_docked"]:
             raise HTTPException(status_code=400, detail="Target ship must be docked")
         target_location_id = str(target_ship_state["location_id"])
-        if target_kind == "ship_container":
-            try:
-                target_container_idx = int(target_key)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="target_key must be a ship container index") from exc
 
+    # ── Resolve source and amount ──
     source_location_id = ""
     move_resource_id = ""
     move_mass_kg = max(0.0, float(req.amount or 0.0))
     source_ship_state: Optional[Dict[str, Any]] = None
     source_resource_row: Optional[sqlite3.Row] = None
-    source_container_idx: Optional[int] = None
 
-    if source_kind in {"ship_container", "ship_resource"}:
-        source_ship_state = _main()._load_ship_inventory_state(conn, source_id)
+    if source_kind == "ship_resource":
+        source_ship_state = m._load_ship_inventory_state(conn, source_id)
         if not source_ship_state["is_docked"]:
             raise HTTPException(status_code=400, detail="Source ship must be docked")
         source_location_id = str(source_ship_state["location_id"])
 
-        if source_kind == "ship_container":
-            try:
-                source_container_idx = int(source_key)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="source_key must be a ship container index") from exc
-
-            src_container = next(
-                (c for c in source_ship_state["containers"] if int(c.get("container_index") or -1) == source_container_idx),
-                None,
-            )
-            if not src_container:
-                raise HTTPException(status_code=404, detail="Source container not found")
-
-            # Multi-resource: find specific resource in manifest
-            req_resource_id = str(req.resource_id or "").strip()
-            src_manifest = list(src_container.get("cargo_manifest") or [])
-            if req_resource_id and src_manifest:
-                src_entry = next((e for e in src_manifest if str(e.get("resource_id") or "") == req_resource_id), None)
-                if not src_entry:
-                    raise HTTPException(status_code=400, detail="Source container does not hold that resource")
-                move_resource_id = req_resource_id
-                available_mass = max(0.0, float(src_entry.get("mass_kg") or 0.0))
-            elif src_manifest:
-                # No specific resource requested — use first manifest entry
-                src_entry = src_manifest[0]
-                move_resource_id = str(src_entry.get("resource_id") or "").strip()
-                available_mass = max(0.0, float(src_entry.get("mass_kg") or 0.0))
-            else:
-                # Legacy fallback
-                move_resource_id = str(src_container.get("resource_id") or "").strip()
-                available_mass = max(0.0, float(src_container.get("cargo_mass_kg") or 0.0))
-
-            if not move_resource_id or available_mass <= 1e-9:
-                raise HTTPException(status_code=400, detail="Source container has no transferable cargo")
-            if move_mass_kg <= 1e-9:
-                move_mass_kg = available_mass
-            move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
-        else:
-            move_resource_id = source_key
-            src_resource = next(
-                (
-                    item
-                    for item in (source_ship_state.get("resources") or [])
-                    if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id
-                ),
-                None,
-            )
-            available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
-            if not move_resource_id or available_mass <= 1e-9:
-                raise HTTPException(status_code=400, detail="Source ship has no transferable cargo for that resource")
-            if move_mass_kg <= 1e-9:
-                move_mass_kg = available_mass
-            move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+        move_resource_id = source_key
+        src_resource = next(
+            (
+                item
+                for item in (source_ship_state.get("resources") or [])
+                if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id
+            ),
+            None,
+        )
+        available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
+        if not move_resource_id or available_mass <= 1e-9:
+            raise HTTPException(status_code=400, detail="Source ship has no transferable cargo for that resource")
+        if move_mass_kg <= 1e-9:
+            move_mass_kg = available_mass
+        move_mass_kg = max(0.0, min(move_mass_kg, available_mass))
     else:
+        # location_resource
         source_location_id = source_id
-        _main()._get_location_row(conn, source_location_id)
-        source_resource_row = _main()._resource_stack_row(
+        m._get_location_row(conn, source_location_id)
+        source_resource_row = m._resource_stack_row(
             conn,
             source_location_id,
             source_key,
@@ -459,322 +409,66 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
     if source_location_id != target_location_id:
         raise HTTPException(status_code=400, detail="Inventories must be at the same location")
 
-    if source_kind in {"ship_container", "ship_resource"} and target_kind == "ship" and source_id == target_id:
+    if source_kind == "ship_resource" and target_kind == "ship" and source_id == target_id:
         raise HTTPException(status_code=400, detail="Cannot transfer cargo to the same ship")
-    if source_kind == "ship_resource" and target_kind == "ship_container" and source_id == target_id:
-        raise HTTPException(status_code=400, detail="Use a specific source container for intra-ship container transfer")
-
-    if source_kind == "ship_container" and target_kind == "ship_container" and source_id == target_id:
-        if not source_ship_state:
-            raise HTTPException(status_code=500, detail="Source ship state unavailable")
-        if source_container_idx is None or target_container_idx is None:
-            raise HTTPException(status_code=400, detail="Source and target container indices are required")
-        if source_container_idx == target_container_idx:
-            raise HTTPException(status_code=400, detail="Cannot transfer cargo to the same container")
-
-        ship_parts = list(source_ship_state["parts"])
-        ship_containers = list(source_ship_state["containers"])
-
-        src_container = next(
-            (c for c in ship_containers if int(c.get("container_index") if c.get("container_index") is not None else -1) == source_container_idx),
-            None,
-        )
-        dst_container = next(
-            (c for c in ship_containers if int(c.get("container_index") if c.get("container_index") is not None else -1) == target_container_idx),
-            None,
-        )
-        if not src_container:
-            raise HTTPException(status_code=404, detail="Source container not found")
-        if not dst_container:
-            raise HTTPException(status_code=404, detail="Target container not found")
-
-        # Find the specific resource in the source container's manifest
-        src_manifest = list(src_container.get("cargo_manifest") or [])
-        src_entry = next((e for e in src_manifest if str(e.get("resource_id") or "") == move_resource_id), None)
-        src_res_mass = max(0.0, float(src_entry.get("mass_kg") or 0.0)) if src_entry else 0.0
-        if src_res_mass <= 1e-9:
-            raise HTTPException(status_code=400, detail="Source container has no transferable cargo of this resource")
-
-        resource_meta = resources.get(move_resource_id) or {}
-        resource_phase = _main().classify_resource_phase(
-            move_resource_id,
-            str(resource_meta.get("name") or move_resource_id),
-            float(resource_meta.get("mass_per_m3_kg") or 0.0),
-        )
-
-        dst_cap = max(0.0, float(dst_container.get("capacity_m3") or 0.0))
-        dst_used = max(0.0, float(dst_container.get("used_m3") or 0.0))
-        dst_free = max(0.0, dst_cap - dst_used)
-        if dst_free <= 1e-9:
-            raise HTTPException(status_code=400, detail="Target container has no free capacity")
-
-        dst_phase = str(dst_container.get("tank_phase") or dst_container.get("phase") or "solid").strip().lower()
-        if dst_phase not in {"solid", "liquid", "gas"}:
-            dst_phase = "solid"
-        if dst_phase != resource_phase:
-            raise HTTPException(status_code=400, detail="Target container phase is not compatible")
-
-        resolved_density = max(
-            0.0,
-            float(
-                (src_entry or {}).get("density_kg_m3")
-                or (resource_meta.get("mass_per_m3_kg") or 0.0)
-            ),
-        )
-        if resolved_density <= 0.0:
-            raise HTTPException(status_code=400, detail="Resource density is unavailable for transfer")
-
-        max_target_mass = dst_free * resolved_density
-        accepted_mass_kg = min(move_mass_kg, src_res_mass, max_target_mass)
-        if accepted_mass_kg <= 1e-9:
-            raise HTTPException(status_code=400, detail="Target container rejected transfer")
-
-        # Source: subtract from this resource's entry
-        src_res_vol = max(0.0, float(src_entry.get("volume_m3") or 0.0)) if src_entry else 0.0
-        src_next_res_mass = max(0.0, src_res_mass - accepted_mass_kg)
-        src_next_res_vol = max(0.0, src_res_vol - (accepted_mass_kg / resolved_density))
-
-        # Destination: find or create resource entry mass
-        dst_manifest = list(dst_container.get("cargo_manifest") or [])
-        dst_entry = next((e for e in dst_manifest if str(e.get("resource_id") or "") == move_resource_id), None)
-        dst_res_mass = max(0.0, float(dst_entry.get("mass_kg") or 0.0)) if dst_entry else 0.0
-        dst_res_vol = max(0.0, float(dst_entry.get("volume_m3") or 0.0)) if dst_entry else 0.0
-        dst_next_res_mass = dst_res_mass + accepted_mass_kg
-        dst_next_res_vol = dst_res_vol + (accepted_mass_kg / resolved_density)
-
-        if source_container_idx < 0 or source_container_idx >= len(ship_parts):
-            raise HTTPException(status_code=400, detail="Source container index is invalid")
-        if target_container_idx < 0 or target_container_idx >= len(ship_parts):
-            raise HTTPException(status_code=400, detail="Target container index is invalid")
-
-        ship_parts[source_container_idx] = _main()._apply_ship_container_fill(
-            ship_parts[source_container_idx],
-            resource_id=move_resource_id,
-            cargo_mass_kg=src_next_res_mass,
-            used_m3=src_next_res_vol,
-            density_kg_m3=resolved_density,
-        )
-        ship_parts[target_container_idx] = _main()._apply_ship_container_fill(
-            ship_parts[target_container_idx],
-            resource_id=move_resource_id,
-            cargo_mass_kg=dst_next_res_mass,
-            used_m3=dst_next_res_vol,
-            density_kg_m3=resolved_density,
-        )
-
-        source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
-        _main()._persist_ship_inventory_state(
-            conn,
-            ship_id=str(source_ship_state["row"]["id"]),
-            parts=ship_parts,
-            fuel_kg=source_fuel_kg,
-        )
-
-        conn.commit()
-        return {
-            "ok": True,
-            "source_kind": source_kind,
-            "source_id": source_id,
-            "source_key": source_key,
-            "target_kind": target_kind,
-            "target_id": target_id,
-            "target_key": target_key,
-            "resource_id": move_resource_id,
-            "moved_mass_kg": accepted_mass_kg,
-            "destroyed_mass_kg": 0.0,
-            "destroyed_in_space": False,
-            "location_id": source_location_id,
-        }
 
     accepted_mass_kg = move_mass_kg
-    destroyed_mass_kg = 0.0
-    density = max(0.0, float((resources.get(move_resource_id) or {}).get("mass_per_m3_kg") or 0.0))
+    try:
+        conn.execute("BEGIN IMMEDIATE")
 
-    if target_kind == "location":
-        # Add the resource to the location's inventory (location-scoped cargo)
-        _main().add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg, corp_id=corp_id or "")
-        destroyed_mass_kg = 0.0
-    else:
-        if not target_ship_state:
-            raise HTTPException(status_code=500, detail="Target ship state unavailable")
-
-        target_parts = list(target_ship_state["parts"])
-        target_containers = list(target_ship_state["containers"])
-
-        resource_meta = resources.get(move_resource_id) or {}
-        resource_phase = _main().classify_resource_phase(
-            move_resource_id,
-            str(resource_meta.get("name") or move_resource_id),
-            float(resource_meta.get("mass_per_m3_kg") or density or 0.0),
-        )
-
-        compatible: List[Tuple[Dict[str, Any], float, float]] = []
-        total_free_mass_kg = 0.0
-        for container in target_containers:
-            raw_ci = container.get("container_index")
-            ci = int(raw_ci) if raw_ci is not None else -1
-            if target_container_idx is not None and ci != target_container_idx:
-                continue
-            cap = max(0.0, float(container.get("capacity_m3") or 0.0))
-            used = max(0.0, float(container.get("used_m3") or 0.0))
-            free = max(0.0, cap - used)
-            tank_phase = str(container.get("tank_phase") or container.get("phase") or "solid").strip().lower()
-            if free <= 1e-9:
-                continue
-            if tank_phase not in {"solid", "liquid", "gas"}:
-                tank_phase = "solid"
-            if tank_phase != resource_phase:
-                continue
-            resolved_density = max(0.0, float(resource_meta.get("mass_per_m3_kg") or density or 0.0))
-            if resolved_density <= 0.0:
-                continue
-            free_mass_kg = free * resolved_density
-            if free_mass_kg <= 1e-9:
-                continue
-            compatible.append((container, resolved_density, free_mass_kg))
-            total_free_mass_kg += free_mass_kg
-
-        if not compatible:
-            raise HTTPException(status_code=400, detail="No compatible destination tank with free capacity")
-
-        accepted_mass_kg = min(accepted_mass_kg, total_free_mass_kg)
-        if accepted_mass_kg <= 1e-9:
-            raise HTTPException(status_code=400, detail="Destination tank has no usable free capacity")
-
-        remaining_to_place = accepted_mass_kg
-        for compatible_container, resolved_density, free_mass_kg in compatible:
-            if remaining_to_place <= 1e-9:
-                break
-
-            to_place = min(remaining_to_place, free_mass_kg)
-            raw_ci = compatible_container.get("container_index")
-            idx = int(raw_ci) if raw_ci is not None else -1
-            if idx < 0 or idx >= len(target_parts):
-                raise HTTPException(status_code=400, detail="Destination container index is invalid")
-
-            # Find existing resource entry mass in this container's manifest
-            manifest = list(compatible_container.get("cargo_manifest") or [])
-            existing = next((e for e in manifest if str(e.get("resource_id") or "") == move_resource_id), None)
-            res_mass = max(0.0, float(existing.get("mass_kg") or 0.0)) if existing else 0.0
-            res_vol = max(0.0, float(existing.get("volume_m3") or 0.0)) if existing else 0.0
-            next_res_mass = res_mass + to_place
-            next_res_vol = res_vol + (to_place / resolved_density)
-            target_parts[idx] = _main()._apply_ship_container_fill(
-                target_parts[idx],
-                resource_id=move_resource_id,
-                cargo_mass_kg=next_res_mass,
-                used_m3=next_res_vol,
-                density_kg_m3=resolved_density,
-            )
-            remaining_to_place -= to_place
-
-        accepted_mass_kg = max(0.0, accepted_mass_kg - remaining_to_place)
-        if accepted_mass_kg <= 1e-9:
-            raise HTTPException(status_code=400, detail="Destination tank rejected transfer")
-
-        target_fuel_kg = max(0.0, float(target_ship_state["fuel_kg"] or 0.0))
-        if move_resource_id.lower() == "water":
-            target_fuel_kg += accepted_mass_kg
-
-        _main()._persist_ship_inventory_state(
-            conn,
-            ship_id=str(target_ship_state["row"]["id"]),
-            parts=target_parts,
-            fuel_kg=target_fuel_kg,
-        )
-
-    if source_kind in {"ship_container", "ship_resource"}:
-        if not source_ship_state:
-            raise HTTPException(status_code=500, detail="Source ship state unavailable")
-        src_parts = list(source_ship_state["parts"])
-        src_containers = list(source_ship_state["containers"])
-        consumed_mass_kg = 0.0
-
-        if source_kind == "ship_container":
-            src_idx = int(source_key)
-            src_container = next((c for c in src_containers if int(c.get("container_index") if c.get("container_index") is not None else -1) == src_idx), None)
-            if not src_container:
-                raise HTTPException(status_code=404, detail="Source container not found")
-
-            # Find specific resource in manifest
-            src_manifest = list(src_container.get("cargo_manifest") or [])
-            src_entry = next((e for e in src_manifest if str(e.get("resource_id") or "") == move_resource_id), None)
-            src_res_mass = max(0.0, float(src_entry.get("mass_kg") or 0.0)) if src_entry else 0.0
-            src_res_vol = max(0.0, float(src_entry.get("volume_m3") or 0.0)) if src_entry else 0.0
-            src_density = max(1e-9, float((src_entry or {}).get("density_kg_m3") or density or 0.0))
-
-            consumed_mass_kg = min(accepted_mass_kg, src_res_mass)
-            next_res_mass = max(0.0, src_res_mass - consumed_mass_kg)
-            next_res_vol = max(0.0, src_res_vol - (consumed_mass_kg / src_density))
-
-            if src_idx < 0 or src_idx >= len(src_parts):
-                raise HTTPException(status_code=400, detail="Source container index is invalid")
-
-            src_parts[src_idx] = _main()._apply_ship_container_fill(
-                src_parts[src_idx],
-                resource_id=move_resource_id,
-                cargo_mass_kg=next_res_mass,
-                used_m3=next_res_vol,
-                density_kg_m3=src_density,
+        # ── Execute source withdrawal ──
+        if source_kind == "ship_resource":
+            if not source_ship_state:
+                raise HTTPException(status_code=500, detail="Source ship state unavailable")
+            try:
+                taken = m.remove_cargo_from_ship(conn, source_id, move_resource_id, accepted_mass_kg)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            accepted_mass_kg = taken
+            if accepted_mass_kg <= 1e-9:
+                raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
+            # Update fuel tracking if water
+            source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
+            if move_resource_id.lower() == "water":
+                source_fuel_kg = max(0.0, source_fuel_kg - accepted_mass_kg)
+            m._persist_ship_inventory_state(
+                conn,
+                ship_id=str(source_ship_state["row"]["id"]),
+                parts=list(source_ship_state["parts"]),
+                fuel_kg=source_fuel_kg,
             )
         else:
-            # ship_resource: drain from all containers that hold this resource
-            remaining_to_take = accepted_mass_kg
-            for src_container in src_containers:
-                if remaining_to_take <= 1e-9:
-                    break
+            if not source_resource_row:
+                raise HTTPException(status_code=500, detail="Source resource stack unavailable")
+            m._consume_location_resource_mass(conn, source_resource_row, accepted_mass_kg)
 
-                # Search manifest for this resource
-                src_manifest = list(src_container.get("cargo_manifest") or [])
-                src_entry = next((e for e in src_manifest if str(e.get("resource_id") or "") == move_resource_id), None)
-                if not src_entry:
-                    continue
-                src_res_mass = max(0.0, float(src_entry.get("mass_kg") or 0.0))
-                if src_res_mass <= 1e-9:
-                    continue
+        # ── Execute target deposit ──
+        if target_kind == "location":
+            m.add_resource_to_location_inventory(conn, target_location_id, move_resource_id, accepted_mass_kg, corp_id=corp_id or "")
+        else:
+            if not target_ship_state:
+                raise HTTPException(status_code=500, detail="Target ship state unavailable")
+            try:
+                accepted = m.add_cargo_to_ship(conn, target_id, move_resource_id, accepted_mass_kg)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            accepted_mass_kg = accepted
+            # Update fuel tracking if water
+            target_fuel_kg = max(0.0, float(target_ship_state["fuel_kg"] or 0.0))
+            if move_resource_id.lower() == "water":
+                target_fuel_kg += accepted_mass_kg
+            m._persist_ship_inventory_state(
+                conn,
+                ship_id=str(target_ship_state["row"]["id"]),
+                parts=list(target_ship_state["parts"]),
+                fuel_kg=target_fuel_kg,
+            )
 
-                raw_ci = src_container.get("container_index")
-                src_idx = int(raw_ci) if raw_ci is not None else -1
-                if src_idx < 0 or src_idx >= len(src_parts):
-                    continue
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
-                src_density = max(1e-9, float(src_entry.get("density_kg_m3") or density or 0.0))
-                src_res_vol = max(0.0, float(src_entry.get("volume_m3") or 0.0))
-                take_mass = min(src_res_mass, remaining_to_take)
-                next_res_mass = max(0.0, src_res_mass - take_mass)
-                next_res_vol = max(0.0, src_res_vol - (take_mass / src_density))
-
-                src_parts[src_idx] = _main()._apply_ship_container_fill(
-                    src_parts[src_idx],
-                    resource_id=move_resource_id,
-                    cargo_mass_kg=next_res_mass,
-                    used_m3=next_res_vol,
-                    density_kg_m3=src_density,
-                )
-                remaining_to_take -= take_mass
-                consumed_mass_kg += take_mass
-
-            if consumed_mass_kg <= 1e-9:
-                raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
-
-        accepted_mass_kg = consumed_mass_kg
-
-        source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
-        if move_resource_id.lower() == "water":
-            source_fuel_kg = max(0.0, source_fuel_kg - accepted_mass_kg)
-
-        _main()._persist_ship_inventory_state(
-            conn,
-            ship_id=str(source_ship_state["row"]["id"]),
-            parts=src_parts,
-            fuel_kg=source_fuel_kg,
-        )
-    else:
-        if not source_resource_row:
-            raise HTTPException(status_code=500, detail="Source resource stack unavailable")
-        _main()._consume_location_resource_mass(conn, source_resource_row, accepted_mass_kg)
-
-    conn.commit()
     return {
         "ok": True,
         "source_kind": source_kind,
@@ -782,11 +476,8 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
         "source_key": source_key,
         "target_kind": target_kind,
         "target_id": target_id,
-        "target_key": target_key,
         "resource_id": move_resource_id,
         "moved_mass_kg": accepted_mass_kg,
-        "destroyed_mass_kg": destroyed_mass_kg,
-        "destroyed_in_space": destroyed_mass_kg > 1e-9,
         "location_id": source_location_id,
     }
 
@@ -972,8 +663,7 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
         "stats": None,
         "power_balance": None,
         "inventory_items": loc_inv_items,
-        "container_groups": [],
-        "capacity_summary": None,
+        "cargo_summary": None,
         "stack_items": loc_stack_items,
     })
 
@@ -1033,8 +723,7 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
             },
             "power_balance": power_balance,
             "inventory_items": m._inventory_items_for_ship(ship_state),
-            "container_groups": m._inventory_container_groups_for_ship(ship_state),
-            "capacity_summary": ship_state.get("capacity_summary"),
+            "cargo_summary": ship_state.get("cargo_summary", {}),
             "stack_items": m._stack_items_for_ship(ship_state),
         })
 
@@ -1121,8 +810,7 @@ def api_cargo_context(location_id: str, request: Request, facility_id: str = "",
         "stats": None,
         "power_balance": None,
         "inventory_items": loc_inv_items,
-        "container_groups": [],
-        "capacity_summary": None,
+        "cargo_summary": None,
         "stack_items": loc_stack_items,
     })
 
@@ -1175,8 +863,7 @@ def api_cargo_context(location_id: str, request: Request, facility_id: str = "",
                 "delta_v_remaining_m_s": dv,
             },
             "inventory_items": m._inventory_items_for_ship(ship_state),
-            "container_groups": m._inventory_container_groups_for_ship(ship_state),
-            "capacity_summary": ship_state.get("capacity_summary"),
+            "cargo_summary": ship_state.get("cargo_summary", {}),
             "stack_items": m._stack_items_for_ship(ship_state),
         })
 

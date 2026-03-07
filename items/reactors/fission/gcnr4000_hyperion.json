@@ -1,17 +1,21 @@
 {
   "id": "gcnr4000_hyperion",
   "name": "GCNR-4000 \"Hyperion\"",
-  "research_node": "gas_core_fission",
+  "research_node": "open_cycle_gas_core",
   "tech_level": 4.5,
   "branch": "gas_core",
   "mass_t": 7.5,
   "output": {
-    "thermal_mw": 10000
+    "thermal_mw": 10000,
+    "core_temp_k": 25000
   },
   "fuel": {
     "type": "high_grade_reactor_pellets",
     "geometry": "open_cycle_plasma_column"
   },
   "description": "An advanced open-cycle gas-core reactor derived from NASA and Los Alamos design studies for interplanetary missions. Fissile plasma is fed directly into the exhaust stream. Extraordinary thermal output, but fissile consumption per burn is significant.",
-  "ui_tags": ["gas_core", "exotic"]
+  "ui_tags": [
+    "gas_core",
+    "exotic"
+  ]
 }

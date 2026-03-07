@@ -16,8 +16,8 @@
     sites: { title: "Sites", url: "/sites", icon: "/static/img/dock/sites.svg" },
     research: { title: "Research", url: "/research", icon: "/static/img/dock/research.png" },
     profile: { title: "Organization", url: "/organization?embed=1", icon: "/static/img/dock/profile.png" },
-    contracts: { title: "Contracts", url: "/contracts?embed=1", icon: "/static/img/dock/contracts.svg" },
-    missions: { title: "Missions", url: "/missions?embed=1", icon: "/static/img/dock/contracts.svg" },
+    contracts: { title: "Contracts", url: "/contracts?embed=1", icon: "/static/img/dock/contractsicon.png" },
+    missions: { title: "Missions", url: "/missions?embed=1", icon: "/static/img/dock/missions.png" },
     admin: { title: "Admin", url: "/admin", icon: "" },
   };
 
@@ -233,12 +233,12 @@
     menu.style.top = `${top}px`;
   }
 
-  async function runShipInventoryAction(shipId, containerIndex, action) {
+  async function runShipInventoryAction(shipId, action) {
     const actionName = action === "deploy" ? "deploy" : "jettison";
     const resp = await fetch(`/api/ships/${encodeURIComponent(String(shipId || ""))}/inventory/${actionName}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ container_index: Number(containerIndex) || 0 }),
+      body: JSON.stringify({}),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(errorDetailText(data?.detail, "Inventory action failed"));
@@ -273,7 +273,7 @@
     const tooltipLines = [];
     if (item?.thrust_kn) tooltipLines.push(["Thrust", `${Number(item.thrust_kn).toFixed(0)} kN`]);
     if (item?.isp_s) tooltipLines.push(["ISP", `${Number(item.isp_s).toFixed(0)} s`]);
-    if (item?.capacity_m3) tooltipLines.push(["Capacity", fmtM3(item.capacity_m3)]);
+    if (item?.capacity_kg) tooltipLines.push(["Capacity", fmtKg(item.capacity_kg)]);
     if (item?.power_mw) tooltipLines.push(["Power", `${Number(item.power_mw).toFixed(1)} MW`]);
     if (item?.resource_id) tooltipLines.push(["Resource", String(item.resource_id)]);
 
@@ -335,151 +335,33 @@
       });
     }
 
-    if (String(item?.item_kind || "").toLowerCase() === "container") {
-      cell.addEventListener("contextmenu", (event) => {
-        event.preventDefault();
-        const transferSource = item?.transfer && typeof item.transfer === "object" ? item.transfer : null;
-        const shipId = String(transferSource?.source_id || "").trim();
-        const rawIdx = Number(item?.container_index ?? transferSource?.source_key);
-        const containerIndex = Number.isFinite(rawIdx) ? rawIdx : -1;
-        const cargoMass = Math.max(0, Number(item?.mass_kg) || 0);
-        const canAct = !!shipId && containerIndex >= 0;
-
-        showInventoryContextMenu(String(item?.label || "Container"), [
-          {
-            label: "Deploy container",
-            disabled: !canAct,
-            onClick: async () => {
-              const ok = window.confirm("Deploy this container with its cargo?");
-              if (!ok) return;
-              await runShipInventoryAction(shipId, containerIndex, "deploy");
-              await refreshAllHangarWindows();
-            },
-          },
-          {
-            label: cargoMass > 0 ? "Jettison cargo" : "Jettison cargo (empty)",
-            disabled: !canAct || cargoMass <= 0,
-            onClick: async () => {
-              await runShipInventoryAction(shipId, containerIndex, "jettison");
-              await refreshAllHangarWindows();
-            },
-          },
-        ], event.clientX, event.clientY);
-      });
-    }
-
     return cell;
-  }
-
-  function renderInventoryContainerGroups(selectedInventory, onDropToContainer = null) {
-    const groups = Array.isArray(selectedInventory?.container_groups) ? selectedInventory.container_groups : [];
-    const list = document.createElement("div");
-    list.className = "inventoryContainerGroupList";
-
-    if (!groups.length) {
-      const empty = document.createElement("div");
-      empty.className = "muted";
-      empty.textContent = "No cargo containers in this ship.";
-      list.appendChild(empty);
-      return list;
-    }
-
-    groups.forEach((group) => {
-      const phase = String(group?.phase || "solid").toLowerCase();
-      const section = document.createElement("section");
-      section.className = `inventoryContainerGroup inventoryDropZone containerPhase-${phase}`;
-
-      const head = document.createElement("div");
-      head.className = "inventoryContainerGroupHead";
-
-      const phaseBadge = document.createElement("span");
-      phaseBadge.className = `containerPhaseBadge containerPhaseBadge-${phase}`;
-      const phaseIcons = { solid: "◆", liquid: "💧", gas: "☁" };
-      phaseBadge.textContent = phaseIcons[phase] || "◆";
-
-      const title = document.createElement("div");
-      title.className = "inventoryContainerGroupTitle";
-      title.textContent = String(group?.name || "Container");
-
-      const used = Math.max(0, Number(group?.used_m3) || 0);
-      const cap = Math.max(0, Number(group?.capacity_m3) || 0);
-      const sub = document.createElement("div");
-      sub.className = "inventoryContainerGroupSub";
-      sub.textContent = `${phase[0].toUpperCase()}${phase.slice(1)} · ${fmtM3(used)} / ${fmtM3(cap)}`;
-
-      const headLeft = document.createElement("div");
-      headLeft.className = "containerGroupHeadLeft";
-      headLeft.append(phaseBadge, title);
-
-      head.append(headLeft, sub);
-
-      const itemsWrap = document.createElement("div");
-      itemsWrap.className = "inventoryContainerItems";
-      const items = Array.isArray(group?.items) ? group.items : [];
-      if (!items.length) {
-        const emptySlot = document.createElement("div");
-        emptySlot.className = `containerEmptySlot containerEmptySlot-${phase}`;
-        emptySlot.textContent = `Empty ${phase} container`;
-        itemsWrap.appendChild(emptySlot);
-      } else {
-        items.forEach((item) => {
-          itemsWrap.appendChild(renderInventoryItemCard(item));
-        });
-      }
-
-      section.append(head, itemsWrap);
-
-      if (typeof onDropToContainer === "function") {
-        const containerIndex = Number(group?.container_index);
-        if (Number.isFinite(containerIndex) && containerIndex >= 0) {
-          section.dataset.targetKind = "ship_container";
-          section.dataset.targetId = String(selectedInventory?.id || "");
-          section.dataset.targetKey = String(containerIndex);
-          setDropZoneBehavior(section, async (payload) => {
-            await onDropToContainer(payload, containerIndex);
-          });
-        }
-      }
-
-      list.appendChild(section);
-    });
-
-    return list;
   }
 
   function renderInventoryCapacitySummary(summary) {
     const payload = summary && typeof summary === "object" ? summary : null;
     if (!payload) return null;
 
-    const used = Math.max(0, Number(payload.used_m3) || 0);
-    const cap = Math.max(0, Number(payload.capacity_m3) || 0);
-    const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
-    const byPhase = payload.by_phase && typeof payload.by_phase === "object" ? payload.by_phase : {};
+    const used = Math.max(0, Number(payload.cargo_used_kg) || 0);
+    const surcharge = Math.max(0, Number(payload.cargo_surcharge_kg) || 0);
+
+    if (used <= 0) return null;
 
     const wrap = document.createElement("div");
     wrap.className = "inventoryCapSummary";
 
     const line = document.createElement("div");
     line.className = "inventoryCapSummaryLine";
-    line.textContent = `${fmtM3(used)} / ${fmtM3(cap)} used`;
+    line.textContent = `Cargo: ${fmtKg(used)}`;
 
-    const bar = document.createElement("div");
-    bar.className = "inventoryCapBar";
-    const fill = document.createElement("div");
-    fill.className = "inventoryCapBarFill";
-    fill.style.width = `${pct.toFixed(2)}%`;
-    bar.appendChild(fill);
-
-    const phases = document.createElement("div");
-    phases.className = "inventoryCapSummaryPhases";
-    phases.textContent = ["solid", "liquid", "gas"].map((phase) => {
-      const row = byPhase[phase] || {};
-      const pUsed = Math.max(0, Number(row.used_m3) || 0);
-      const pCap = Math.max(0, Number(row.capacity_m3) || 0);
-      return `${phase[0].toUpperCase()}${phase.slice(1)} ${fmtM3(pUsed)} / ${fmtM3(pCap)}`;
-    }).join(" · ");
-
-    wrap.append(line, bar, phases);
+    if (surcharge > 0) {
+      const surchargeEl = document.createElement("div");
+      surchargeEl.className = "inventoryCapSummaryPhases";
+      surchargeEl.textContent = `Surcharge: ${fmtKg(surcharge)}`;
+      wrap.append(line, surchargeEl);
+    } else {
+      wrap.append(line);
+    }
     return wrap;
   }
 
@@ -508,7 +390,6 @@
     if (!sourceKey) missing.push("source_key");
     if (!destKind) missing.push("target_kind");
     if (!destId) missing.push("target_id");
-    if (destKind === "ship_container" && !destKey) missing.push("target_key");
     if (missing.length) {
       throw new Error(`Transfer payload missing: ${missing.join(", ")}`);
     }
@@ -560,7 +441,7 @@
   function shouldPromptInventoryTransferAmount(payload) {
     const sourceKind = String(payload?.source_kind || "").trim().toLowerCase();
     if (!sourceKind) return false;
-    if (!new Set(["ship_container", "ship_resource", "location_resource"]).has(sourceKind)) return false;
+    if (!new Set(["ship_resource", "location_resource"]).has(sourceKind)) return false;
     const maxAmount = Math.max(0, Number(payload?.amount) || 0);
     return maxAmount > 1e-9;
   }
@@ -751,13 +632,11 @@
 
     const dryMass = Number(stats.dry_mass_kg || 0);
     const fuel = Number(stats.fuel_kg || 0);
-    const fuelCap = Number(stats.fuel_capacity_kg || 0);
     const wetMass = Number(stats.wet_mass_kg || 0);
     const isp = Number(stats.isp_s || 0);
     const thrust = Number(stats.thrust_kn || 0);
     const dv = Number(stats.delta_v_remaining_m_s || 0);
     const accelG = Number(stats.accel_g || 0);
-    const fPct = fuelPctVal(fuel, fuelCap);
     const dvCls = dv > 0 ? "pbPositive" : "pbNeutral";
 
     section.innerHTML = `
@@ -766,8 +645,7 @@
         <div class="pbSection">
           <div class="pbSectionHead">Mass Budget</div>
           <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Fuel level</span><span class="pbVal"><span class="pbBarWrap"><span class="pbBar" style="width:${fPct.toFixed(1)}%"></span></span> ${fPct.toFixed(0)}%</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)}</span></div>
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
         </div>
         <div class="pbSection">
@@ -819,7 +697,7 @@
     section.className = "hangarSection";
     section.innerHTML = `
       <div class="powerBalancePanel${isOverheating ? ' pbOverheating' : ''}">
-        <div class="pbTitle">Power &amp; Thermal Balance</div>
+        <div class="pbTitle">Thermal Balance</div>
         <div class="pbSection">
           <div class="pbSectionHead">Thermal Budget (MWth)</div>
           <div class="pbRow"><span class="pbLabel">Reactor output</span><span class="pbVal">${fmtMwTh(reactorMw)}</span></div>
@@ -827,10 +705,6 @@
           <div class="pbRow"><span class="pbLabel">Generator input</span><span class="pbVal">−${fmtMwTh(genInputMw)}</span></div>
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Surplus</b></span><span class="pbVal ${thermalCls}"><b>${thermalSurplus >= 0 ? "+" : ""}${thermalSurplus.toFixed(1)}<span class="pbUnit">MWth</span></b></span></div>
           ${thrusterMw > 0 ? `<div class="pbRow"><span class="pbLabel">Max throttle</span><span class="pbVal ${throttleCls}">${(maxThrottle * 100).toFixed(0)}%</span></div>` : ""}
-        </div>
-        <div class="pbSection">
-          <div class="pbSectionHead">Electric (MWe)</div>
-          <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
         </div>
         <div class="pbSection">
           <div class="pbSectionHead">Waste Heat (MWth)</div>
@@ -842,18 +716,23 @@
         </div>
         ${overheatBanner}
       </div>
+      <div class="powerBalancePanel" style="margin-top:8px">
+        <div class="pbTitle">Power Balance</div>
+        <div class="pbSection">
+          <div class="pbSectionHead">⚡ Electric (MWe)</div>
+          <div class="pbRow"><span class="pbLabel">Generator output${genThrottled ? ' <span class="pbNegative">(throttled)</span>' : ''}</span><span class="pbVal">${fmtMwE(electricMw)}${genThrottled ? ` <span class="muted">/ ${electricRated.toFixed(1)}</span>` : ''}</span></div>
+        </div>
+      </div>
     `;
     return section;
   }
 
-  function renderCargoSection(entity, onDropToContainer, onTransferClick) {
+  function renderCargoSection(entity, onTransferClick) {
     const isShip = entity?.entity_kind === "ship";
-    const containerGroups = Array.isArray(entity?.container_groups) ? entity.container_groups : [];
     const invItems = Array.isArray(entity?.inventory_items) ? entity.inventory_items : [];
-    const hasContainers = isShip && containerGroups.length > 0;
     const hasItems = invItems.length > 0;
 
-    if (!hasContainers && !hasItems) return null;
+    if (!hasItems && !entity?.cargo_summary?.cargo_used_kg) return null;
 
     const section = document.createElement("div");
     section.className = "hangarSection";
@@ -865,33 +744,11 @@
 
     // Capacity summary for ships
     if (isShip) {
-      const capEl = renderInventoryCapacitySummary(entity?.capacity_summary);
+      const capEl = renderInventoryCapacitySummary(entity?.cargo_summary);
       if (capEl) section.appendChild(capEl);
     }
 
-    if (hasContainers) {
-      const containerList = renderInventoryContainerGroups(
-        { ...entity, id: entity?.id },
-        onDropToContainer,
-      );
-      section.appendChild(containerList);
-
-      // Add transfer buttons to cargo items
-      if (typeof onTransferClick === "function") {
-        containerList.querySelectorAll(".invCell").forEach((cell) => {
-          const transferBtn = document.createElement("button");
-          transferBtn.type = "button";
-          transferBtn.className = "hangarTransferBtn";
-          transferBtn.textContent = "Transfer";
-          transferBtn.title = "Transfer this cargo to another ship or location";
-          transferBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            onTransferClick(cell);
-          });
-          cell.appendChild(transferBtn);
-        });
-      }
-    } else if (hasItems) {
+    if (hasItems) {
       const grid = document.createElement("div");
       grid.className = "inventoryItemGrid";
       invItems.forEach((item) => {
@@ -1068,19 +925,6 @@
     }
 
     // 4. Cargo section
-    const cargoDropHandler = isShip ? async (payload, containerIndex) => {
-      const chosenAmount = await requestInventoryTransferAmount(payload, "ship_container", selectedEntity?.id);
-      if (chosenAmount == null) return;
-      const result = await runInventoryTransfer(
-        { ...payload, amount: chosenAmount },
-        "ship_container",
-        selectedEntity?.id,
-        String(containerIndex),
-      );
-      maybeWarnDestroyedTransfer(result);
-      await refreshAllHangarWindows();
-    } : null;
-
     const transferClickHandler = (cellEl) => {
       // Build transfer target menu from sibling entities
       const targets = entities.filter((e) => {
@@ -1133,7 +977,7 @@
       showInventoryContextMenu("Transfer to…", menuItems, rect.right, rect.top);
     };
 
-    const cargoSection = renderCargoSection(selectedEntity, cargoDropHandler, transferClickHandler);
+    const cargoSection = renderCargoSection(selectedEntity, transferClickHandler);
     if (cargoSection) sections.appendChild(cargoSection);
 
     mainPane.appendChild(sections);

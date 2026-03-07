@@ -1,0 +1,19 @@
+{
+  "id": "ipr_4a_colossus",
+  "name": "IPR-4A \"Colossus\"",
+  "research_node": "industrial_plasma_printing",
+  "tech_level": 4,
+  "branch": "plasma_molecular_fabbing",
+  "mass_t": 160.0,
+  "operational_environment": "surface",
+  "printer_type": "industrial",
+  "power_requirements": {
+    "electric_mw": 100.0
+  },
+  "performance": {
+    "construction_rate_kg_per_hr": 600,
+    "fabrication_type": "plasma_molecular_assembly"
+  },
+  "description": "The Colossus is a full industrial-scale fabrication platform combining plasma-arc disaggregation of feedstock with directed molecular reassembly. Raw regolith or pre-sorted concentrate enters a plasma feedstock processor that separates and ionises elemental streams; these streams feed a large-format vacuum-arc deposition cell capable of building structures up to 20 m in any dimension. The process is efficient enough to produce tier-4 industrial equipment — plasma arc miners, advanced refinery columns, and autonomous prospector chassis — from near-100% locally-sourced feedstock on resource-rich bodies.",
+  "ui_tags": ["plasma_molecular", "full_local_feedstock", "tier_4"]
+}

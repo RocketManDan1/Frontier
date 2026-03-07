@@ -1,0 +1,24 @@
+{
+  "id": "spr_2a_mill",
+  "name": "SPR-2A \"Mill\"",
+  "research_node": "advanced_aerospace_printing",
+  "tech_level": 2,
+  "branch": "electron_beam_freeform",
+  "mass_t": 7.0,
+  "operational_environment": "surface",
+  "printer_type": "ship",
+  "power_requirements": {
+    "electric_mw": 7.0
+  },
+  "performance": {
+    "construction_rate_kg_per_hr": 120,
+    "fabrication_type": "electron_beam_freeform_fabrication"
+  },
+  "description": "The Mill uses electron beam freeform fabrication (EBF3) in a partial-vacuum enclosure to produce ship components with near-net-shape accuracy in refractory metals and titanium alloys. The electron beam melts a continuously fed wire into a growing deposit; the process builds up complex thruster injector plates, reactor pressure boundary components, and radiator manifolds with internal channel geometry impossible to machine conventionally. Throughput nearly triple that of the Lathe with only a modest power increase.",
+  "ui_tags": [
+    "ebf3",
+    "electron_beam",
+    "refractory_metals",
+    "tier_2"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "spr_1a_lathe",
+  "name": "SPR-1A \"Lathe\"",
+  "research_node": "early_aerospace_printing",
+  "tech_level": 1,
+  "branch": "wire_feed_cnc",
+  "mass_t": 2.0,
+  "operational_environment": "surface",
+  "printer_type": "ship",
+  "power_requirements": {
+    "electric_mw": 1.2
+  },
+  "performance": {
+    "construction_rate_kg_per_hr": 50,
+    "fabrication_type": "wire_feed_cnc_mill"
+  },
+  "description": "The SPR-1A Lathe is the first generation of surface ship printers, combining a wire-feed welder with a 5-axis CNC milling station. It is optimized for the precision tolerances required in propulsion and power systems: thruster nozzle contours, reactor vessel geometry, generator rotor stacking. Though throughput is modest, the Lathe can produce functional thruster assemblies and small radiator panel arrays from imported alloy feedstock with acceptable accuracy for tier-1 ship components.",
+  "ui_tags": [
+    "wire_feed",
+    "cnc_mill",
+    "ship_print",
+    "tier_1"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "recipe_id": "pbr40_cinder",
+  "name": "Assemble PBR-40 \"Cinder\"",
+  "output_item_id": "pbr40_cinder",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "structural_alloys",
+      "qty": 470.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 310.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 120.0
+    }
+  ],
+  "build_time_s": 600,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 1,
+  "power_kw": 100,
+  "byproducts": []
+}

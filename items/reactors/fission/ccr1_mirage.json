@@ -1,0 +1,20 @@
+{
+  "id": "ccr1_mirage",
+  "name": "CCR-1 \"Mirage\"",
+  "research_node": "vapor_core",
+  "tech_level": 3.0,
+  "branch": "vapor_core",
+  "mass_t": 3.0,
+  "output": {
+    "thermal_mw": 3500,
+    "core_temp_k": 8000
+  },
+  "fuel": {
+    "type": "high_grade_reactor_pellets",
+    "geometry": "colloid_suspension_fissile_vapor"
+  },
+  "description": "A colloid-core reactor where ultrafine fissile particles are suspended in superheated propellant gas. Operating at 8,000K, it bridges the gap between liquid-core and gas-core designs. Containment vessel life is measured in months, not years.",
+  "ui_tags": [
+    "vapor_core"
+  ]
+}

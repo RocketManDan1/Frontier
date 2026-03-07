@@ -1,7 +1,7 @@
 {
   "id": "lapwing_al_osr",
   "name": "Al/OSR Panel \"Lapwing\"",
-  "research_node": "early_rigid_panel_radiator",
+  "research_node": "starter_corp",
   "tech_level": 1,
   "branch": "aluminum",
   "mass_t": 14.5,
@@ -16,6 +16,10 @@
   "output": {
     "heat_rejection_mw": 100
   },
-  "description": "A large fixed array of aluminum honeycomb panels bonded with optical solar reflector (OSR) second-surface mirrors — the same approach used on early planetary spacecraft and the SNAP reactor test articles. The 4,900 m² panel spread is substantial but manufacturable from common materials, and the 800 K operating limit keeps thermal stress manageable. One array can reject the full waste-heat load of an early fission reactor.",
-  "ui_tags": ["rigid_panel", "aluminum", "early"]
+  "description": "A large fixed array of aluminum honeycomb panels bonded with optical solar reflector (OSR) second-surface mirrors \u2014 the same approach used on early planetary spacecraft and the SNAP reactor test articles. The 4,900 m\u00b2 panel spread is substantial but manufacturable from common materials, and the 800 K operating limit keeps thermal stress manageable. One array can reject the full waste-heat load of an early fission reactor.",
+  "ui_tags": [
+    "rigid_panel",
+    "aluminum",
+    "early"
+  ]
 }

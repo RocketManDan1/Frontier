@@ -1,0 +1,19 @@
+{
+  "id": "ipr_2a_forge",
+  "name": "IPR-2A \"Forge\"",
+  "research_node": "advanced_industrial_printing",
+  "tech_level": 2,
+  "branch": "directed_energy_deposition",
+  "mass_t": 8.0,
+  "operational_environment": "surface",
+  "printer_type": "industrial",
+  "power_requirements": {
+    "electric_mw": 8.0
+  },
+  "performance": {
+    "construction_rate_kg_per_hr": 100,
+    "fabrication_type": "ded_wire_arc"
+  },
+  "description": "The Forge upgrades the industrial printing pipeline to wire-arc directed energy deposition. A plasma torch and wire-feed system lay down structural steel and aluminum alloy at high deposition rates, building up part geometry layer by layer in a shielded atmosphere tent. Post-deposition CNC milling arms finish critical tolerances. Effective on excavator frames, refinery pressure vessels, and large mining chassis. Substantially faster than the Mold for medium-density structures.",
+  "ui_tags": ["wire_arc_ded", "plasma_torch", "tier_2"]
+}

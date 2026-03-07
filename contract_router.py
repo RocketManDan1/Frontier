@@ -352,9 +352,9 @@ def _find_courier_container(
         (f"%{container_id}%",),
     ).fetchall()
     for ship in ships:
-        import json as _json
+        import main as m
         try:
-            parts = _json.loads(ship["parts_json"] or "[]")
+            parts, _cargo = m.split_ship_parts_and_cargo(ship["parts_json"] or "[]")
             for part in parts:
                 if isinstance(part, dict) and part.get("stack_key") == container_id:
                     return {
@@ -398,9 +398,9 @@ def _remove_courier_container(
         (f"%{container_id}%",),
     ).fetchall()
     for ship in ships:
-        import json as _json
+        import main as m
         try:
-            parts = _json.loads(ship["parts_json"] or "[]")
+            parts, _cargo = m.split_ship_parts_and_cargo(ship["parts_json"] or "[]")
             new_parts = [
                 p for p in parts
                 if not (isinstance(p, dict) and p.get("stack_key") == container_id)
