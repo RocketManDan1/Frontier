@@ -332,7 +332,6 @@ class TestClaimGateAndNoTeleport:
             owner_corp=corp_b,
             parts=strong_parts,
             fuel_kg=8000,
-            fuel_capacity_kg=10000,
         )
 
         _enable_corp_auth(api_client_db, conn, corp_b, monkeypatch)
@@ -377,7 +376,6 @@ class TestClaimGateAndNoTeleport:
             owner_corp=corp_id,
             parts=transfer_parts,
             fuel_kg=9000,
-            fuel_capacity_kg=10000,
         )
 
         resp_transfer = api_client_db.post(f"/api/ships/{ship_id}/transfer", json={"to_location_id": "GEO"})

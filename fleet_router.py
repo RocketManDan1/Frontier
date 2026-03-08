@@ -920,7 +920,6 @@ def api_state(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             # Basic stats exposed for all ships (tooltip, Δv bar, mass display)
             "dry_mass_kg": stats["dry_mass_kg"],
             "fuel_kg": stats["fuel_kg"],
-            "fuel_capacity_kg": stats["fuel_capacity_kg"],
             "total_mass_kg": stats["dry_mass_kg"] + stats["fuel_kg"],
             "thrust_kn": stats["thrust_kn"],
             "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(

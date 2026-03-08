@@ -1298,7 +1298,8 @@ def add_cargo_to_ship(
 ) -> float:
     """Add resource mass to ship cargo. Returns accepted kg.
 
-    Cargo capacity is no longer enforced for ships; `cargo_capacity_kg` remains
+    Water is always stored as fuel (ships.fuel_kg), not in cargo stacks.
+    Cargo capacity is no longer enforced for ships; ``cargo_capacity_kg`` remains
     for caller compatibility.
     """
     sid = str(ship_id)
@@ -1314,15 +1315,22 @@ def add_cargo_to_ship(
 
     accepted = requested
 
-    conn.execute(
-        """
-        INSERT INTO ship_cargo_stacks (ship_id, resource_id, mass_kg)
-        VALUES (?, ?, ?)
-        ON CONFLICT(ship_id, resource_id)
-        DO UPDATE SET mass_kg = mass_kg + excluded.mass_kg
-        """,
-        (sid, rid, accepted),
-    )
+    if rid.lower() == "water":
+        # Water is always fuel
+        conn.execute(
+            "UPDATE ships SET fuel_kg = fuel_kg + ? WHERE id = ?",
+            (accepted, sid),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO ship_cargo_stacks (ship_id, resource_id, mass_kg)
+            VALUES (?, ?, ?)
+            ON CONFLICT(ship_id, resource_id)
+            DO UPDATE SET mass_kg = mass_kg + excluded.mass_kg
+            """,
+            (sid, rid, accepted),
+        )
     return accepted
 
 
@@ -1332,9 +1340,28 @@ def remove_cargo_from_ship(
     resource_id: str,
     mass_kg: float,
 ) -> float:
-    """Remove resource mass from ship cargo. Returns actual amount taken."""
+    """Remove resource mass from ship cargo. Returns actual amount taken.
+
+    Water is stored as fuel (ships.fuel_kg), not in cargo stacks.
+    """
     sid = str(ship_id)
     rid = str(resource_id)
+
+    if rid.lower() == "water":
+        # Water is always fuel
+        fuel_row = conn.execute("SELECT fuel_kg FROM ships WHERE id=?", (sid,)).fetchone()
+        if not fuel_row:
+            raise ValueError(f"No {resource_id} in ship cargo")
+        available = max(0.0, float(fuel_row["fuel_kg"] or 0.0))
+        taken = min(max(0.0, float(mass_kg)), available)
+        if taken <= 0.01:
+            return 0.0
+        conn.execute(
+            "UPDATE ships SET fuel_kg = MAX(0, fuel_kg - ?) WHERE id = ?",
+            (taken, sid),
+        )
+        return taken
+
     row = conn.execute(
         "SELECT mass_kg FROM ship_cargo_stacks WHERE ship_id=? AND resource_id=?",
         (sid, rid),
@@ -1826,6 +1853,26 @@ def _load_ship_inventory_state(conn: sqlite3.Connection, ship_id: str) -> Dict[s
     parts = normalize_parts(raw_parts)
     fuel_kg = max(0.0, float(row["fuel_kg"] or 0.0))
     cargo_stacks = get_ship_cargo_stacks(conn, sid)
+    # Absorb any water in cargo stacks into fuel_kg (water is always fuel)
+    water_cargo_kg = 0.0
+    non_water_stacks: List[Dict[str, Any]] = []
+    for cs in cargo_stacks:
+        if str(cs.get("resource_id") or "").lower() == "water":
+            water_cargo_kg += max(0.0, float(cs.get("mass_kg") or 0.0))
+        else:
+            non_water_stacks.append(cs)
+    if water_cargo_kg > 1e-9:
+        fuel_kg += water_cargo_kg
+        # Clean up: remove water from ship_cargo_stacks and update fuel_kg
+        conn.execute(
+            "DELETE FROM ship_cargo_stacks WHERE ship_id=? AND resource_id='water'",
+            (sid,),
+        )
+        conn.execute(
+            "UPDATE ships SET fuel_kg=? WHERE id=?",
+            (fuel_kg, sid),
+        )
+        cargo_stacks = non_water_stacks
     resource_catalog = load_resource_catalog()
     resources = compute_ship_inventory_resources(sid, cargo_stacks)
     cargo_summary = compute_ship_cargo_summary(parts, cargo_stacks, resource_catalog)
@@ -1882,7 +1929,7 @@ def _persist_ship_inventory_state(
         (
             merge_ship_parts_and_cargo(parts),
             stats["fuel_kg"],
-            stats["fuel_capacity_kg"],
+            0,
             stats["dry_mass_kg"],
             stats["isp_s"],
             ship_id,
@@ -2032,13 +2079,13 @@ def _consume_location_part_unit(conn: sqlite3.Connection, row: sqlite3.Row) -> D
 
 
 def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = list(ship_state.get("resources") or [])
+    # Exclude water from cargo resources — water is always tracked via fuel_kg
+    rows: List[Dict[str, Any]] = [
+        r for r in (ship_state.get("resources") or [])
+        if str(r.get("resource_id") or r.get("item_id") or "").lower() != "water"
+    ]
     fuel_kg = max(0.0, float(ship_state.get("fuel_kg") or 0.0))
-    has_water_row = any(
-        str(r.get("resource_id") or r.get("item_id") or "").strip().lower() == "water"
-        for r in rows
-    )
-    if fuel_kg > 1e-9 and not has_water_row:
+    if fuel_kg > 1e-9:
         ship_row = ship_state.get("row")
         ship_id = ""
         if isinstance(ship_row, sqlite3.Row):
@@ -2059,6 +2106,13 @@ def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]
             "mass_kg": fuel_kg,
             "quantity": fuel_kg,
             "icon_seed": "ship_fuel::water",
+            "transfer": {
+                "source_kind": "ship_resource",
+                "source_id": ship_id,
+                "source_key": "water",
+                "resource_id": "water",
+                "amount": fuel_kg,
+            },
         })
     rows.sort(key=lambda r: (str(r.get("phase") or ""), str(r.get("label") or r.get("item_id") or "")))
     return rows
@@ -2522,7 +2576,7 @@ def ensure_inventory_baseline_ship(conn: sqlite3.Connection) -> None:
                 None,
                 json.dumps(starter_parts),
                 starter_stats["fuel_kg"],
-                starter_stats["fuel_capacity_kg"],
+                0,
                 starter_stats["dry_mass_kg"],
                 starter_stats["isp_s"],
             ),
@@ -2547,7 +2601,7 @@ def ensure_inventory_baseline_ship(conn: sqlite3.Connection) -> None:
                 json.dumps(["Shipyard baseline hull"]),
                 json.dumps(starter_parts),
                 resolved_fuel_kg,
-                starter_stats["fuel_capacity_kg"],
+                0,
                 starter_stats["dry_mass_kg"],
                 starter_stats["isp_s"],
                 starter_id,

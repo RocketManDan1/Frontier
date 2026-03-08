@@ -370,15 +370,19 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
         source_location_id = str(source_ship_state["location_id"])
 
         move_resource_id = source_key
-        src_resource = next(
-            (
-                item
-                for item in (source_ship_state.get("resources") or [])
-                if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id
-            ),
-            None,
-        )
-        available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
+        # Water is always tracked via fuel_kg, not cargo stacks
+        if move_resource_id.lower() == "water":
+            available_mass = max(0.0, float(source_ship_state.get("fuel_kg") or 0.0))
+        else:
+            src_resource = next(
+                (
+                    item
+                    for item in (source_ship_state.get("resources") or [])
+                    if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id
+                ),
+                None,
+            )
+            available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
         if not move_resource_id or available_mass <= 1e-9:
             raise HTTPException(status_code=400, detail="Source ship has no transferable cargo for that resource")
         if move_mass_kg <= 1e-9:
@@ -424,17 +428,21 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
         if source_kind == "ship_resource":
             if not source_ship_state:
                 raise HTTPException(status_code=500, detail="Source ship state unavailable")
-            try:
-                taken = m.remove_cargo_from_ship(conn, source_id, move_resource_id, accepted_mass_kg)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            accepted_mass_kg = taken
-            if accepted_mass_kg <= 1e-9:
-                raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
-            # Update fuel tracking if water
             source_fuel_kg = max(0.0, float(source_ship_state["fuel_kg"] or 0.0))
             if move_resource_id.lower() == "water":
+                # Water is always fuel — withdraw directly from fuel_kg
+                accepted_mass_kg = max(0.0, min(accepted_mass_kg, source_fuel_kg))
+                if accepted_mass_kg <= 1e-9:
+                    raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
                 source_fuel_kg = max(0.0, source_fuel_kg - accepted_mass_kg)
+            else:
+                try:
+                    taken = m.remove_cargo_from_ship(conn, source_id, move_resource_id, accepted_mass_kg)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                accepted_mass_kg = taken
+                if accepted_mass_kg <= 1e-9:
+                    raise HTTPException(status_code=400, detail="Source ship has no transferable cargo")
             m._persist_ship_inventory_state(
                 conn,
                 ship_id=str(source_ship_state["row"]["id"]),
@@ -452,15 +460,16 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
         else:
             if not target_ship_state:
                 raise HTTPException(status_code=500, detail="Target ship state unavailable")
-            try:
-                accepted = m.add_cargo_to_ship(conn, target_id, move_resource_id, accepted_mass_kg)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            accepted_mass_kg = accepted
-            # Update fuel tracking if water
             target_fuel_kg = max(0.0, float(target_ship_state["fuel_kg"] or 0.0))
             if move_resource_id.lower() == "water":
+                # Water is always fuel — deposit directly to fuel_kg
                 target_fuel_kg += accepted_mass_kg
+            else:
+                try:
+                    accepted = m.add_cargo_to_ship(conn, target_id, move_resource_id, accepted_mass_kg)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                accepted_mass_kg = accepted
             m._persist_ship_inventory_state(
                 conn,
                 ship_id=str(target_ship_state["row"]["id"]),
@@ -698,16 +707,20 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
         ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))
         parts = ship_state["parts"]
         fuel_kg = ship_state["fuel_kg"]
+        cargo_summary = ship_state.get("cargo_summary", {}) or {}
+        cargo_effective_kg = max(0.0, float(cargo_summary.get("cargo_effective_kg") or 0.0))
+        cargo_avg_density = max(1.0, float(cargo_summary.get("avg_density_kg_m3") or 2500.0))
 
         # Compute stats
-        stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=fuel_kg)
-        dv = m.compute_delta_v_remaining_m_s(
-            stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"]
+        stats = m.build_ship_stats_payload(
+            parts,
+            current_fuel_kg=fuel_kg,
+            cargo_mass_kg=cargo_effective_kg,
+            cargo_avg_density=cargo_avg_density,
         )
-        wet_mass = m.compute_wet_mass_kg(stats["dry_mass_kg"], stats["fuel_kg"])
-        accel_g = m.compute_acceleration_gs(
-            stats["dry_mass_kg"], stats["fuel_kg"], stats["thrust_kn"]
-        )
+        dv = stats.get("delta_v_remaining_m_s", 0.0)
+        wet_mass = stats.get("wet_mass_kg", 0.0)
+        accel_g = stats.get("accel_g", 0.0)
         power_balance = catalog_service.compute_power_balance(parts)
 
         entities.append({
@@ -719,7 +732,6 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
             "stats": {
                 "dry_mass_kg": stats["dry_mass_kg"],
                 "fuel_kg": stats["fuel_kg"],
-                "fuel_capacity_kg": stats["fuel_capacity_kg"],
                 "wet_mass_kg": wet_mass,
                 "isp_s": stats["isp_s"],
                 "thrust_kn": stats["thrust_kn"],
@@ -728,7 +740,7 @@ def api_hangar_context(ship_id: str, request: Request, conn: sqlite3.Connection 
             },
             "power_balance": power_balance,
             "inventory_items": m._inventory_items_for_ship(ship_state),
-            "cargo_summary": ship_state.get("cargo_summary", {}),
+            "cargo_summary": cargo_summary,
             "stack_items": m._stack_items_for_ship(ship_state),
         })
 
@@ -845,12 +857,18 @@ def api_cargo_context(location_id: str, request: Request, facility_id: str = "",
         ship_state = m._load_ship_inventory_state(conn, str(sr["id"]))
         parts = ship_state["parts"]
         fuel_kg = ship_state["fuel_kg"]
+        cargo_summary = ship_state.get("cargo_summary", {}) or {}
+        cargo_effective_kg = max(0.0, float(cargo_summary.get("cargo_effective_kg") or 0.0))
+        cargo_avg_density = max(1.0, float(cargo_summary.get("avg_density_kg_m3") or 2500.0))
 
-        stats = m.derive_ship_stats_from_parts(parts, current_fuel_kg=fuel_kg)
-        dv = m.compute_delta_v_remaining_m_s(
-            stats["dry_mass_kg"], stats["fuel_kg"], stats["isp_s"]
+        stats = m.build_ship_stats_payload(
+            parts,
+            current_fuel_kg=fuel_kg,
+            cargo_mass_kg=cargo_effective_kg,
+            cargo_avg_density=cargo_avg_density,
         )
-        wet_mass = m.compute_wet_mass_kg(stats["dry_mass_kg"], stats["fuel_kg"])
+        dv = stats.get("delta_v_remaining_m_s", 0.0)
+        wet_mass = stats.get("wet_mass_kg", 0.0)
 
         entities.append({
             "entity_kind": "ship",
@@ -861,14 +879,13 @@ def api_cargo_context(location_id: str, request: Request, facility_id: str = "",
             "stats": {
                 "dry_mass_kg": stats["dry_mass_kg"],
                 "fuel_kg": stats["fuel_kg"],
-                "fuel_capacity_kg": stats["fuel_capacity_kg"],
                 "wet_mass_kg": wet_mass,
                 "isp_s": stats["isp_s"],
                 "thrust_kn": stats["thrust_kn"],
                 "delta_v_remaining_m_s": dv,
             },
             "inventory_items": m._inventory_items_for_ship(ship_state),
-            "cargo_summary": ship_state.get("cargo_summary", {}),
+            "cargo_summary": cargo_summary,
             "stack_items": m._stack_items_for_ship(ship_state),
         })
 

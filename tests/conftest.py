@@ -185,7 +185,7 @@ class TestHelpers:
         location_id: str = "LEO",
         owner: str = "testuser",
         dry_mass_kg: float = 5000.0,
-        fuel_capacity_kg: float = 2000.0,
+        fuel_capacity_kg: float = 0,
         fuel_kg: float = 2000.0,
         status: str = "docked",
     ) -> str:

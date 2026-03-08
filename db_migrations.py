@@ -1074,6 +1074,23 @@ def _migration_0029_unified_research_tree(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_0030_water_is_fuel(conn: sqlite3.Connection) -> None:
+    """Merge any water in ship_cargo_stacks into ships.fuel_kg.
+
+    Water is always fuel on ships — it should only live in the fuel_kg
+    column, never as a separate cargo stack.
+    """
+    rows = conn.execute(
+        "SELECT ship_id, mass_kg FROM ship_cargo_stacks WHERE resource_id = 'water' AND mass_kg > 0"
+    ).fetchall()
+    for r in rows:
+        conn.execute(
+            "UPDATE ships SET fuel_kg = fuel_kg + ? WHERE id = ?",
+            (float(r["mass_kg"]), str(r["ship_id"])),
+        )
+    conn.execute("DELETE FROM ship_cargo_stacks WHERE resource_id = 'water'")
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -1105,6 +1122,7 @@ def _migrations() -> List[Migration]:
     Migration("0027_ship_cargo_stacks", "Ship cargo stored as mass stacks per resource", _migration_0027_ship_cargo_stacks),
     Migration("0028_miners_printers", "Rename constructor deployed equipment to miner category", _migration_0028_miners_printers),
     Migration("0029_unified_research_tree", "Reset research unlocks for unified research tree, auto-unlock starter_corp", _migration_0029_unified_research_tree),
+    Migration("0030_water_is_fuel", "Merge water cargo stacks into ships.fuel_kg", _migration_0030_water_is_fuel),
     ]
 
 

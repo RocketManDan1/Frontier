@@ -154,11 +154,6 @@
     return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  function fuelPct(fuel, cap) {
-    if (cap <= 0) return 0;
-    return Math.max(0, Math.min(100, (fuel / cap) * 100));
-  }
-
   function fmtMwTh(v) { return `${Math.max(0, Number(v) || 0).toFixed(1)}<span class="pbUnit">MWth</span>`; }
   function fmtMwE(v) { return `${Math.max(0, Number(v) || 0).toFixed(1)}<span class="pbUnit">MWe</span>`; }
 
@@ -936,13 +931,11 @@
   function renderDeltaVPanel(ship) {
     const dryMass = Number(ship.dry_mass_kg || 0);
     const fuel = Number(ship.fuel_kg || 0);
-    const fuelCap = Number(ship.fuel_capacity_kg || 0);
     const wetMass = dryMass + fuel;
     const isp = Number(ship.isp_s || 0);
     const thrust = Number(ship.thrust_kn || 0);
     const dv = Number(ship.delta_v_remaining_m_s || 0);
     const accelG = wetMass > 0 ? (thrust * 1000) / (wetMass * 9.80665) : 0;
-    const fPct = fuelPct(fuel, fuelCap);
     const dvCls = dv > 0 ? "pbPositive" : "pbNeutral";
 
     return `
@@ -952,7 +945,7 @@
           <div class="pbSection">
             <div class="pbSectionHead">Mass Budget</div>
             <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtKg(dryMass)}</span></div>
-            <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)} / ${fmtKg(fuelCap)}</span></div>
+            <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtKg(fuel)}</span></div>
             <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtKg(wetMass)}</b></span></div>
           </div>
           <div class="pbSection">

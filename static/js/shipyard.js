@@ -66,7 +66,6 @@
   let activeCategory = "";          // which section is currently selected for the picker
 
   // Fuel loading state
-  let fuelCapacityKg = 0;
   let availableFuelKg = 0;
   let requestedFuelKg = 0;
 
@@ -79,6 +78,7 @@
   let editShipId = "";
   let editShipOriginalParts = [];   // original part item_ids before editing
   let editShipLocationId = "";
+  let editShipFuelKg = 0;           // fuel_kg the ship had before editing (will become water on deconstruct)
   let allFleetShips = [];
 
   /* ── Category definitions ─────────────────────────────── */
@@ -134,11 +134,11 @@
     selectedItemIds = [];
     activeCategory = "";
     requestedFuelKg = 0;
-    fuelCapacityKg = 0;
     availableFuelKg = 0;
     editShipId = "";
     editShipOriginalParts = [];
     editShipLocationId = "";
+    editShipFuelKg = 0;
     shipNameEl.value = "";
     setMsg("", false);
     if (boostCostEl) boostCostEl.style.display = "none";
@@ -820,15 +820,9 @@
     `;
   }
 
-  function fuelPct(fuel, cap) {
-    if (cap <= 0) return 0;
-    return Math.max(0, Math.min(100, (fuel / cap) * 100));
-  }
-
   function renderDeltaVPanel(stats) {
     const dryMass = Number(stats?.dry_mass_kg || 0);
     const fuelMass = Number(stats?.fuel_kg || 0);
-    const fuelCap = Number(stats?.fuel_capacity_kg || 0);
     const wetMass = Number(stats?.wet_mass_kg || 0);
     const isp = Number(stats?.isp_s || 0);
     const thrust = Number(stats?.thrust_kn || 0);
@@ -852,7 +846,7 @@
         <div class="pbSection">
           <div class="pbSectionHead">Mass Budget</div>
           <div class="pbRow"><span class="pbLabel">Dry mass</span><span class="pbVal">${fmtMassKg(dryMass)}</span></div>
-          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtMassKg(fuelMass)} / ${fmtMassKg(fuelCap)}</span></div>
+          <div class="pbRow"><span class="pbLabel">Fuel</span><span class="pbVal">${fmtMassKg(fuelMass)}</span></div>
           <div class="pbRow pbDivider"><span class="pbLabel"><b>Wet mass</b></span><span class="pbVal"><b>${fmtMassKg(wetMass)}</b></span></div>
         </div>
         <div class="pbSection">
@@ -920,8 +914,8 @@
   /* ── Fuel UI ──────────────────────────────────────────── */
 
   function updateFuelUI() {
-    // In boost mode, always show fuel section (no tank capacity required)
-    const hasFuelCapacity = currentMode === "boost" || fuelCapacityKg > 0;
+    // In boost mode, always show fuel section; otherwise show when parts are selected
+    const hasFuelCapacity = currentMode === "boost" || selectedItemIds.length > 0;
 
     // Toggle hasFuel class on the picker section to split the layout
     if (pickerSectionEl) pickerSectionEl.classList.toggle("hasFuel", hasFuelCapacity);
@@ -943,8 +937,8 @@
       requestedFuelKg = Math.max(0, requestedFuelKg);
       if (fuelInputEl) { fuelInputEl.removeAttribute("max"); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
     } else {
-      // Site/edit mode: cap at tank capacity vs available water
-      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+      // Site/edit mode: cap at available water (backend allows loading beyond tank capacity)
+      const maxFuel = availableFuelKg;
       requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
       if (fuelSliderEl) { fuelSliderEl.max = String(Math.floor(maxFuel)); fuelSliderEl.value = String(Math.floor(requestedFuelKg)); }
       if (fuelInputEl) { fuelInputEl.max = String(Math.floor(maxFuel)); fuelInputEl.value = String(Math.floor(requestedFuelKg)); }
@@ -953,19 +947,21 @@
     // Hide bar and label in boost mode
     if (fuelBarEl) fuelBarEl.style.display = isBoost ? "none" : "";
     if (fuelLabelEl) fuelLabelEl.style.display = isBoost ? "none" : "";
-    if (!isBoost && fuelBarFillEl) { const pct = fuelCapacityKg > 0 ? Math.min(100, (requestedFuelKg / fuelCapacityKg) * 100) : 0; fuelBarFillEl.style.width = `${pct.toFixed(1)}%`; }
-    if (!isBoost && fuelLabelEl) { const pct = fuelCapacityKg > 0 ? (requestedFuelKg / fuelCapacityKg) * 100 : 0; fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} / ${fmtMassKg(fuelCapacityKg)} (${pct.toFixed(0)}%)`; }
+    if (!isBoost && fuelBarFillEl) { const pct = availableFuelKg > 0 ? Math.min(100, (requestedFuelKg / availableFuelKg) * 100) : 0; fuelBarFillEl.style.width = `${pct.toFixed(1)}%`; }
+    if (!isBoost && fuelLabelEl) { fuelLabelEl.textContent = `${fmtMassKg(requestedFuelKg)} loaded`; }
   }
 
   /* ── Preview ──────────────────────────────────────────── */
 
   let previewTimer = null;
+  let previewRequestSeq = 0;
   async function refreshPreview() {
     if (previewTimer) clearTimeout(previewTimer);
     previewTimer = setTimeout(doRefreshPreview, 150);
   }
 
   async function doRefreshPreview() {
+    const reqSeq = ++previewRequestSeq;
     // For boost mode, use LEO as the preview location
     const locationForPreview = currentMode === "boost" ? "LEO" : buildLocationId;
 
@@ -977,16 +973,17 @@
           parts: selectedItemIds,
           source_location_id: locationForPreview,
           fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
+          existing_fuel_kg: currentMode === "edit" ? editShipFuelKg : null,
           unlimited_fuel: currentMode === "boost",
         }),
       });
+      if (reqSeq !== previewRequestSeq) return;
       const stats = data.stats || {};
-      fuelCapacityKg = Number(stats.fuel_capacity_kg || 0);
       availableFuelKg = Number(data.available_fuel_kg || 0);
 
-      // In non-boost mode, clamp to tank capacity / available water
+      // In non-boost mode, clamp to available water (backend allows loading beyond tank capacity)
       if (currentMode !== "boost") {
-        const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+        const maxFuel = availableFuelKg;
         requestedFuelKg = Math.max(0, Math.min(requestedFuelKg, maxFuel));
       }
       updateFuelUI();
@@ -1085,7 +1082,6 @@
       setMsg(`Built ${ship.name || "ship"} at ${ship.location_id || buildLocationId}${fuelNote}.`, false);
       selectedItemIds = [];
       requestedFuelKg = 0;
-      fuelCapacityKg = 0;
       availableFuelKg = 0;
       shipNameEl.value = "";
       updateFuelUI();
@@ -1108,35 +1104,28 @@
 
     buildBtn.disabled = true;
     try {
-      // Step 1: Deconstruct the old ship (parts return to location inventory)
-      await fetchJson(`/api/ships/${encodeURIComponent(editShipId)}/deconstruct`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keep_ship_record: false }),
-      });
-
-      // Step 2: Build the new ship from the location inventory (which now has old + new parts)
-      const data = await fetchJson("/api/shipyard/build", {
+      // Atomic refit: swaps parts and adjusts fuel in one request
+      const data = await fetchJson("/api/shipyard/refit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ship_id: editShipId,
           name,
           parts: selectedItemIds,
-          source_location_id: editShipLocationId,
-          fuel_kg: requestedFuelKg > 0 ? requestedFuelKg : null,
+          fuel_kg: requestedFuelKg,
         }),
       });
 
       const ship = data.ship || {};
       const fuelNote = (Number(ship.fuel_kg) || 0) > 0 ? ` with ${fmtMassKg(ship.fuel_kg)} fuel` : "";
-      setMsg(`Rebuilt ${ship.name || "ship"} at ${ship.location_id || editShipLocationId}${fuelNote}.`, false);
+      setMsg(`Refitted ${ship.name || "ship"} at ${ship.location_id || editShipLocationId}${fuelNote}.`, false);
 
       selectedItemIds = [];
       requestedFuelKg = 0;
-      fuelCapacityKg = 0;
       availableFuelKg = 0;
       editShipId = "";
       editShipOriginalParts = [];
+      editShipFuelKg = 0;
       shipNameEl.value = "";
       updateFuelUI();
       await loadGarageForCurrentSource();
@@ -1144,7 +1133,7 @@
       renderPicker();
       await refreshPreview();
     } catch (err) {
-      setMsg(err?.message || "Rebuild failed.", true);
+      setMsg(err?.message || "Refit failed.", true);
     } finally {
       buildBtn.disabled = false;
     }
@@ -1257,6 +1246,10 @@
     editShipId = ship.id;
     editShipLocationId = ship.location_id;
     buildLocationId = ship.location_id;
+    editShipFuelKg = Math.max(0, Number(ship.fuel_kg || 0));
+
+    // Pre-populate fuel slider with ship's current fuel load
+    requestedFuelKg = editShipFuelKg;
 
     // Extract part item_ids from parts array
     const parts = Array.isArray(ship.parts) ? ship.parts : [];
@@ -1425,7 +1418,6 @@
     buildLocationId = String(sourceLocationEl.value || "");
     selectedItemIds = [];
     requestedFuelKg = 0;
-    fuelCapacityKg = 0;
     availableFuelKg = 0;
     updateSourceHint();
     await loadGarageForCurrentSource();
@@ -1444,7 +1436,7 @@
   fuelInputEl?.addEventListener("change", () => {
     let val = Math.max(0, Number(fuelInputEl.value || 0));
     if (currentMode !== "boost") {
-      const maxFuel = Math.min(fuelCapacityKg, availableFuelKg);
+      const maxFuel = availableFuelKg;
       val = Math.min(val, maxFuel);
     }
     requestedFuelKg = val;
@@ -1454,7 +1446,7 @@
   });
 
   fuelFillBtn?.addEventListener("click", () => {
-    requestedFuelKg = Math.min(fuelCapacityKg, availableFuelKg);
+    requestedFuelKg = availableFuelKg;
     updateFuelUI();
     renderBoostCost();
     refreshPreview();

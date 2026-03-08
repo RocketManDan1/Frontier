@@ -806,6 +806,7 @@ class TestEndToEndProduction:
         assert leo_iron >= 2999.0
         assert leo_silicate >= 1999.0
 
-        # Ship should be empty
+        # Ship should only have its initial fuel remaining (water = fuel)
         cargo_final = world.get_ship_cargo(ship)
-        assert sum(cargo_final.values()) < 1.0
+        non_water = {k: v for k, v in cargo_final.items() if k != "water"}
+        assert sum(non_water.values()) < 1.0

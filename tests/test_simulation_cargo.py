@@ -73,15 +73,18 @@ class TestLocationToShipTransfer:
         conn = world.conn
         import main as _main
 
+        # Ship A starts with 5,000 kg fuel (water)
+        initial_fuel = 5_000.0
+
         # Load 10,000 kg water onto ship
         accepted = _main.add_cargo_to_ship(conn, ship_a, "water", 10_000.0)
         conn.commit()
         assert accepted >= 10_000.0
 
-        # Verify ship cargo
+        # Verify ship cargo (includes initial fuel since water = fuel)
         cargo = world.get_ship_cargo(ship_a)
         assert "water" in cargo
-        assert cargo["water"] == pytest.approx(10_000.0)
+        assert cargo["water"] == pytest.approx(initial_fuel + 10_000.0)
 
     def test_load_is_unbounded(self, world: GameWorldBuilder, corp_and_ships):
         """Ship cargo loads are no longer capped by ship capacity."""
@@ -89,13 +92,16 @@ class TestLocationToShipTransfer:
         conn = world.conn
         import main as _main
 
+        # Ship B starts with 3,000 kg fuel (water)
+        initial_fuel = 3_000.0
+
         # Try to load 80,000 kg onto a nominally 50,000 kg-capacity ship.
         accepted = _main.add_cargo_to_ship(conn, ship_b, "water", 80_000.0)
         conn.commit()
 
         assert accepted == pytest.approx(80_000.0)
         cargo = world.get_ship_cargo(ship_b)
-        assert cargo.get("water", 0.0) == pytest.approx(80_000.0)
+        assert cargo.get("water", 0.0) == pytest.approx(initial_fuel + 80_000.0)
 
     def test_load_multiple_resources(self, world: GameWorldBuilder, corp_and_ships):
         """Load different resources onto the same ship."""
@@ -103,19 +109,22 @@ class TestLocationToShipTransfer:
         conn = world.conn
         import main as _main
 
+        # Ship A starts with 5,000 kg fuel (water)
+        initial_fuel = 5_000.0
+
         _main.add_cargo_to_ship(conn, ship_a, "water", 20_000.0)
         _main.add_cargo_to_ship(conn, ship_a, "iron_oxides", 15_000.0)
         _main.add_cargo_to_ship(conn, ship_a, "aluminum_oxides", 5_000.0)
         conn.commit()
 
         cargo = world.get_ship_cargo(ship_a)
-        assert cargo["water"] == pytest.approx(20_000.0)
+        assert cargo["water"] == pytest.approx(initial_fuel + 20_000.0)
         assert cargo["iron_oxides"] == pytest.approx(15_000.0)
         assert cargo["aluminum_oxides"] == pytest.approx(5_000.0)
 
         # Total cargo can exceed legacy nominal capacity.
         total = sum(cargo.values())
-        assert total == pytest.approx(40_000.0)
+        assert total == pytest.approx(initial_fuel + 40_000.0)
 
 
 # ── Ship → Location Resource Transfer ─────────────────────────────────────────
@@ -151,10 +160,13 @@ class TestShipToLocationTransfer:
         assert water_after == pytest.approx(water_before + 5_000.0)
 
     def test_unload_all_removes_stack(self, world: GameWorldBuilder, corp_and_ships):
-        """Unloading all cargo of a resource removes the ship_cargo_stacks row."""
+        """Unloading all added cargo returns to the original fuel level."""
         corp_id, org_id, ship_a, ship_b = corp_and_ships
         conn = world.conn
         import main as _main
+
+        # Ship A starts with 5,000 kg fuel (water)
+        initial_fuel = 5_000.0
 
         _main.add_cargo_to_ship(conn, ship_a, "water", 1_000.0)
         conn.commit()
@@ -164,7 +176,8 @@ class TestShipToLocationTransfer:
 
         assert taken == pytest.approx(1_000.0)
         cargo = world.get_ship_cargo(ship_a)
-        assert "water" not in cargo or cargo.get("water", 0) < 0.01
+        # Water = fuel; original fuel remains
+        assert cargo.get("water", 0.0) == pytest.approx(initial_fuel)
 
 
 # ── Ship → Ship Resource Transfer ─────────────────────────────────────────────
@@ -178,6 +191,10 @@ class TestShipToShipTransfer:
         conn = world.conn
         import main as _main
 
+        # Initial fuel levels
+        initial_fuel_a = 5_000.0
+        initial_fuel_b = 3_000.0
+
         # Load water onto ship A
         _main.add_cargo_to_ship(conn, ship_a, "water", 30_000.0)
         conn.commit()
@@ -190,14 +207,17 @@ class TestShipToShipTransfer:
         cargo_a = world.get_ship_cargo(ship_a)
         cargo_b = world.get_ship_cargo(ship_b)
 
-        assert cargo_a["water"] == pytest.approx(20_000.0)
-        assert cargo_b["water"] == pytest.approx(10_000.0)
+        assert cargo_a["water"] == pytest.approx(initial_fuel_a + 20_000.0)
+        assert cargo_b["water"] == pytest.approx(initial_fuel_b + 10_000.0)
 
     def test_transfer_ignores_target_capacity(self, world: GameWorldBuilder, corp_and_ships):
         """Ship-to-ship transfer is not capped by legacy target capacity."""
         corp_id, org_id, ship_a, ship_b = corp_and_ships
         conn = world.conn
         import main as _main
+
+        # Initial fuel levels
+        initial_fuel_b = 3_000.0
 
         # Fill ship B heavily, then transfer should still accept all cargo.
         _main.add_cargo_to_ship(conn, ship_b, "iron_oxides", 45_000.0)
@@ -217,9 +237,9 @@ class TestShipToShipTransfer:
 
         assert accepted == pytest.approx(20_000.0)
         cargo_b = world.get_ship_cargo(ship_b)
-        assert cargo_b.get("water", 0.0) == pytest.approx(20_000.0)
+        assert cargo_b.get("water", 0.0) == pytest.approx(initial_fuel_b + 20_000.0)
         total_b = sum(cargo_b.values())
-        assert total_b == pytest.approx(65_000.0)
+        assert total_b == pytest.approx(initial_fuel_b + 65_000.0)
 
 
 # ── Part (Stack) Transfers ─────────────────────────────────────────────────────
@@ -313,6 +333,9 @@ class TestFullCargoWorkflow:
         conn = world.conn
         import main as _main
 
+        # Ship A starts with 5,000 kg fuel (water)
+        initial_fuel = 5_000.0
+
         # Step 1: Load cargo at LEO
         _main.add_cargo_to_ship(conn, ship_a, "water", 40_000.0)
         _main.add_cargo_to_ship(conn, ship_a, "iron_oxides", 20_000.0)
@@ -338,15 +361,19 @@ class TestFullCargoWorkflow:
         assert lmo_water == pytest.approx(40_000.0)
         assert lmo_iron == pytest.approx(20_000.0)
 
-        # Ship should be empty
+        # Ship still has its initial fuel (water = fuel)
         cargo = world.get_ship_cargo(ship_a)
-        assert sum(cargo.values()) < 1.0
+        assert cargo.get("water", 0.0) == pytest.approx(initial_fuel)
+        assert cargo.get("iron_oxides", 0.0) < 1.0
 
     def test_round_trip_cargo(self, world: GameWorldBuilder, corp_and_ships):
         """Load at LEO, haul to LMO, unload, then return empty."""
         corp_id, org_id, ship_a, ship_b = corp_and_ships
         conn = world.conn
         import main as _main
+
+        # Ship A starts with 5,000 kg fuel (water)
+        initial_fuel = 5_000.0
 
         leo_water_initial = world.get_resource_mass_at_location("LEO", "water", corp_id=corp_id)
 
@@ -363,12 +390,12 @@ class TestFullCargoWorkflow:
         _main.add_resource_to_location_inventory(conn, "LMO", "water", taken, corp_id=corp_id)
         conn.commit()
 
-        # Return to LEO (empty)
+        # Return to LEO (only initial fuel remains)
         conn.execute("UPDATE ships SET location_id = 'LEO' WHERE id = ?", (ship_a,))
         conn.commit()
 
         cargo = world.get_ship_cargo(ship_a)
-        assert sum(cargo.values()) < 1.0
+        assert cargo.get("water", 0.0) == pytest.approx(initial_fuel)
 
         # LMO has the water
         lmo_water = world.get_resource_mass_at_location("LMO", "water", corp_id=corp_id)

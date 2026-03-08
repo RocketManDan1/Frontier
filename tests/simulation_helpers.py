@@ -275,7 +275,7 @@ class GameWorldBuilder:
         parts: Optional[List[Dict[str, Any]]] = None,
         fuel_kg: float = 5000.0,
         dry_mass_kg: float = 10000.0,
-        fuel_capacity_kg: float = 10000.0,
+        fuel_capacity_kg: float = 0,
         cargo_capacity_kg: float = 50000.0,
         status: str = "docked",
     ) -> str:
@@ -453,12 +453,21 @@ class GameWorldBuilder:
         return float(row["total"]) if row else 0.0
 
     def get_ship_cargo(self, ship_id: str) -> Dict[str, float]:
-        """Get ship cargo {resource_id: mass_kg}."""
+        """Get ship cargo {resource_id: mass_kg}. Includes water from fuel_kg."""
         rows = self.conn.execute(
             "SELECT resource_id, mass_kg FROM ship_cargo_stacks WHERE ship_id = ?",
             (ship_id,),
         ).fetchall()
-        return {str(r["resource_id"]): float(r["mass_kg"]) for r in rows}
+        result = {str(r["resource_id"]): float(r["mass_kg"]) for r in rows}
+        # Water is tracked as fuel_kg, not in cargo stacks
+        fuel_row = self.conn.execute(
+            "SELECT fuel_kg FROM ships WHERE id = ?", (ship_id,)
+        ).fetchone()
+        if fuel_row:
+            fuel_kg = float(fuel_row["fuel_kg"] or 0.0)
+            if fuel_kg > 0.01:
+                result["water"] = result.get("water", 0.0) + fuel_kg
+        return result
 
     # ── Equipment helpers ──────────────────────────────────────────────────
 

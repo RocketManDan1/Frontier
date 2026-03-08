@@ -1150,7 +1150,6 @@ class TestAdminShipOps:
             r = client.post(f"/api/admin/ships/{ship_id}/refuel")
             assert r.status_code == 200
             data = r.json()
-            assert data["ship"]["fuel_kg"] == data["ship"]["fuel_capacity_kg"]
             assert data["ship"]["fuel_kg"] > 1.0
         finally:
             client.delete(f"/api/admin/ships/{ship_id}")

@@ -8028,10 +8028,7 @@
               <span class="tpLabel"><b>Launch Δv (current window)</b></span>
               <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpLaunchDvReadout"><b>${Math.round(launchDvMs)} m/s</b></span>
             </div>
-            ${q.is_interplanetary ? `<div class="tpRow" style="font-size:12px;opacity:0.8;">
-              <span class="tpLabel">Porkchop sample Δv</span>
-              <span class="tpVal" id="tpPorkchopDvReadout">—</span>
-            </div>` : ""}
+
             ${q.interplanetary_dv_m_s != null ? `
             <div class="tpRow" style="font-size:12px;opacity:0.7;">
               <span class="tpLabel">${q.gateway_departure ? _esc(locationsById.get(q.gateway_departure)?.name || q.gateway_departure) + ' →' : 'Interplanetary'}</span>
@@ -8140,6 +8137,11 @@
 
       // Auto-fetch porkchop for interplanetary transfers
       if (q.is_interplanetary && q.orbital) {
+        const cfmBtn = document.getElementById("tpConfirmBtn");
+        if (cfmBtn) {
+          cfmBtn._overheating = isOverheating;
+          cfmBtn._noSurfaceTwr = !hasSurfaceTwr;
+        }
         fetchAndRenderPorkchop(q, depTime);
       }
 
@@ -8474,8 +8476,13 @@
     function wireTofSlider(data, depTime) {
       const slider = document.getElementById("tpTofSlider");
       const readout = document.getElementById("tpTofReadout");
-      const dvReadout = document.getElementById("tpPorkchopDvReadout");
+      const launchDvReadout = document.getElementById("tpLaunchDvReadout");
       const transitReadout = document.getElementById("tpTransitTimeReadout");
+      const fuelRequiredEl = document.getElementById("tpFuelRequired");
+      const fuelRemainingEl = document.getElementById("tpFuelRemaining");
+      const shipDvRemainingEl = document.getElementById("tpShipDvRemaining");
+      const costStatusEl = document.getElementById("tpCostStatus");
+      const confirmBtn = document.getElementById("tpConfirmBtn");
       const tofMinLabel = document.getElementById("tpTofMinLabel");
       const tofMaxLabel = document.getElementById("tpTofMaxLabel");
       if (!slider || !readout) return;
@@ -8527,17 +8534,44 @@
 
         // Look up Δv at (bestDepIdx, ti) from the grid
         const dv = (grid[bestDepIdx] || [])[ti];
-        if (dv != null && isFinite(dv)) {
-          const dvM = Math.round(dv);
-          if (dvReadout) dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
-          if (dvReadout) {
-            dvReadout.className = "tpVal";
-          }
-        } else {
-          if (dvReadout) { dvReadout.innerHTML = `<b>N/A</b>`; dvReadout.className = "tpVal muted"; }
+        const dvValid = dv != null && isFinite(dv);
+        const dvMs = dvValid ? dv : 0;
+        const dvM = Math.round(dvMs);
+
+        // Update Launch Δv display
+        const hasDv = dvMs <= shipDv + 0.1;
+        if (launchDvReadout) {
+          launchDvReadout.innerHTML = `<b>${dvValid ? dvM + ' m/s' : 'N/A'}</b>`;
+          launchDvReadout.className = `tpVal ${dvValid ? (hasDv ? 'tpPositive' : 'tpNegative') : 'muted'}`;
         }
 
-        // Show sampled TOF from the porkchop cell; launch uses server quote TOF.
+        // Recalculate fuel & ship cost
+        const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, dvMs);
+        const fuelAfterKg = Math.max(0, shipFuel - fuelNeedKg);
+        const fuelAfterPct = shipFuelCap > 0 ? Math.round((fuelAfterKg / shipFuelCap) * 100) : 0;
+        const hasFuel = fuelNeedKg <= shipFuel + 0.1;
+
+        if (fuelRequiredEl) {
+          fuelRequiredEl.textContent = fmtKg(fuelNeedKg);
+          fuelRequiredEl.className = `tpVal ${hasFuel ? '' : 'tpNegative'}`;
+        }
+        if (fuelRemainingEl) {
+          fuelRemainingEl.textContent = `${fmtKg(fuelAfterKg)} (${fuelAfterPct}%)`;
+          fuelRemainingEl.className = `tpVal ${fuelAfterPct > 20 ? '' : fuelAfterPct > 0 ? 'tpWarn' : 'tpNegative'}`;
+        }
+        if (shipDvRemainingEl) {
+          shipDvRemainingEl.textContent = `${Math.round(shipDv)} m/s`;
+        }
+        if (costStatusEl) {
+          let statusHtml = '';
+          if (!hasDv) statusHtml += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${dvM}, have ${Math.round(shipDv)})</span></div>`;
+          if (!hasFuel && hasDv) statusHtml += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>`;
+          costStatusEl.innerHTML = statusHtml;
+        }
+        if (confirmBtn && !confirmBtn._overheating && !confirmBtn._noSurfaceTwr) {
+          confirmBtn.disabled = !(hasDv && hasFuel);
+        }
+
         if (transitReadout) transitReadout.textContent = fmtDuration(tofS);
 
         // Redraw crosshair on porkchop

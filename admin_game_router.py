@@ -207,11 +207,17 @@ def api_admin_spawn_ship(req: SpawnShipReq, request: Request, conn: sqlite3.Conn
             {"item_id": "water_tank_10_m3"},
         ])
 
+    if req.fuel_kg is not None:
+        fuel_for_stats = float(req.fuel_kg)
+    else:
+        # No fuel specified — fill to physical tank capacity
+        from catalog_service import compute_parts_water_capacity_kg, load_resource_catalog
+        fuel_for_stats = compute_parts_water_capacity_kg(parts, load_resource_catalog())
+
     stats = m.derive_ship_stats_from_parts(
         parts,
-        current_fuel_kg=float(req.fuel_kg) if req.fuel_kg is not None else None,
+        current_fuel_kg=fuel_for_stats,
     )
-    fuel_capacity_kg = stats["fuel_capacity_kg"]
     fuel_kg = stats["fuel_kg"]
     dry_mass_kg = stats["dry_mass_kg"]
     isp_s = stats["isp_s"]
@@ -245,7 +251,7 @@ def api_admin_spawn_ship(req: SpawnShipReq, request: Request, conn: sqlite3.Conn
             None,
             json.dumps(parts),
             fuel_kg,
-            fuel_capacity_kg,
+            0,
             dry_mass_kg,
             isp_s,
         ),
@@ -264,7 +270,6 @@ def api_admin_spawn_ship(req: SpawnShipReq, request: Request, conn: sqlite3.Conn
             "location_id": location_id,
             "parts": parts,
             "fuel_kg": fuel_kg,
-            "fuel_capacity_kg": fuel_capacity_kg,
             "dry_mass_kg": dry_mass_kg,
             "isp_s": isp_s,
             "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(dry_mass_kg, fuel_kg, isp_s),
@@ -317,9 +322,11 @@ def api_admin_refuel_ship(ship_id: str, request: Request, conn: sqlite3.Connecti
 
     raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(row["parts_json"] or "[]")
     parts = m.normalize_parts(raw_parts)
+    from catalog_service import compute_parts_water_capacity_kg, load_resource_catalog
+    capacity = compute_parts_water_capacity_kg(parts, load_resource_catalog())
     stats = m.derive_ship_stats_from_parts(
         parts,
-        current_fuel_kg=float(row["fuel_kg"] or 0.0),
+        current_fuel_kg=capacity,
     )
 
     conn.execute(
@@ -329,8 +336,8 @@ def api_admin_refuel_ship(ship_id: str, request: Request, conn: sqlite3.Connecti
         WHERE id=?
         """,
         (
-            stats["fuel_capacity_kg"],
-            stats["fuel_capacity_kg"],
+            capacity,
+            0,
             stats["dry_mass_kg"],
             stats["isp_s"],
             sid,
@@ -343,11 +350,11 @@ def api_admin_refuel_ship(ship_id: str, request: Request, conn: sqlite3.Connecti
         "ship": {
             "id": row["id"],
             "name": row["name"],
-            "fuel_kg": stats["fuel_capacity_kg"],
-            "fuel_capacity_kg": stats["fuel_capacity_kg"],
+            "fuel_kg": capacity,
+            "fuel_capacity_kg": capacity,
             "delta_v_remaining_m_s": m.compute_delta_v_remaining_m_s(
                 stats["dry_mass_kg"],
-                stats["fuel_capacity_kg"],
+                capacity,
                 stats["isp_s"],
             ),
         },

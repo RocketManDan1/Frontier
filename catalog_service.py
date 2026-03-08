@@ -2386,6 +2386,27 @@ def find_incompatible_reactor_thruster_pairs(parts: List[Dict[str, Any]]) -> Lis
     return incompatible
 
 
+def compute_parts_water_capacity_kg(
+    parts: List[Dict[str, Any]],
+    resource_catalog: Dict[str, Dict[str, Any]],
+) -> float:
+    """Sum the physical water/fuel tank capacity across all parts."""
+    total = 0.0
+    for part in parts:
+        cap = max(0.0, float(part.get("fuel_capacity_kg") or 0.0))
+        if cap > 0.0:
+            total += cap
+        else:
+            capacity_m3 = max(0.0, float(part.get("capacity_m3") or 0.0))
+            resource_id = str(part.get("resource_id") or "").strip()
+            if capacity_m3 > 0.0 and resource_id == "water":
+                resource = resource_catalog.get(resource_id) or {}
+                density = max(0.0, float(resource.get("mass_per_m3_kg") or 0.0))
+                if density > 0.0:
+                    total += capacity_m3 * density
+    return total
+
+
 def derive_ship_stats_from_parts(
     parts: List[Dict[str, Any]],
     resource_catalog: Dict[str, Dict[str, Any]],
@@ -2476,12 +2497,9 @@ def derive_ship_stats_from_parts(
         base_thrust_total_kn += part_thrust_kn
 
     resolved_dry_mass_kg = max(0.0, dry_mass_kg)
-    resolved_fuel_capacity_kg = max(0.0, water_mass_kg)
     if current_fuel_kg is None:
-        resolved_fuel_kg = resolved_fuel_capacity_kg
+        resolved_fuel_kg = 0.0
     else:
-        # Don't clamp to tank capacity — callers (shipyard route, fleet)
-        # enforce their own limits (available water, unlimited boost, etc.).
         resolved_fuel_kg = max(0.0, float(current_fuel_kg or 0.0))
 
     resolved_isp_s = max(isp_values) if isp_values else 0.0
@@ -2498,7 +2516,6 @@ def derive_ship_stats_from_parts(
     return {
         "dry_mass_kg": resolved_dry_mass_kg,
         "fuel_kg": resolved_fuel_kg,
-        "fuel_capacity_kg": resolved_fuel_capacity_kg,
         "isp_s": resolved_isp_s,
         "base_isp_s": resolved_base_isp_s,
         "isp_modifier_pct": isp_modifier_pct,
@@ -2585,7 +2602,6 @@ def build_ship_stats_payload(
     return {
         "dry_mass_kg": stats["dry_mass_kg"],
         "fuel_kg": stats["fuel_kg"],
-        "fuel_capacity_kg": stats["fuel_capacity_kg"],
         "wet_mass_kg": wet_mass_kg,
         "isp_s": stats["isp_s"],
         "base_isp_s": stats["base_isp_s"],
