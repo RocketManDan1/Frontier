@@ -2,19 +2,19 @@
   "recipe_id": "semiconductor_materials",
   "name": "Produce Semiconductor Materials",
   "output_item_id": "semiconductor_materials",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "silicate_rock",
-      "qty": 3.3
+      "qty": 3300
     },
     {
       "item_id": "aluminum_oxides",
-      "qty": 0.27
+      "qty": 270
     }
   ],
-  "build_time_s": 40,
-  "facility_type": "factory",
+  "build_time_s": 40000,
+  "facility_type": "refinery",
   "refinery_category": "lithic_processing",
   "min_tech_tier": 2,
   "power_kw": 320,

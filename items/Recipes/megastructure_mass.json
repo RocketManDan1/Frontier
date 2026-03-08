@@ -2,22 +2,22 @@
   "recipe_id": "megastructure_mass",
   "name": "Produce Megastructure Mass",
   "output_item_id": "megastructure_mass",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "silicate_rock",
-      "qty": 1.15
+      "qty": 1150
     },
     {
       "item_id": "water_ice",
-      "qty": 0.45
+      "qty": 450
     },
     {
       "item_id": "sulfur_compounds",
-      "qty": 0.1
+      "qty": 100
     }
   ],
-  "build_time_s": 20,
+  "build_time_s": 20000,
   "facility_type": "refinery",
   "refinery_category": "lithic_processing",
   "min_tech_tier": 1,

@@ -794,6 +794,17 @@
         water_extraction_kg_per_hr: p.water_extraction_kg_per_hr,
         min_water_ice_fraction: p.min_water_ice_fraction,
         max_water_ice_fraction: p.max_water_ice_fraction,
+        miner_type: p.miner_type,
+        operational_environment: p.operational_environment,
+        min_surface_gravity_ms2: p.min_surface_gravity_ms2,
+        max_surface_gravity_ms2: p.max_surface_gravity_ms2,
+        min_volatile_mass_fraction: p.min_volatile_mass_fraction,
+        thermal_mw_input: p.thermal_mw_input,
+        electric_mw: p.electric_mw,
+        conversion_efficiency: p.conversion_efficiency,
+        max_concurrent_recipes: p.max_concurrent_recipes,
+        recipe_slots: p.recipe_slots,
+        supported_recipe_names: p.supported_recipe_names,
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
 

@@ -27,6 +27,66 @@ def _main():
     return main
 
 
+def _compute_site_eligibility(gravity_m_s2: float, resource_distribution: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compute which miner types and ISRU families are eligible for a site
+    based on its gravity and water-ice fraction.
+
+    Returns a dict with:
+      eligible_miners: list of {"type": ..., "label": ...}
+      eligible_isru:   list of {"type": ..., "label": ...}
+    """
+    grav = gravity_m_s2
+
+    # ── Miner eligibility by gravity / volatiles ─────────
+    eligible_miners: List[Dict[str, str]] = []
+    if grav >= 1.0:
+        eligible_miners.append({"type": "large_body", "label": "Large-Body Miners", "reason": f"Gravity ≥ 1.0 m/s²"})
+    if grav < 1.0:
+        eligible_miners.append({"type": "microgravity", "label": "Microgravity Miners", "reason": f"Gravity < 1.0 m/s²"})
+
+    # Volatile fraction for cryovolatile
+    _VOLATILE_IDS = {"water_ice", "carbon_volatiles", "nitrogen_volatiles"}
+    volatile_fraction = sum(
+        float(r.get("mass_fraction") or 0)
+        for r in resource_distribution
+        if r.get("resource_id") in _VOLATILE_IDS
+    )
+    if volatile_fraction >= 0.4:
+        eligible_miners.append({
+            "type": "cryovolatile",
+            "label": "Cryovolatile Miners",
+            "reason": f"Volatiles ≥ 40% ({volatile_fraction:.0%})",
+        })
+
+    # ── ISRU eligibility by water-ice fraction ───────────
+    water_ice_fraction = 0.0
+    for r in resource_distribution:
+        if r.get("resource_id") == "water_ice":
+            water_ice_fraction = float(r.get("mass_fraction") or 0)
+            break
+
+    eligible_isru: List[Dict[str, str]] = []
+    # Deep Efficiency Sifting: 0–15% water ice
+    if water_ice_fraction <= 0.15:
+        eligible_isru.append({
+            "type": "deep_efficiency_sifting",
+            "label": "Deep Efficiency Sifting ISRU",
+            "reason": f"Water Ice ≤ 15% ({water_ice_fraction:.1%})",
+        })
+    # Heat Drill Capture: >= 8% water ice
+    if water_ice_fraction >= 0.08:
+        eligible_isru.append({
+            "type": "heat_drill_capture",
+            "label": "Heat Drill Capture ISRU",
+            "reason": f"Water Ice ≥ 8% ({water_ice_fraction:.1%})",
+        })
+
+    return {
+        "eligible_miners": eligible_miners,
+        "eligible_isru": eligible_isru,
+    }
+
+
 # ── Helpers ────────────────────────────────────────────────
 
 def build_tree(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
@@ -188,15 +248,21 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
     for s in sites:
         site_id = s["location_id"]
         is_prospected = site_id in prospected_sites
-        result.append({
+        site_resources = resources_by_site.get(site_id, []) if is_prospected else []
+        site_entry: Dict[str, Any] = {
             "location_id": site_id,
             "name": s["site_name"],
             "body_id": s["body_id"],
             "orbit_node_id": s["orbit_node_id"],
             "gravity_m_s2": float(s["gravity_m_s2"]),
             "is_prospected": is_prospected,
-            "resource_distribution": resources_by_site.get(site_id, []) if is_prospected else [],
-        })
+            "resource_distribution": site_resources,
+        }
+        if is_prospected:
+            site_entry["eligible_equipment"] = _compute_site_eligibility(
+                float(s["gravity_m_s2"]), resources_by_site.get(site_id, [])
+            )
+        result.append(site_entry)
 
     return {"surface_sites": result}
 
@@ -250,7 +316,7 @@ def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connec
             for r in rows
         ]
 
-    return {
+    response: Dict[str, Any] = {
         "location_id": site["location_id"],
         "name": site["site_name"],
         "body_id": site["body_id"],
@@ -259,3 +325,9 @@ def api_surface_site_detail(site_id: str, request: Request, conn: sqlite3.Connec
         "is_prospected": is_prospected,
         "resource_distribution": resources,
     }
+    if is_prospected:
+        response["eligible_equipment"] = _compute_site_eligibility(
+            float(site["gravity_m_s2"]), resources
+        )
+
+    return response

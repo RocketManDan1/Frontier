@@ -3,10 +3,10 @@
   "tech_category": "refineries_metallurgy",
   "display_name": "Metallurgical Refinery",
   "notes": [
-    "Processes metallic ore feedstocks and carbon precursors into structural alloys, carbon-fiber composites, and advanced aerospace materials.",
+    "Processes metallic ore feedstocks and carbon precursors into structural alloys, carbon composites, and advanced aerospace alloys.",
     "throughput_mult scales batch completion speed relative to the recipe's base build_time_s.",
     "efficiency is the fraction of listed input materials consumed; values below 1.0 represent yield improvements from process control.",
-    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "All refineries in this family can process all metallurgy recipes in-domain from tech 1 onward.",
     "max_concurrent_recipes is the number of recipe slots running in parallel.",
     "Draws electric_mw from the ship or base power bus continuously while active.",
     "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."

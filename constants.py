@@ -40,7 +40,7 @@ ITEM_CATEGORIES: List[Dict[str, Any]] = [
         "id": "miner",
         "name": "Miner",
         "kind": "ship_component",
-        "description": "Surface-deployed robotic miner for bulk excavation and ore extraction. Subtypes: large_body (gravity > 1 m/s²), microgravity (< 1 m/s²), cryovolatile (ice-rich sites).",
+        "description": "Surface-deployed robotic miner for bulk excavation and ore extraction. Subtypes: large_body (gravity >= 1 m/s²), microgravity (< 1 m/s²), cryovolatile (>= 40% water ice sites).",
     },
     {
         "id": "printer",

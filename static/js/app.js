@@ -1717,6 +1717,17 @@
           branch: partData.branch || "",
           family: partData.thruster_family || "",
           techLevel: partData.tech_level || "",
+          miner_type: partData.miner_type,
+          operational_environment: partData.operational_environment,
+          min_surface_gravity_ms2: partData.min_surface_gravity_ms2,
+          max_surface_gravity_ms2: partData.max_surface_gravity_ms2,
+          min_volatile_mass_fraction: partData.min_volatile_mass_fraction,
+          thermal_mw_input: partData.thermal_mw_input,
+          electric_mw: partData.electric_mw,
+          conversion_efficiency: partData.conversion_efficiency,
+          max_concurrent_recipes: partData.max_concurrent_recipes,
+          recipe_slots: partData.recipe_slots,
+          supported_recipe_names: partData.supported_recipe_names,
         });
         partGrid.appendChild(cell);
       });
@@ -2288,6 +2299,17 @@
         branch: p.branch || "",
         family: p.thruster_family || "",
         techLevel: p.tech_level || "",
+        miner_type: p.miner_type,
+        operational_environment: p.operational_environment,
+        min_surface_gravity_ms2: p.min_surface_gravity_ms2,
+        max_surface_gravity_ms2: p.max_surface_gravity_ms2,
+        min_volatile_mass_fraction: p.min_volatile_mass_fraction,
+        thermal_mw_input: p.thermal_mw_input,
+        electric_mw: p.electric_mw,
+        conversion_efficiency: p.conversion_efficiency,
+        max_concurrent_recipes: p.max_concurrent_recipes,
+        recipe_slots: p.recipe_slots,
+        supported_recipe_names: p.supported_recipe_names,
         tooltipLines: tooltipLines.length ? tooltipLines : undefined,
       });
       grid.appendChild(cell);
@@ -6183,6 +6205,16 @@
         const icon = site.is_prospected ? "✓" : "?";
         const cls = site.is_prospected ? "bodyTooltipSiteProspected" : "bodyTooltipSiteUnknown";
         html += `<div class="bodyTooltipSiteRow"><span class="${cls}">${icon}</span> ${site.name}</div>`;
+        // Show eligible equipment for prospected sites
+        if (site.is_prospected && site.eligible_equipment) {
+          const elig = site.eligible_equipment;
+          const tags = [];
+          (elig.eligible_miners || []).forEach(m => tags.push(m.label));
+          (elig.eligible_isru || []).forEach(m => tags.push(m.label));
+          if (tags.length) {
+            html += `<div class="bodyTooltipSiteEligible">${tags.map(t => `<span class="bodyTooltipEligTag">${t}</span>`).join("")}</div>`;
+          }
+        }
       }
       sitesEl.innerHTML = html;
     });
@@ -6235,12 +6267,9 @@
     if (isOwn) {
       const dvPct = (ship.delta_v_remaining_m_s != null && ship.delta_v_remaining_m_s > 0)
         ? Math.round(ship.delta_v_remaining_m_s) + " m/s" : "0 m/s";
-      const fuelPct = (ship.fuel_capacity_kg > 0)
-        ? Math.round((ship.fuel_kg / ship.fuel_capacity_kg) * 100) + "%" : "—";
       rows = `
         <div class="shipTooltipDivider"></div>
         <div class="shipTooltipRow"><span class="shipTooltipLabel">Δv</span><span class="shipTooltipVal">${dvPct}</span></div>
-        <div class="shipTooltipRow"><span class="shipTooltipLabel">Fuel</span><span class="shipTooltipVal">${fuelPct}</span></div>
         <div class="shipTooltipRow"><span class="shipTooltipLabel">Mass</span><span class="shipTooltipVal">${formatMassTons(ship.total_mass_kg)}</span></div>
         <div class="shipTooltipRow"><span class="shipTooltipLabel">Accel</span><span class="shipTooltipVal">${accelStr}</span></div>`;
     } else {

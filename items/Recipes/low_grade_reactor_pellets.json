@@ -2,18 +2,18 @@
   "recipe_id": "low_grade_reactor_pellets",
   "name": "Produce Low-Grade Reactor Pellets",
   "output_item_id": "low_grade_reactor_pellets",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "radioactives",
-      "qty": 10.5
+      "qty": 10500
     },
     {
       "item_id": "strategic_elements",
-      "qty": 0.08
+      "qty": 80
     }
   ],
-  "build_time_s": 40,
+  "build_time_s": 40000,
   "facility_type": "refinery",
   "refinery_category": "nuclear_exotic",
   "min_tech_tier": 2,

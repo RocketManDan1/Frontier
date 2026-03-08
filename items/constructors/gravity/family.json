@@ -3,8 +3,8 @@
   "tech_category": "constructors_gravity",
   "display_name": "Large-Body Miner",
   "notes": [
-    "Surface-deployed mining robots for bodies with significant gravity (Luna, Mercury, Ceres-class and above; minimum ~1.6 m/s²).",
-    "miner_type: large_body — requires site gravity above 1 m/s². Blocked from microgravity bodies.",
+    "Surface-deployed mining robots for bodies with significant gravity (Luna, Mercury, Ceres-class and above; minimum 1.0 m/s²).",
+    "miner_type: large_body — requires site gravity >= 1.0 m/s². Blocked from microgravity bodies.",
     "mining_rate_kg_per_hr describes bulk regolith excavation and ore extraction throughput.",
     "Multiple units on the same vessel or surface cache may be operated concurrently; rates sum.",
     "Draws electric_mw from the ship or surface power bus during active operations.",

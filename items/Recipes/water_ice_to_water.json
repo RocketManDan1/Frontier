@@ -2,14 +2,14 @@
   "recipe_id": "water_ice_to_water",
   "name": "Melt Water Ice",
   "output_item_id": "water",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "water_ice",
-      "qty": 1
+      "qty": 1000
     }
   ],
-  "build_time_s": 10,
+  "build_time_s": 10000,
   "facility_type": "refinery",
   "refinery_category": "all_refineries",
   "min_tech_tier": 1,

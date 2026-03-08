@@ -845,7 +845,7 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
     # Parts: tech level 1 and 2 only.
     # If org has unlocked techs, we try to filter by unlocks; if that yields no parts,
     # fall back to base TL gating so boost options never disappear due unlock drift.
-    part_candidates: List[Dict[str, Any]] = []
+    part_candidates_by_type: Dict[str, List[Dict[str, Any]]] = {}
     for loader_name, loader_fn in [
         ("thruster", catalog_service.load_thruster_main_catalog),
         ("reactor", catalog_service.load_reactor_catalog),
@@ -854,11 +854,13 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
         ("constructor", catalog_service.load_constructor_catalog),
         ("miner", catalog_service.load_miner_catalog),
         ("printer", catalog_service.load_printer_catalog),
+        ("isru", catalog_service.load_isru_catalog),
         ("refinery", catalog_service.load_refinery_catalog),
         ("robonaut", catalog_service.load_robonaut_catalog),
         ("storage", catalog_service.load_storage_catalog),
     ]:
         catalog = loader_fn()
+        part_candidates_by_type.setdefault(loader_name, [])
         for iid, item in catalog.items():
             tech_lvl = float(item.get("tech_level") or 1)
             if tech_lvl not in BOOSTABLE_TECH_LEVELS:
@@ -866,7 +868,7 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
             branch = str(item.get("branch") or "")
             node_id = _tech_node_id_for_item(loader_name, tech_lvl, branch, item=item)
             mass = float(item.get("mass_kg") or item.get("dry_mass_kg") or 0.0)
-            part_candidates.append({
+            part_candidates_by_type[loader_name].append({
                 "item_id": iid,
                 "name": item.get("name") or iid,
                 "type": loader_name,
@@ -875,17 +877,31 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
                 "required_tech_id": node_id,
             })
 
-    unlocked_part_candidates = [
-        p for p in part_candidates
-        if p.get("required_tech_id") is None or p.get("required_tech_id") in unlocked_ids
-    ]
-
-    # Prefer unlock-gated set only when it is non-empty; otherwise use TL-only base set.
-    chosen_parts = unlocked_part_candidates if unlocked_part_candidates else part_candidates
-    for p in chosen_parts:
-        out = dict(p)
-        out.pop("required_tech_id", None)
-        boostable.append(out)
+    # Prefer unlock-gated items per family; if a family yields no unlock matches,
+    # fall back to TL-only candidates for that family so options don't disappear.
+    for loader_name in [
+        "thruster",
+        "reactor",
+        "generator",
+        "radiator",
+        "constructor",
+        "miner",
+        "printer",
+        "isru",
+        "refinery",
+        "robonaut",
+        "storage",
+    ]:
+        family_candidates = part_candidates_by_type.get(loader_name, [])
+        unlocked_family = [
+            p for p in family_candidates
+            if p.get("required_tech_id") is None or p.get("required_tech_id") in unlocked_ids
+        ]
+        chosen_family = unlocked_family if unlocked_family else family_candidates
+        for p in chosen_family:
+            out = dict(p)
+            out.pop("required_tech_id", None)
+            boostable.append(out)
 
     return boostable
 
@@ -1516,3 +1532,128 @@ def is_site_prospected(conn: sqlite3.Connection, org_id: str, site_location_id: 
         (org_id, site_location_id),
     ).fetchone()
     return int(row["cnt"]) > 0
+
+
+# ── Scenario Leaderboard (Win Condition) ──────────────────────────────────────
+
+# Nuclear research tree nodes (the branch from starter_corp through to early_fusion_reactors)
+NUCLEAR_TREE_NODES = [
+    "starter_corp",
+    "nuclear_fission",
+    "pebble_bed",
+    "advanced_pebble_bed",
+    "advanced_solid_core_ii",
+    "advanced_solid_core_iii",
+    "high_power_solid_core",
+    "high_power_solid_core_ii",
+    "liquid_core",
+    "advanced_liquid_core",
+    "vapor_core",
+    "vapor_core_ii",
+    "closed_cycle_gas_core",
+    "open_cycle_gas_core",
+    "early_fusion_reactors",
+]
+
+# He3 required by the tokamak recipe (kg)
+TOKAMAK_HE3_REQUIRED_KG = 50000.0
+
+# Win condition item
+WIN_CONDITION_RECIPE_ID = "helion_he3_tokamak"
+
+
+def get_scenario_leaderboard(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """
+    Compute the Scenario 1 leaderboard for all corporations.
+
+    Progress breakdown:
+      - 90% max: fraction of nuclear research tree nodes unlocked
+      - 5% max:  fraction of required He3 mined / in possession
+      - 5%:      awarded for completing the tokamak build (100% total = win)
+    """
+    # Get all corps
+    corps = conn.execute(
+        "SELECT id, name, color, org_id FROM corporations ORDER BY name"
+    ).fetchall()
+
+    results = []
+    for corp in corps:
+        corp_id = str(corp["id"])
+        corp_name = str(corp["name"])
+        corp_color = str(corp["color"] or "#ffffff")
+        org_id = str(corp["org_id"] or "")
+
+        if not org_id:
+            results.append({
+                "corp_id": corp_id,
+                "corp_name": corp_name,
+                "color": corp_color,
+                "research_pct": 0.0,
+                "he3_pct": 0.0,
+                "build_pct": 0.0,
+                "total_pct": 0.0,
+                "winner": False,
+            })
+            continue
+
+        # ── Research progress (90% cap) ────────────────────────────────
+        unlocked = {
+            str(r["tech_id"])
+            for r in conn.execute(
+                "SELECT tech_id FROM research_unlocks WHERE org_id = ?", (org_id,)
+            ).fetchall()
+        }
+        nuclear_unlocked = sum(1 for n in NUCLEAR_TREE_NODES if n in unlocked)
+        research_fraction = nuclear_unlocked / len(NUCLEAR_TREE_NODES)
+        research_pct = round(research_fraction * 90.0, 2)
+
+        # ── He3 progress (5% cap) ─────────────────────────────────────
+        # Sum He3 in location inventories owned by this corp
+        loc_he3_row = conn.execute(
+            """SELECT COALESCE(SUM(mass_kg), 0) as total
+               FROM location_inventory_stacks
+               WHERE corp_id = ? AND item_id = 'helium_3'""",
+            (corp_id,),
+        ).fetchone()
+        loc_he3 = float(loc_he3_row["total"]) if loc_he3_row else 0.0
+
+        # Sum He3 in ship cargo for ships owned by this corp
+        ship_he3_row = conn.execute(
+            """SELECT COALESCE(SUM(sc.mass_kg), 0) as total
+               FROM ship_cargo_stacks sc
+               JOIN ships s ON s.id = sc.ship_id
+               WHERE s.corp_id = ? AND sc.resource_id = 'helium_3'""",
+            (corp_id,),
+        ).fetchone()
+        ship_he3 = float(ship_he3_row["total"]) if ship_he3_row else 0.0
+
+        total_he3 = loc_he3 + ship_he3
+        he3_fraction = min(1.0, total_he3 / TOKAMAK_HE3_REQUIRED_KG) if TOKAMAK_HE3_REQUIRED_KG > 0 else 0.0
+        he3_pct = round(he3_fraction * 5.0, 2)
+
+        # ── Build progress (5% for completion) ────────────────────────
+        built_row = conn.execute(
+            """SELECT COUNT(*) as cnt FROM construction_queue
+               WHERE corp_id = ? AND recipe_id = ? AND status = 'completed'""",
+            (corp_id, WIN_CONDITION_RECIPE_ID),
+        ).fetchone()
+        has_built = int(built_row["cnt"]) > 0 if built_row else False
+        build_pct = 5.0 if has_built else 0.0
+
+        total_pct = round(research_pct + he3_pct + build_pct, 2)
+        winner = total_pct >= 100.0
+
+        results.append({
+            "corp_id": corp_id,
+            "corp_name": corp_name,
+            "color": corp_color,
+            "research_pct": research_pct,
+            "he3_pct": he3_pct,
+            "build_pct": build_pct,
+            "total_pct": total_pct,
+            "winner": winner,
+        })
+
+    # Sort by total_pct descending
+    results.sort(key=lambda r: r["total_pct"], reverse=True)
+    return results

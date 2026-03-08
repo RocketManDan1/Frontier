@@ -87,6 +87,7 @@
     { id: "refineries",   label: "Refineries",    catId: "refinery",    hue: 340, tooltip: "Processes raw feedstock into refined industrial resources." },
     { id: "miners",       label: "Miners",        catId: "miner",       hue: 175, tooltip: "Surface excavation systems specialized for large-body, microgravity, or cryovolatile sites." },
     { id: "printers",     label: "Printers",      catId: "printer",     hue: 165, tooltip: "Surface fabrication systems specialized for industrial equipment or ship components." },
+    { id: "isru",         label: "ISRU",          catId: "isru",        hue: 135, tooltip: "In-situ resource utilization modules for volatile extraction and processing support." },
     { id: "storage",      label: "Storage",       catId: "storage",     hue: 260, tooltip: "Cargo and propellant capacity for logistics and mission endurance." },
     { id: "radiators",    label: "Radiators",     catId: "radiator",    hue: 200, tooltip: "Rejects excess waste heat so the ship can run at sustained power." },
     { id: "generators",   label: "Generators",    catId: "generator",   hue: 145, tooltip: "Converts MWth into electrical output (MWe)." },
@@ -230,6 +231,7 @@
     if (rawCategory === "constructor") return "miners";
     if (rawCategory === "miner") return "miners";
     if (rawCategory === "printer") return "printers";
+    if (rawCategory === "isru") return "isru";
     if (rawCategory === "refinery") return "refineries";
     if (rawCategory === "prospector" || rawCategory === "robonaut") return "robonauts";
     if (rawCategory === "storage") return "storage";
@@ -242,10 +244,12 @@
     if (rawCategory.includes("constructor")) return "miners";
     if (rawCategory.includes("miner") || rawCategory.includes("excavat")) return "miners";
     if (rawCategory.includes("printer") || rawCategory.includes("fabricat")) return "printers";
+    if (rawCategory.includes("isru") || rawCategory.includes("extraction") || rawCategory.includes("drill") || rawCategory.includes("sifting")) return "isru";
     if (rawCategory.includes("refiner") || rawCategory.includes("smelter") || rawCategory.includes("processing")) return "refineries";
     if (rawCategory.includes("prospector") || rawCategory.includes("robonaut") || rawCategory.includes("drone") || rawCategory.includes("rover")) return "robonauts";
     if (Number(part?.thrust_kn) > 0 || Number(part?.isp_s) > 0) return "thrusters";
     if (Number(part?.heat_rejection_mw) > 0) return "radiators";
+    if (Number(part?.water_extraction_kg_per_hr) > 0 || Number(part?.min_water_ice_fraction) > 0 || Number(part?.max_water_ice_fraction) > 0) return "isru";
     if (Number(part?.capacity_m3) > 0 || Number(part?.fuel_capacity_kg) > 0 || Number(part?.water_kg) > 0) return "storage";
     if (name.includes("storage") || name.includes("tank")) return "storage";
     return "storage";
@@ -385,6 +389,17 @@
           water_extraction_kg_per_hr: part?.water_extraction_kg_per_hr,
           min_water_ice_fraction: part?.min_water_ice_fraction,
           max_water_ice_fraction: part?.max_water_ice_fraction,
+          miner_type: part?.miner_type,
+          operational_environment: part?.operational_environment,
+          min_surface_gravity_ms2: part?.min_surface_gravity_ms2,
+          max_surface_gravity_ms2: part?.max_surface_gravity_ms2,
+          min_volatile_mass_fraction: part?.min_volatile_mass_fraction,
+          thermal_mw_input: part?.thermal_mw_input,
+          electric_mw: part?.electric_mw,
+          conversion_efficiency: part?.conversion_efficiency,
+          max_concurrent_recipes: part?.max_concurrent_recipes,
+          recipe_slots: part?.recipe_slots,
+          supported_recipe_names: part?.supported_recipe_names,
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         })
       : (() => {

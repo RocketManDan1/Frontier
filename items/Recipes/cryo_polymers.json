@@ -2,27 +2,27 @@
   "recipe_id": "cryo_polymers",
   "name": "Produce Cryo-Polymers",
   "output_item_id": "cryo_polymers",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "carbon_volatiles",
-      "qty": 1.35
+      "qty": 1350
     },
     {
       "item_id": "water_ice",
-      "qty": 0.3
+      "qty": 300
     },
     {
       "item_id": "silicate_rock",
-      "qty": 0.25
+      "qty": 250
     },
     {
       "item_id": "nitrogen_volatiles",
-      "qty": 0.05
+      "qty": 50
     }
   ],
-  "build_time_s": 40,
-  "facility_type": "factory",
+  "build_time_s": 40000,
+  "facility_type": "refinery",
   "refinery_category": "volatiles_cryogenics",
   "min_tech_tier": 2,
   "power_kw": 260,

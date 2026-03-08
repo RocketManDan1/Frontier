@@ -852,7 +852,7 @@ def deploy_equipment(
                     float(r["mass_fraction"]) for r in vol_rows
                     if r["resource_id"] in _VOLATILE_RESOURCE_IDS
                 )
-                min_vol = float(catalog_entry.get("min_volatile_mass_fraction") or 0.5)
+                min_vol = float(catalog_entry.get("min_volatile_mass_fraction") or 0.4)
                 if volatile_fraction < min_vol:
                     raise ValueError(
                         f"Cryovolatile miner requires site volatile mass fraction >= {min_vol:.0%}; "
@@ -910,8 +910,10 @@ def deploy_equipment(
             "miner_type": catalog_entry.get("miner_type", "large_body"),
             "mining_rate_kg_per_hr": catalog_entry.get("mining_rate_kg_per_hr", 0),
             "excavation_type": catalog_entry.get("excavation_type", ""),
+            "operational_environment": catalog_entry.get("operational_environment", "surface_gravity"),
             "min_surface_gravity_ms2": catalog_entry.get("min_surface_gravity_ms2", 0.0),
             "max_surface_gravity_ms2": catalog_entry.get("max_surface_gravity_ms2", 0.0),
+            "min_volatile_mass_fraction": catalog_entry.get("min_volatile_mass_fraction", 0.0),
         })
     elif category == "printer":
         config.update({
@@ -1253,8 +1255,8 @@ def start_production_job(
             printer_type = str(config.get("printer_type") or "industrial")
             out_check_id = str(recipe.get("output_item_id") or "").strip()
             if out_check_id:
-                _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer"}
-                _SHIP_CATS = {"thruster", "reactor", "generator", "radiator", "isru"}
+                _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer", "isru"}
+                _SHIP_CATS = {"thruster", "reactor", "generator", "radiator"}
                 # Determine output category by searching all catalogs
                 _out_cat = ""
                 for _ldr in (
@@ -1275,12 +1277,12 @@ def start_production_job(
                 if printer_type == "industrial" and _out_cat and _out_cat not in _INDUSTRIAL_CATS:
                     raise ValueError(
                         f"Industrial printer cannot build output category '{_out_cat}'. "
-                        f"Use a Ship Printer for thrusters, reactors, generators, radiators, and ISRU."
+                        f"Use an Aerospace Printer for thrusters, reactors, generators, and radiators."
                     )
-                elif printer_type == "ship" and _out_cat and _out_cat not in _SHIP_CATS:
+                elif printer_type in ("ship", "aerospace") and _out_cat and _out_cat not in _SHIP_CATS:
                     raise ValueError(
-                        f"Ship printer cannot build output category '{_out_cat}'. "
-                        f"Use an Industrial Printer for refineries, miners, prospectors, and printers."
+                        f"Aerospace printer cannot build output category '{_out_cat}'. "
+                        f"Use an Industrial Printer for refineries, miners, prospectors, printers, and ISRU."
                     )
     else:
         # Refineries run refinery/factory recipes
@@ -1841,7 +1843,7 @@ def get_available_recipes_for_location(
 ) -> List[Dict[str, Any]]:
     """
     Get all recipes that could be run at a location, based on deployed equipment.
-    - Refinery/factory recipes matched to deployed refineries (by specialization + tier).
+    - Refinery/factory recipes matched to deployed refineries (by specialization).
     - Shipyard recipes matched to deployed constructors (any constructor can build any).
     Also annotates each recipe with whether the location has sufficient inputs.
     """
@@ -1863,8 +1865,8 @@ def get_available_recipes_for_location(
     all_recipes = catalog_service.load_recipe_catalog()
     resource_catalog = catalog_service.load_resource_catalog()
 
-    # Build output_item_id → category_id map from all part catalogs
-    _output_category_map: Dict[str, str] = {}
+    # Build output_item_id → metadata map from all part catalogs
+    _output_meta_map: Dict[str, Dict[str, str]] = {}
     for _loader, _cat in [
         (catalog_service.load_thruster_main_catalog, "thruster"),
         (catalog_service.load_reactor_catalog, "reactor"),
@@ -1878,8 +1880,11 @@ def get_available_recipes_for_location(
         (catalog_service.load_refinery_catalog, "refinery"),
     ]:
         try:
-            for _item_id in _loader():
-                _output_category_map[_item_id] = _cat
+            for _item_id, _entry in _loader().items():
+                _output_meta_map[_item_id] = {
+                    "category": _cat,
+                    "research_node": str((_entry or {}).get("research_node") or "").strip(),
+                }
         except Exception:
             pass
 
@@ -1893,17 +1898,17 @@ def get_available_recipes_for_location(
 
         if facility_type == "shipyard":
             # Shipyard recipes: filter printers by printer_type specialization
-            _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer"}
-            _SHIP_CATS = {"thruster", "reactor", "generator", "radiator", "isru"}
+            _INDUSTRIAL_CATS = {"refinery", "miner", "constructor", "prospector", "robonaut", "printer", "isru"}
+            _SHIP_CATS = {"thruster", "reactor", "generator", "radiator"}
             out_item_id_r = str(recipe.get("output_item_id") or "")
-            out_cat_r = _output_category_map.get(out_item_id_r, "")
+            out_cat_r = (_output_meta_map.get(out_item_id_r) or {}).get("category", "")
             for c in constructors:
                 equip_cat = str(c.get("category") or "")
                 if equip_cat == "printer":
                     ptype = str((c.get("config") or {}).get("printer_type") or "industrial")
                     if ptype == "industrial" and out_cat_r and out_cat_r not in _INDUSTRIAL_CATS:
                         continue
-                    if ptype == "ship" and out_cat_r and out_cat_r not in _SHIP_CATS:
+                    if ptype in ("ship", "aerospace") and out_cat_r and out_cat_r not in _SHIP_CATS:
                         continue
                 compatible_constructors.append(c)
         else:
@@ -1919,35 +1924,44 @@ def get_available_recipes_for_location(
 
         # Shipyard recipes are visible only when researched for the org.
         if facility_type == "shipyard" and unlocked_tech_ids is not None:
-            required_tier = max(0, int(recipe.get("min_tech_tier") or 0))
-            if required_tier > 0:
-                out_id = str(recipe.get("output_item_id") or "")
-                output_category = _output_category_map.get(out_id, "other")
-                research_category = _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY.get(output_category)
-                if research_category:
-                    # Refineries have per-branch subtrees in the research tree
-                    if output_category == "refinery":
-                        ref_cat = str(recipe.get("refinery_category") or "")
-                        subtree_prefix = _REFINERY_CATEGORY_TO_RESEARCH_PREFIX.get(ref_cat)
-                        if subtree_prefix:
-                            required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
+            out_id = str(recipe.get("output_item_id") or "")
+            out_meta = _output_meta_map.get(out_id) or {}
+            required_node_id = str(recipe.get("required_tech_id") or "").strip()
+            if not required_node_id:
+                required_node_id = str(out_meta.get("research_node") or "").strip()
+
+            if required_node_id:
+                if required_node_id not in unlocked_tech_ids:
+                    continue
+            else:
+                required_tier = max(0, int(recipe.get("min_tech_tier") or 0))
+                if required_tier > 0:
+                    output_category = str(out_meta.get("category") or "other")
+                    research_category = _SHIPYARD_OUTPUT_TO_RESEARCH_CATEGORY.get(output_category)
+                    if research_category:
+                        # Refineries have per-branch subtrees in the research tree
+                        if output_category == "refinery":
+                            ref_cat = str(recipe.get("refinery_category") or "")
+                            subtree_prefix = _REFINERY_CATEGORY_TO_RESEARCH_PREFIX.get(ref_cat)
+                            if subtree_prefix:
+                                required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
+                            else:
+                                required_node_id = f"{research_category}_lvl_{required_tier}"
+                        elif output_category == "isru":
+                            # ISRU has per-branch subtrees (sifting / heat_drill)
+                            out_id_isru = str(recipe.get("output_item_id") or "")
+                            isru_catalog = catalog_service.load_isru_catalog()
+                            isru_entry = isru_catalog.get(out_id_isru, {})
+                            isru_branch = str(isru_entry.get("branch") or "")
+                            subtree_prefix = _ISRU_BRANCH_TO_RESEARCH_PREFIX.get(isru_branch)
+                            if subtree_prefix:
+                                required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
+                            else:
+                                required_node_id = f"{research_category}_lvl_{required_tier}"
                         else:
                             required_node_id = f"{research_category}_lvl_{required_tier}"
-                    elif output_category == "isru":
-                        # ISRU has per-branch subtrees (sifting / heat_drill)
-                        out_id_isru = str(recipe.get("output_item_id") or "")
-                        isru_catalog = catalog_service.load_isru_catalog()
-                        isru_entry = isru_catalog.get(out_id_isru, {})
-                        isru_branch = str(isru_entry.get("branch") or "")
-                        subtree_prefix = _ISRU_BRANCH_TO_RESEARCH_PREFIX.get(isru_branch)
-                        if subtree_prefix:
-                            required_node_id = f"{subtree_prefix}_lvl_{required_tier}"
-                        else:
-                            required_node_id = f"{research_category}_lvl_{required_tier}"
-                    else:
-                        required_node_id = f"{research_category}_lvl_{required_tier}"
-                    if required_node_id not in unlocked_tech_ids:
-                        continue
+                        if required_node_id not in unlocked_tech_ids:
+                            continue
 
         # Check input availability and compute max_batches
         inputs_status = []
@@ -1986,7 +2000,7 @@ def get_available_recipes_for_location(
 
         # Determine output category for grouping
         out_id = str(recipe.get("output_item_id") or "")
-        output_category = _output_category_map.get(out_id, "other")
+        output_category = str((_output_meta_map.get(out_id) or {}).get("category") or "other")
 
         result.append({
             **recipe,
@@ -2205,6 +2219,21 @@ def get_refinery_slots(conn: sqlite3.Connection, location_id: str, *, facility_i
         ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
+    # Pre-fetch current job timing for active slots
+    job_timing: Dict[str, Dict[str, float]] = {}
+    active_job_ids = [str(r["current_job_id"]) for r in rows if r["current_job_id"]]
+    if active_job_ids:
+        placeholders = ",".join("?" for _ in active_job_ids)
+        job_rows = conn.execute(
+            f"SELECT id, started_at, completes_at FROM production_jobs WHERE id IN ({placeholders})",
+            active_job_ids,
+        ).fetchall()
+        for jr in job_rows:
+            job_timing[str(jr["id"])] = {
+                "started_at": float(jr["started_at"] or 0),
+                "completes_at": float(jr["completes_at"] or 0),
+            }
+
     result = []
     for r in rows:
         recipe_id = r["recipe_id"]
@@ -2233,6 +2262,10 @@ def get_refinery_slots(conn: sqlite3.Connection, location_id: str, *, facility_i
                     min_batches = min(min_batches, batches_for_input)
                 batches_available = int(min_batches) if min_batches != float("inf") else 0
 
+        # Attach job timing if this slot has an active job
+        cur_job_id = str(r["current_job_id"] or "")
+        jt = job_timing.get(cur_job_id, {})
+
         result.append({
             "id": r["id"],
             "equipment_id": r["equipment_id"],
@@ -2247,6 +2280,8 @@ def get_refinery_slots(conn: sqlite3.Connection, location_id: str, *, facility_i
             "specialization": config.get("specialization", ""),
             "throughput_mult": config.get("throughput_mult", 1.0),
             "corp_id": corp_id,
+            "job_started_at": jt.get("started_at"),
+            "job_completes_at": jt.get("completes_at"),
         })
     return result
 

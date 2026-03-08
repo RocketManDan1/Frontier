@@ -1,0 +1,23 @@
+{
+  "id": "helion_he3_tokamak",
+  "name": "Helion He3 Tokamak Fusion Reactor",
+  "research_node": "early_fusion_reactors",
+  "tech_level": 5.0,
+  "branch": "fusion",
+  "mass_t": 500,
+  "output": {
+    "thermal_mw": 1200000,
+    "core_temp_k": 100000000
+  },
+  "fuel": {
+    "type": "fusion_fuel",
+    "geometry": "tokamak_magnetic_confinement"
+  },
+  "description": "The Helion He3 Tokamak is a first-generation aneutronic fusion reactor harnessing Helium-3 deuterium reactions in a toroidal magnetic confinement chamber. At 100 million degrees core temperature and 1.2 GW thermal output, it represents the pinnacle of human energy engineering. Its construction marks a civilizational milestone — mastery over fusion power in deep space.",
+  "ui_tags": [
+    "fusion",
+    "tokamak",
+    "win_condition",
+    "exotic"
+  ]
+}

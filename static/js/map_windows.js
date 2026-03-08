@@ -291,6 +291,17 @@
           volume_m3: item?.volume_m3,
           quantity: qty > 1 ? qty : 0,
           draggable: !!transfer,
+          miner_type: item?.miner_type,
+          operational_environment: item?.operational_environment,
+          min_surface_gravity_ms2: item?.min_surface_gravity_ms2,
+          max_surface_gravity_ms2: item?.max_surface_gravity_ms2,
+          min_volatile_mass_fraction: item?.min_volatile_mass_fraction,
+          thermal_mw_input: item?.thermal_mw_input,
+          electric_mw: item?.electric_mw,
+          conversion_efficiency: item?.conversion_efficiency,
+          max_concurrent_recipes: item?.max_concurrent_recipes,
+          recipe_slots: item?.recipe_slots,
+          supported_recipe_names: item?.supported_recipe_names,
           tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         })
       : (() => {

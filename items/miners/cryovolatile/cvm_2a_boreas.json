@@ -7,7 +7,7 @@
   "mass_t": 7.5,
   "operational_environment": "surface_cryo",
   "miner_type": "cryovolatile",
-  "min_volatile_mass_fraction": 0.5,
+  "min_volatile_mass_fraction": 0.4,
   "power_requirements": {
     "electric_mw": 9.0
   },

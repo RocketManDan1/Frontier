@@ -3,10 +3,10 @@
   "tech_category": "refineries_volatiles",
   "display_name": "Volatiles & Cryogenics Refinery",
   "notes": [
-    "Processes volatile and molecular feedstocks (water ice, carbon and nitrogen volatiles, carbon-chain organics) into propellants, cryogenic polymers, and biosphere support materials.",
+    "Processes volatile and molecular feedstocks (water ice, carbon and nitrogen volatiles, carbon-chain organics) into volatile propellants (hydrolox), high-energy propellant feedstock, cryo-polymers, and biosphere materials.",
     "throughput_mult scales batch completion speed relative to the recipe's base build_time_s.",
     "efficiency is the fraction of listed input materials consumed; values below 1.0 represent improved molecular yield.",
-    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "All refineries in this family can process all volatile/cryogenic recipes in-domain from tech 1 onward.",
     "max_concurrent_recipes is the number of recipe slots running in parallel.",
     "Draws electric_mw from the ship or base power bus continuously while active.",
     "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."

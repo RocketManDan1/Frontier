@@ -538,6 +538,11 @@ def load_printer_catalog() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
+def load_isru_catalog() -> Dict[str, Dict[str, Any]]:
+    return catalog_service.load_isru_catalog()
+
+
+@lru_cache(maxsize=1)
 def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
     return catalog_service.load_refinery_catalog()
 
@@ -1172,6 +1177,7 @@ def normalize_parts(raw_parts: Any) -> List[Dict[str, Any]]:
         radiator_catalog=load_radiator_catalog(),
         robonaut_catalog=load_robonaut_catalog(),
         constructor_catalog={**load_miner_catalog(), **load_printer_catalog()},
+        isru_catalog=load_isru_catalog(),
         refinery_catalog=load_refinery_catalog(),
     )
 
@@ -2099,8 +2105,16 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         ship_fabrication_type = str(part_payload.get("fabrication_type") or "")
         ship_specialization = str(part_payload.get("specialization") or "")
         ship_max_recipe_tier = int(part_payload.get("max_recipe_tier") or 0)
+        ship_max_concurrent_recipes = int(part_payload.get("max_concurrent_recipes") or 0)
+        ship_recipe_slots = int(part_payload.get("recipe_slots") or ship_max_concurrent_recipes or 0)
+        ship_supported_recipe_names = [
+            str(name) for name in (part_payload.get("supported_recipe_names") or []) if str(name).strip()
+        ]
         ship_throughput_mult = float(part_payload.get("throughput_mult") or 0)
         ship_min_gravity = float(part_payload.get("min_surface_gravity_ms2") or 0)
+        ship_max_gravity = float(part_payload.get("max_surface_gravity_ms2") or 0)
+        ship_min_volatile_fraction = float(part_payload.get("min_volatile_mass_fraction") or 0)
+        ship_operational_environment = str(part_payload.get("operational_environment") or "")
         ship_operating_temp_k = float(part_payload.get("operating_temp_k") or 0)
         ship_branch = str(part_payload.get("branch") or "")
         ship_tech_level = float(part_payload.get("tech_level") or 0)
@@ -2160,10 +2174,22 @@ def _stack_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
             ship_row["specialization"] = ship_specialization
         if ship_max_recipe_tier > 0:
             ship_row["max_recipe_tier"] = ship_max_recipe_tier
+        if ship_max_concurrent_recipes > 0:
+            ship_row["max_concurrent_recipes"] = ship_max_concurrent_recipes
+        if ship_recipe_slots > 0:
+            ship_row["recipe_slots"] = ship_recipe_slots
+        if ship_supported_recipe_names:
+            ship_row["supported_recipe_names"] = ship_supported_recipe_names
         if ship_throughput_mult > 0:
             ship_row["throughput_mult"] = ship_throughput_mult
         if ship_min_gravity > 0:
             ship_row["min_surface_gravity_ms2"] = ship_min_gravity
+        if ship_max_gravity > 0:
+            ship_row["max_surface_gravity_ms2"] = ship_max_gravity
+        if ship_min_volatile_fraction > 0:
+            ship_row["min_volatile_mass_fraction"] = ship_min_volatile_fraction
+        if ship_operational_environment:
+            ship_row["operational_environment"] = ship_operational_environment
         if ship_operating_temp_k > 0:
             ship_row["operating_temp_k"] = ship_operating_temp_k
         if ship_branch:
@@ -2250,8 +2276,16 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
         fabrication_type = str(part_payload_loc.get("fabrication_type") or "")
         specialization = str(part_payload_loc.get("specialization") or "")
         max_recipe_tier = int(part_payload_loc.get("max_recipe_tier") or 0)
+        max_concurrent_recipes = int(part_payload_loc.get("max_concurrent_recipes") or 0)
+        recipe_slots = int(part_payload_loc.get("recipe_slots") or max_concurrent_recipes or 0)
+        supported_recipe_names = [
+            str(name) for name in (part_payload_loc.get("supported_recipe_names") or []) if str(name).strip()
+        ]
         throughput_mult = float(part_payload_loc.get("throughput_mult") or 0)
         min_gravity = float(part_payload_loc.get("min_surface_gravity_ms2") or 0)
+        max_gravity = float(part_payload_loc.get("max_surface_gravity_ms2") or 0)
+        min_volatile_fraction = float(part_payload_loc.get("min_volatile_mass_fraction") or 0)
+        operational_environment = str(part_payload_loc.get("operational_environment") or "")
         operating_temp_k = float(part_payload_loc.get("operating_temp_k") or 0)
         branch = str(part_payload_loc.get("branch") or "")
         tech_level = float(part_payload_loc.get("tech_level") or 0)
@@ -2316,10 +2350,22 @@ def _stack_items_for_location(location_payload: Dict[str, Any]) -> List[Dict[str
             row_dict["specialization"] = specialization
         if max_recipe_tier > 0:
             row_dict["max_recipe_tier"] = max_recipe_tier
+        if max_concurrent_recipes > 0:
+            row_dict["max_concurrent_recipes"] = max_concurrent_recipes
+        if recipe_slots > 0:
+            row_dict["recipe_slots"] = recipe_slots
+        if supported_recipe_names:
+            row_dict["supported_recipe_names"] = supported_recipe_names
         if throughput_mult > 0:
             row_dict["throughput_mult"] = throughput_mult
         if min_gravity > 0:
             row_dict["min_surface_gravity_ms2"] = min_gravity
+        if max_gravity > 0:
+            row_dict["max_surface_gravity_ms2"] = max_gravity
+        if min_volatile_fraction > 0:
+            row_dict["min_volatile_mass_fraction"] = min_volatile_fraction
+        if operational_environment:
+            row_dict["operational_environment"] = operational_environment
         if operating_temp_k > 0:
             row_dict["operating_temp_k"] = operating_temp_k
         if branch:
@@ -2408,6 +2454,7 @@ def build_shipyard_catalog_payload() -> Dict[str, Any]:
         radiator_catalog=load_radiator_catalog(),
         robonaut_catalog=load_robonaut_catalog(),
         constructor_catalog=load_constructor_catalog(),
+        isru_catalog=load_isru_catalog(),
         refinery_catalog=load_refinery_catalog(),
     )
 

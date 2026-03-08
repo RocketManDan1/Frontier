@@ -3,10 +3,10 @@
   "tech_category": "refineries_lithic",
   "display_name": "Lithic Processing Refinery",
   "notes": [
-    "Processes silicate and oxide raw materials into advanced ceramics, semiconductor-grade compounds, and megastructure-class structural matrix.",
+    "Processes silicate and oxide raw materials into advanced ceramics, semiconductor materials, and megastructure mass.",
     "throughput_mult scales how quickly a batch completes relative to the recipe's base build_time_s.",
     "efficiency is the fraction of listed input materials consumed per batch; values below 1.0 represent material savings from process optimization.",
-    "max_recipe_tier is the highest min_tech_tier recipe this unit can process.",
+    "All refineries in this family can process all lithic recipes in-domain from tech 1 onward.",
     "max_concurrent_recipes is the number of recipe slots that can run in parallel.",
     "Draws electric_mw from the ship or base power bus at all times the facility is active.",
     "Usable at any location — orbital, surface, or microgravity habitat. No gravity requirement."

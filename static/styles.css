@@ -1245,6 +1245,22 @@ body.embedMode .pagePanel {
   margin-right: 3px;
 }
 
+.bodyTooltipSiteEligible {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 1px 0 2px 18px;
+}
+
+.bodyTooltipEligTag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(116, 216, 192, 0.15);
+  color: rgba(116, 216, 192, 0.9);
+  white-space: nowrap;
+}
+
 .bodyTooltipMuted {
   font-size: 10px;
   color: rgba(163, 184, 203, 0.55);
@@ -4948,6 +4964,44 @@ tr.bodyGroupHeader td {
 .depositBarFill { height: 100%; background: linear-gradient(90deg, #74d8c0, #48d1f3); border-radius: 3px; transition: width 0.3s; }
 .depositPct { width: 48px; text-align: right; color: var(--muted); font-size: 11px; flex-shrink: 0; }
 
+/* ── Eligible equipment list ─────────────────────────────── */
+
+.eligibleGroupLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 6px 0 2px;
+}
+.eligibleGroupLabel:first-child { margin-top: 0; }
+
+.eligibleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.eligibleIcon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.eligibleLabel {
+  font-weight: 500;
+  color: #74d8c0;
+}
+
+.eligibleReason {
+  font-size: 11px;
+  margin-left: auto;
+}
+
 .siteShipRow {
   padding: 4px 0;
   font-size: 12px;
@@ -7319,6 +7373,7 @@ body.embedMode #orgTabOverview {
   padding: 8px 10px;
   border-bottom: 1px solid rgba(40,55,75,0.25);
   transition: background 0.15s;
+  flex-wrap: wrap;
 }
 .refinerySlotRow:last-child { border-bottom: none; }
 .refinerySlotRow:hover { background: rgba(89,185,230,0.04); }
@@ -7373,6 +7428,35 @@ body.embedMode #orgTabOverview {
   opacity: 0.6;
 }
 .btnClearSlot:hover { opacity: 1; }
+
+.slotProgressWrap {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  background: rgba(30,42,58,0.6);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.slotProgressBar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(89,185,230,0.35), rgba(89,185,230,0.55));
+  transition: width 1s linear;
+  border-radius: 2px;
+}
+.slotProgressLabel {
+  position: absolute;
+  left: 0; top: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #b0c4d8;
+  letter-spacing: 0.3px;
+  text-shadow: 0 0 3px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
 
 /* ── Construction Queue ───────────────────────────────────── */
 

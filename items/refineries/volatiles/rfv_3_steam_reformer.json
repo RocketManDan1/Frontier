@@ -11,7 +11,7 @@
   "performance": {
     "throughput_mult": 4.0,
     "efficiency": 0.80,
-    "max_recipe_tier": 3,
+    "max_recipe_tier": 4,
     "max_concurrent_recipes": 4,
     "specialization": "volatiles_cryogenics"
   },

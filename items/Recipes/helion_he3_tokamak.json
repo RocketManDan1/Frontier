@@ -1,0 +1,50 @@
+{
+  "recipe_id": "helion_he3_tokamak",
+  "name": "Construct Helion He3 Tokamak Fusion Reactor",
+  "output_item_id": "helion_he3_tokamak",
+  "output_qty": 1,
+  "inputs": [
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 120000.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 95000.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 80000.0
+    },
+    {
+      "item_id": "cryo_polymers",
+      "qty": 65000.0
+    },
+    {
+      "item_id": "helium_3",
+      "qty": 50000.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 40000.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 25000.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 15000.0
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 10000.0
+    }
+  ],
+  "build_time_s": 86400,
+  "facility_type": "shipyard",
+  "refinery_category": "nuclear_exotic",
+  "min_tech_tier": 5,
+  "power_kw": 2000,
+  "byproducts": []
+}

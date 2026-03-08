@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "tech_category": "reactors_fusion",
+  "display_name": "Fusion Reactor",
+  "notes": [
+    "Helium-3 fueled tokamak fusion reactor.",
+    "Provides massive thermal power for next-generation propulsion and industry.",
+    "One reactor per vessel.",
+    "Win condition: first corporation to construct this reactor wins the scenario."
+  ],
+  "constraints": {
+    "one_per_vessel": true
+  },
+  "output_interface": {
+    "model": "reactor_thermal",
+    "field": "thermal_mw"
+  },
+  "mainline_files": [
+    "helion_he3_tokamak.json"
+  ]
+}

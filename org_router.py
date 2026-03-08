@@ -318,3 +318,21 @@ def api_prospect_site(
         return {"ok": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Scenario Leaderboard ──────────────────────────────────────────────────────
+
+@router.get("/api/org/leaderboard")
+def api_leaderboard(conn: sqlite3.Connection = Depends(get_db)) -> Dict[str, Any]:
+    """Return the scenario leaderboard — progress toward win condition for all corps."""
+    entries = org_service.get_scenario_leaderboard(conn)
+    return {
+        "leaderboard": entries,
+        "scenario": {
+            "name": "Scenario 1: Fusion Dawn",
+            "objective": "Construct the Helion He3 Tokamak Fusion Reactor",
+            "research_weight": 90,
+            "he3_weight": 5,
+            "build_weight": 5,
+        },
+    }

@@ -2,26 +2,26 @@
   "recipe_id": "structural_alloys",
   "name": "Produce Structural Alloys",
   "output_item_id": "structural_alloys",
-  "output_qty": 1,
+  "output_qty": 1000,
   "inputs": [
     {
       "item_id": "iron_oxides",
-      "qty": 0.86
+      "qty": 860
     },
     {
       "item_id": "aluminum_oxides",
-      "qty": 0.75
+      "qty": 750
     },
     {
       "item_id": "titanium_oxides",
-      "qty": 0.06
+      "qty": 60
     },
     {
       "item_id": "magnesium_oxides",
-      "qty": 0.04
+      "qty": 40
     }
   ],
-  "build_time_s": 20,
+  "build_time_s": 20000,
   "facility_type": "refinery",
   "refinery_category": "metallurgy",
   "min_tech_tier": 1,

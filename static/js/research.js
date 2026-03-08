@@ -127,9 +127,16 @@
     return n.toLocaleString() + (unit ? " " + unit : "");
   }
   function itemSubtitle(item) {
-    return String((item && (item.category_id || item.type || item.category)) || "module")
+    var category = String((item && (item.category_id || item.type || item.category)) || "module")
       .trim()
       .toLowerCase() || "module";
+    if (category === "printer") {
+      var printerType = String((item && item.printer_type) || "").trim().toLowerCase();
+      if (printerType === "industrial") return "industrial printer";
+      if (printerType === "ship" || printerType === "aerospace") return "aerospace printer";
+      return "printer";
+    }
+    return category;
   }
   function redirectToLogin() {
     try { if (window.top && window.top !== window) { window.top.location.href = "/login"; return; } } catch (e) { /* noop */ }
@@ -466,6 +473,17 @@
           water_extraction_kg_per_hr: item.water_extraction_kg_per_hr,
           min_water_ice_fraction: item.min_water_ice_fraction,
           max_water_ice_fraction: item.max_water_ice_fraction,
+          miner_type: item.miner_type,
+          operational_environment: item.operational_environment,
+          min_surface_gravity_ms2: item.min_surface_gravity_ms2,
+          max_surface_gravity_ms2: item.max_surface_gravity_ms2,
+          min_volatile_mass_fraction: item.min_volatile_mass_fraction,
+          thermal_mw_input: item.thermal_mw_input,
+          electric_mw: item.electric_mw,
+          conversion_efficiency: item.conversion_efficiency,
+          max_concurrent_recipes: item.max_concurrent_recipes,
+          recipe_slots: item.recipe_slots,
+          supported_recipe_names: item.supported_recipe_names,
           tooltipLines: tooltipLines,
         });
 

@@ -925,6 +925,31 @@ def load_isru_catalog() -> Dict[str, Dict[str, Any]]:
 def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
     """Load all refinery items from items/refineries/<family>/*.json."""
     catalog: Dict[str, Dict[str, Any]] = {}
+    recipe_catalog = load_recipe_catalog()
+
+    def _is_recipe_compatible(recipe_category: str, specialization: str) -> bool:
+        category = str(recipe_category or "").strip()
+        spec = str(specialization or "").strip()
+        if not category or category == "all_refineries":
+            return True
+        return bool(spec) and spec == category
+
+    def _supported_refinery_recipes(specialization: str) -> List[Dict[str, str]]:
+        supported: List[Dict[str, str]] = []
+        for recipe in recipe_catalog.values():
+            if str(recipe.get("facility_type") or "").strip().lower() != "refinery":
+                continue
+            recipe_category = str(recipe.get("refinery_category") or "unassigned").strip()
+            if not _is_recipe_compatible(recipe_category, specialization):
+                continue
+            recipe_id = str(recipe.get("recipe_id") or "").strip()
+            if not recipe_id:
+                continue
+            recipe_name = str(recipe.get("name") or recipe_id)
+            supported.append({"recipe_id": recipe_id, "name": recipe_name})
+        supported.sort(key=lambda row: str(row.get("name") or "").lower())
+        return supported
+
     ref_root = APP_DIR / "items" / "refineries"
     if not ref_root.exists() or not ref_root.is_dir():
         return catalog
@@ -952,6 +977,10 @@ def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
                 continue
             perf = entry.get("performance") or {}
             power_req = entry.get("power_requirements") or {}
+            specialization = str(perf.get("specialization") or "")
+            max_recipe_tier = max(1, int(perf.get("max_recipe_tier") or 1))
+            max_concurrent_recipes = max(1, int(perf.get("max_concurrent_recipes") or 1))
+            supported_recipes = _supported_refinery_recipes(specialization)
             catalog[item_id] = {
                 "item_id": item_id,
                 "name": str(entry.get("name") or item_id),
@@ -961,9 +990,12 @@ def load_refinery_catalog() -> Dict[str, Dict[str, Any]]:
                 "electric_mw": max(0.0, float(power_req.get("electric_mw") or 0.0)),
                 "throughput_mult": max(0.0, float(perf.get("throughput_mult") or 1.0)),
                 "efficiency": max(0.0, float(perf.get("efficiency") or 1.0)),
-                "max_recipe_tier": max(1, int(perf.get("max_recipe_tier") or 1)),
-                "max_concurrent_recipes": max(1, int(perf.get("max_concurrent_recipes") or 1)),
-                "specialization": str(perf.get("specialization") or ""),
+                "max_recipe_tier": max_recipe_tier,
+                "max_concurrent_recipes": max_concurrent_recipes,
+                "recipe_slots": max_concurrent_recipes,
+                "specialization": specialization,
+                "supported_recipe_ids": [str(recipe.get("recipe_id") or "") for recipe in supported_recipes],
+                "supported_recipe_names": [str(recipe.get("name") or "") for recipe in supported_recipes],
                 "branch": str(entry.get("branch") or ""),
                 "tech_level": max(1.0, float(entry.get("tech_level") or 1)),
                 "research_node": str(entry.get("research_node") or ""),
@@ -1803,6 +1835,10 @@ def build_ksp_tech_tree() -> Dict[str, Any]:
                     "mining_rate_kg_per_hr": float(item.get("mining_rate_kg_per_hr") or 0),
                     "miner_type": str(item.get("miner_type") or "large_body"),
                     "electric_mw": float(item.get("electric_mw") or 0),
+                    "operational_environment": str(item.get("operational_environment") or "surface_gravity"),
+                    "min_surface_gravity_ms2": float(item.get("min_surface_gravity_ms2") or 0),
+                    "max_surface_gravity_ms2": float(item.get("max_surface_gravity_ms2") or 0),
+                    "min_volatile_mass_fraction": float(item.get("min_volatile_mass_fraction") or 0),
                 })
             elif cat_id == "printers":
                 entry.update({
@@ -2102,7 +2138,9 @@ def build_unified_research_tree() -> Dict[str, Any]:
                     "core_temp_k": float(item.get("core_temp_k") or 0),
                 })
             elif cat_id == "generators":
+                entry["thermal_mw_input"] = float(item.get("thermal_mw_input") or 0)
                 entry["electric_mw"] = float(item.get("electric_mw") or 0)
+                entry["conversion_efficiency"] = float(item.get("conversion_efficiency") or 0)
             elif cat_id == "radiators":
                 entry["heat_rejection_mw"] = float(item.get("heat_rejection_mw") or 0)
             elif cat_id == "robonauts":
@@ -2117,11 +2155,23 @@ def build_unified_research_tree() -> Dict[str, Any]:
                     entry["max_water_ice_fraction"] = float(item.get("max_water_ice_fraction") or 1)
                 else:
                     entry["mining_rate_kg_per_hr"] = float(item.get("mining_rate_kg_per_hr") or 0)
-                    entry["miner_type"] = str(item.get("miner_type") or "")
+                    entry["miner_type"] = str(item.get("miner_type") or "large_body")
+                    entry["operational_environment"] = str(item.get("operational_environment") or "surface_gravity")
+                    entry["min_surface_gravity_ms2"] = float(item.get("min_surface_gravity_ms2") or 0)
+                    entry["max_surface_gravity_ms2"] = float(item.get("max_surface_gravity_ms2") or 0)
+                    entry["min_volatile_mass_fraction"] = float(item.get("min_volatile_mass_fraction") or 0)
             elif cat_id == "printers":
                 entry["construction_rate_kg_per_hr"] = float(item.get("construction_rate_kg_per_hr") or 0)
                 entry["printer_type"] = str(item.get("printer_type") or "")
                 entry["electric_mw"] = float(item.get("electric_mw") or 0)
+            elif cat_id == "refineries":
+                entry["electric_mw"] = float(item.get("electric_mw") or 0)
+                entry["max_recipe_tier"] = int(item.get("max_recipe_tier") or 1)
+                entry["max_concurrent_recipes"] = int(item.get("max_concurrent_recipes") or 1)
+                entry["recipe_slots"] = int(item.get("recipe_slots") or item.get("max_concurrent_recipes") or 1)
+                entry["supported_recipe_names"] = [
+                    str(name) for name in (item.get("supported_recipe_names") or []) if str(name).strip()
+                ]
 
             items_by_node.setdefault(research_node, []).append(entry)
 
@@ -2164,6 +2214,7 @@ def normalize_parts(
     radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     robonaut_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     constructor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    isru_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     refinery_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     if not isinstance(raw_parts, list):
@@ -2184,6 +2235,7 @@ def normalize_parts(
     _radiator_catalog = radiator_catalog or {}
     _robonaut_catalog = robonaut_catalog or {}
     _constructor_catalog = constructor_catalog or {}
+    _isru_catalog = isru_catalog or {}
     _refinery_catalog = refinery_catalog or {}
 
     normalized: List[Dict[str, Any]] = []
@@ -2212,6 +2264,9 @@ def normalize_parts(
                 continue
             if label in _constructor_catalog:
                 normalized.append(dict(_constructor_catalog[label]))
+                continue
+            if label in _isru_catalog:
+                normalized.append(dict(_isru_catalog[label]))
                 continue
             if label in _refinery_catalog:
                 normalized.append(dict(_refinery_catalog[label]))
@@ -2253,6 +2308,11 @@ def normalize_parts(
                 continue
             if raw_item_id and raw_item_id in _constructor_catalog:
                 merged = dict(_constructor_catalog[raw_item_id])
+                merged.update(entry)
+                normalized.append(merged)
+                continue
+            if raw_item_id and raw_item_id in _isru_catalog:
+                merged = dict(_isru_catalog[raw_item_id])
                 merged.update(entry)
                 normalized.append(merged)
                 continue
@@ -2548,6 +2608,7 @@ def build_shipyard_catalog_payload(
     radiator_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     robonaut_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     constructor_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
+    isru_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
     refinery_catalog: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     _storage_catalog = storage_catalog or {}
@@ -2643,6 +2704,7 @@ def build_shipyard_catalog_payload(
                 "name": item.get("name"),
                 "type": "miner",
                 "category_id": "miner",
+                "miner_type": str(item.get("miner_type") or "large_body"),
                 "mass_kg": float(item.get("mass_kg") or 0.0),
                 "electric_mw": float(item.get("electric_mw") or 0.0),
                 "mining_rate_kg_per_hr": float(item.get("mining_rate_kg_per_hr") or 0.0),
@@ -2650,6 +2712,26 @@ def build_shipyard_catalog_payload(
                 "excavation_type": str(item.get("excavation_type") or ""),
                 "operational_environment": str(item.get("operational_environment") or "surface_gravity"),
                 "min_surface_gravity_ms2": float(item.get("min_surface_gravity_ms2") or 0.0),
+                "max_surface_gravity_ms2": float(item.get("max_surface_gravity_ms2") or 0.0),
+                "min_volatile_mass_fraction": float(item.get("min_volatile_mass_fraction") or 0.0),
+                "branch": str(item.get("branch") or ""),
+                "tech_level": float(item.get("tech_level") or 1),
+            }
+        )
+
+    for item in (isru_catalog or {}).values():
+        parts.append(
+            {
+                "item_id": item.get("item_id"),
+                "name": item.get("name"),
+                "type": "isru",
+                "category_id": "isru",
+                "mass_kg": float(item.get("mass_kg") or 0.0),
+                "electric_mw": float(item.get("electric_mw") or 0.0),
+                "water_extraction_kg_per_hr": float(item.get("water_extraction_kg_per_hr") or 0.0),
+                "min_water_ice_fraction": float(item.get("min_water_ice_fraction") or 0.0),
+                "max_water_ice_fraction": float(item.get("max_water_ice_fraction") or 1.0),
+                "operational_environment": str(item.get("operational_environment") or "surface"),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
             }
@@ -2668,6 +2750,10 @@ def build_shipyard_catalog_payload(
                 "efficiency": float(item.get("efficiency") or 1.0),
                 "max_recipe_tier": int(item.get("max_recipe_tier") or 1),
                 "max_concurrent_recipes": int(item.get("max_concurrent_recipes") or 1),
+                "recipe_slots": int(item.get("recipe_slots") or item.get("max_concurrent_recipes") or 1),
+                "supported_recipe_names": [
+                    str(name) for name in (item.get("supported_recipe_names") or []) if str(name).strip()
+                ],
                 "specialization": str(item.get("specialization") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),

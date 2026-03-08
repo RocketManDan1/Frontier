@@ -372,7 +372,20 @@ def api_site_detail(
         org_id = _get_org_id(conn, user)
         site_prospected = org_id and org_service.is_site_prospected(conn, org_id, location_id)
         result["is_prospected"] = bool(site_prospected)
-        result["minable_resources"] = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
+        minable = industry_service.get_minable_resources(conn, location_id) if site_prospected else []
+        result["minable_resources"] = minable
+
+        # Eligible equipment (miners + ISRU) based on gravity and water ice
+        if site_prospected and minable:
+            from location_router import _compute_site_eligibility
+            # Convert minable_resources to the resource_distribution format expected
+            resource_dist = [
+                {"resource_id": r["resource_id"], "mass_fraction": r["mass_fraction"]}
+                for r in minable
+            ]
+            result["eligible_equipment"] = _compute_site_eligibility(
+                float(site["gravity_m_s2"]), resource_dist
+            )
 
     return result
 

@@ -56,6 +56,12 @@
   function fmtKg(v) { return itemDisplay ? itemDisplay.fmtKg(v) : (function(){ var val = Math.max(0, Number(v||0)); return val >= 5000 ? (val/1000).toFixed(1)+' t' : val.toFixed(0)+' kg'; })(); }
   function fmtM3(v) { return Math.max(0, Number(v) || 0).toFixed(2) + ' m³'; }
   function fmtPct(v) { return `${(Number(v||0) * 100).toFixed(1)}%`; }
+  function formatPrinterTypeLabel(printerType, withSuffix) {
+    const key = String(printerType || "").trim().toLowerCase();
+    if (key === "industrial") return withSuffix ? "Industrial Printer" : "Industrial";
+    if (key === "ship" || key === "aerospace") return withSuffix ? "Aerospace Printer" : "Aerospace";
+    return withSuffix ? "Printer" : "";
+  }
   function fmtDuration(s) {
     s = Math.max(0, Math.round(Number(s) || 0));
     if (s < 60) return `${s}s`;
@@ -263,6 +269,31 @@
       depSection.style.display = "none";
     }
 
+    // Eligible Equipment (shown only for prospected surface sites)
+    const eligSection = document.getElementById("siteEligibleSection");
+    const eligGrid = document.getElementById("siteEligibleGrid");
+    const eligible = site.eligible_equipment;
+    if (eligible && (eligible.eligible_miners?.length || eligible.eligible_isru?.length)) {
+      eligSection.style.display = "";
+      let eligHtml = "";
+      if (eligible.eligible_miners && eligible.eligible_miners.length) {
+        eligHtml += `<div class="eligibleGroupLabel">Miners</div>`;
+        eligible.eligible_miners.forEach(m => {
+          eligHtml += `<div class="eligibleRow"><span class="eligibleIcon">⛏</span><span class="eligibleLabel">${esc(m.label)}</span><span class="eligibleReason muted">${esc(m.reason)}</span></div>`;
+        });
+      }
+      if (eligible.eligible_isru && eligible.eligible_isru.length) {
+        eligHtml += `<div class="eligibleGroupLabel">ISRU Modules</div>`;
+        eligible.eligible_isru.forEach(m => {
+          eligHtml += `<div class="eligibleRow"><span class="eligibleIcon">🏭</span><span class="eligibleLabel">${esc(m.label)}</span><span class="eligibleReason muted">${esc(m.reason)}</span></div>`;
+        });
+      }
+      eligGrid.innerHTML = eligHtml;
+    } else {
+      eligSection.style.display = "none";
+      eligGrid.innerHTML = "";
+    }
+
     // Inventory
     const invGrid = document.getElementById("siteInventoryGrid");
     const invEmpty = document.getElementById("siteInventoryEmpty");
@@ -289,6 +320,12 @@
           label: p.name, iconSeed: p.item_id, itemId: p.item_id,
           category: cat,
           mass_kg: p.mass_kg, quantity: p.quantity,
+          thermal_mw_input: part.thermal_mw_input,
+          electric_mw: part.electric_mw,
+          conversion_efficiency: part.conversion_efficiency,
+          max_concurrent_recipes: part.max_concurrent_recipes,
+          recipe_slots: part.recipe_slots,
+          supported_recipe_names: part.supported_recipe_names,
           water_extraction_kg_per_hr: part.water_extraction_kg_per_hr,
           min_water_ice_fraction: part.min_water_ice_fraction,
           max_water_ice_fraction: part.max_water_ice_fraction,
@@ -659,8 +696,12 @@
           </div>`;
       } else if (isPrinter) {
         // Printers: construct + idle only
-        const minerType = cfg.printer_type || "";
-        const printerLabel = minerType === "industrial" ? "🏭 Build Industrial" : minerType === "ship" ? "🚀 Build Ship" : "🔧 Build";
+        const printerType = cfg.printer_type || "";
+        const printerLabel = printerType === "industrial"
+          ? "🏭 Build Industrial"
+          : (printerType === "ship" || printerType === "aerospace")
+            ? "🚀 Build Aerospace"
+            : "🔧 Build";
         modeHtml = `
           <div class="constructorModeSwitch">
             <label class="modeOption ${mode === 'construct' ? 'active' : ''}">
@@ -694,7 +735,7 @@
       } else if (isPrinter) {
         statsHtml = `<span class="eqDetail">${buildRate} kg/hr build</span>` +
           `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
-        if (cfg.printer_type) statsHtml += `<span class="eqDetail">${cfg.printer_type}</span>`;
+        if (cfg.printer_type) statsHtml += `<span class="eqDetail">${formatPrinterTypeLabel(cfg.printer_type, true)}</span>`;
       } else if (!isProspector) {
         statsHtml = `<span class="eqDetail">${miningRate} kg/hr mine</span>` +
           `<span class="eqDetail">${buildRate} kg/hr build</span>` +
@@ -819,6 +860,7 @@
       const isActive = slot.status === "active";
 
       let statsHtml = "";
+      let progressHtml = "";
       if (hasRecipe) {
         const produced = slot.cumulative_output_qty || 0;
         const batches = slot.batches_available || 0;
@@ -827,6 +869,20 @@
           + `<span class="slotProduced" title="Total produced since recipe assigned">${prodLabel} produced</span>`
           + `<span class="slotBatches ${batches === 0 ? 'noBatches' : ''}" title="Jobs worth of raw materials in storage">${batches} batch${batches !== 1 ? 'es' : ''} avail</span>`
           + `</div>`;
+
+        // Progress bar for active jobs
+        if (isActive && slot.job_started_at && slot.job_completes_at) {
+          const now = serverNow();
+          const total = slot.job_completes_at - slot.job_started_at;
+          const elapsed = now - slot.job_started_at;
+          const pct = total > 0 ? Math.min(100, Math.max(0, (elapsed / total) * 100)) : 0;
+          const remain = Math.max(0, slot.job_completes_at - now);
+          const remainLabel = fmtDuration(remain);
+          progressHtml = `<div class="slotProgressWrap" data-job-start="${slot.job_started_at}" data-job-end="${slot.job_completes_at}">`
+            + `<div class="slotProgressBar" style="width:${pct.toFixed(1)}%"></div>`
+            + `<div class="slotProgressLabel">${remainLabel} remaining</div>`
+            + `</div>`;
+        }
       }
 
       const recipeName = hasRecipe ? esc(slot.recipe_name || slot.recipe_id) : '<span class="muted">Empty — click to assign recipe</span>';
@@ -838,6 +894,7 @@
         <div class="slotRecipe ${hasRecipe ? '' : 'slotEmpty'}" data-slot-id="${slot.id}">${recipeName}</div>
         ${statsHtml}
         ${hasRecipe ? `<button class="btnSmall btnClearSlot" data-slot-id="${slot.id}">${isActive ? 'Clear Next' : 'Clear'}</button>` : ''}
+        ${progressHtml}
       </div>`;
     }).join("");
 
@@ -866,6 +923,36 @@
 
     // Drag-and-drop reordering
     initSlotDragDrop(list, slots);
+
+    // Start live progress-bar ticker
+    startRefineryProgressTicker();
+  }
+
+  let _refineryTickInterval = null;
+  function startRefineryProgressTicker() {
+    if (_refineryTickInterval) clearInterval(_refineryTickInterval);
+    _refineryTickInterval = setInterval(() => {
+      document.querySelectorAll(".slotProgressWrap").forEach(wrap => {
+        const start = Number(wrap.dataset.jobStart);
+        const end = Number(wrap.dataset.jobEnd);
+        if (!start || !end || end <= start) return;
+        const now = serverNow();
+        const total = end - start;
+        const elapsed = now - start;
+        const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+        const remain = Math.max(0, end - now);
+        const bar = wrap.querySelector(".slotProgressBar");
+        const label = wrap.querySelector(".slotProgressLabel");
+        if (bar) bar.style.width = pct.toFixed(1) + "%";
+        if (label) label.textContent = fmtDuration(remain) + " remaining";
+        // If batch is done, trigger a refresh
+        if (remain <= 0) {
+          clearInterval(_refineryTickInterval);
+          _refineryTickInterval = null;
+          loadIndustryContent();
+        }
+      });
+    }, 1000);
   }
 
   function initSlotDragDrop(container, slots) {
@@ -2056,18 +2143,35 @@
     const sourceId = String(transfer.source_id || item.source_id || "");
     const sourceKeyStr = String(transfer.source_key || item.source_key || "");
 
+    const category = item.category_id || item.category || item.type;
+    let subtitle = item.subtitle || item.category_id;
+    if (String(category || "").toLowerCase() === "printer" && item.printer_type) {
+      subtitle = formatPrinterTypeLabel(item.printer_type, true);
+    }
+
     const cell = itemDisplay.createGridCell({
       label: item.label || item.name || "Item",
       iconSeed: item.icon_seed || item.item_uid || item.item_id,
       itemId: item.item_id || "",
-      category: item.category_id || item.category || item.type,
+      category: category,
       quantity: item.quantity || item.amount,
       mass_kg: item.mass_kg,
       volume_m3: item.volume_m3,
-      subtitle: item.subtitle || item.category_id,
+      subtitle: subtitle,
       water_extraction_kg_per_hr: item.water_extraction_kg_per_hr,
       min_water_ice_fraction: item.min_water_ice_fraction,
       max_water_ice_fraction: item.max_water_ice_fraction,
+      miner_type: item.miner_type,
+      operational_environment: item.operational_environment,
+      min_surface_gravity_ms2: item.min_surface_gravity_ms2,
+      max_surface_gravity_ms2: item.max_surface_gravity_ms2,
+      min_volatile_mass_fraction: item.min_volatile_mass_fraction,
+      thermal_mw_input: item.thermal_mw_input,
+      electric_mw: item.electric_mw,
+      conversion_efficiency: item.conversion_efficiency,
+      max_concurrent_recipes: item.max_concurrent_recipes,
+      recipe_slots: item.recipe_slots,
+      supported_recipe_names: item.supported_recipe_names,
       tooltipLines: item.tooltip_lines,
     });
 

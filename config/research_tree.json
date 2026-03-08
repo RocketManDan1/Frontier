@@ -102,6 +102,13 @@
       "y": 2126
     },
     {
+      "id": "early_fusion_reactors",
+      "name": "Early Fusion Reactors",
+      "cost_rp": 250,
+      "x": 7180,
+      "y": 2126
+    },
+    {
       "id": "electrical_thermal_systems",
       "name": "Electrical and Thermal Systems",
       "cost_rp": 20,
@@ -580,6 +587,10 @@
     [
       "closed_cycle_gas_core",
       "open_cycle_gas_core"
+    ],
+    [
+      "open_cycle_gas_core",
+      "early_fusion_reactors"
     ],
     [
       "solid_state_thermoelectrics",

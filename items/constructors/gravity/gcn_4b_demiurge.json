@@ -7,7 +7,7 @@
   "mass_t": 350.0,
   "operational_environment": "surface_gravity",
   "miner_type": "large_body",
-  "min_surface_gravity_ms2": 1.6,
+  "min_surface_gravity_ms2": 1.0,
   "power_requirements": {
     "electric_mw": 220.0
   },
