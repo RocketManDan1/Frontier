@@ -1296,36 +1296,23 @@ def add_cargo_to_ship(
     mass_kg: float,
     cargo_capacity_kg: float = 0.0,
 ) -> float:
-    """Add resource mass to ship cargo. Enforces ship cargo mass budget. Returns accepted kg."""
+    """Add resource mass to ship cargo. Returns accepted kg.
+
+    Cargo capacity is no longer enforced for ships; `cargo_capacity_kg` remains
+    for caller compatibility.
+    """
     sid = str(ship_id)
     rid = str(resource_id)
     requested = max(0.0, float(mass_kg))
     if requested <= 0.01:
         raise ValueError("Nothing to load")
 
-    if cargo_capacity_kg > 0.0:
-        capacity_kg = max(0.0, float(cargo_capacity_kg))
-    else:
-        ship_row = conn.execute("SELECT parts_json FROM ships WHERE id=?", (sid,)).fetchone()
-        if not ship_row:
-            raise ValueError("Ship not found")
-        raw_parts, _raw_cargo = split_ship_parts_and_cargo(ship_row["parts_json"] or "[]")
-        parts = normalize_parts(raw_parts)
-        capacity_kg = sum(
-            max(0.0, float(part.get("cargo_capacity_kg") or 0.0))
-            for part in parts
-            if str(part.get("type") or "").lower() == "thruster"
-        )
+    # Validate ship existence to keep prior error semantics for bad ids.
+    ship_row = conn.execute("SELECT 1 FROM ships WHERE id=?", (sid,)).fetchone()
+    if not ship_row:
+        raise ValueError("Ship not found")
 
-    row = conn.execute(
-        "SELECT COALESCE(SUM(mass_kg), 0.0) AS total_mass_kg FROM ship_cargo_stacks WHERE ship_id=?",
-        (sid,),
-    ).fetchone()
-    used_kg = max(0.0, float(row["total_mass_kg"] if row else 0.0))
-    available_kg = max(0.0, capacity_kg - used_kg)
-    accepted = min(requested, available_kg)
-    if accepted <= 0.01:
-        raise ValueError("Ship cargo is full")
+    accepted = requested
 
     conn.execute(
         """
@@ -2046,6 +2033,33 @@ def _consume_location_part_unit(conn: sqlite3.Connection, row: sqlite3.Row) -> D
 
 def _inventory_items_for_ship(ship_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = list(ship_state.get("resources") or [])
+    fuel_kg = max(0.0, float(ship_state.get("fuel_kg") or 0.0))
+    has_water_row = any(
+        str(r.get("resource_id") or r.get("item_id") or "").strip().lower() == "water"
+        for r in rows
+    )
+    if fuel_kg > 1e-9 and not has_water_row:
+        ship_row = ship_state.get("row")
+        ship_id = ""
+        if isinstance(ship_row, sqlite3.Row):
+            ship_id = str(ship_row["id"] or "")
+        elif isinstance(ship_row, dict):
+            ship_id = str(ship_row.get("id") or "")
+        resource_meta = load_resource_catalog().get("water") or {}
+        rows.append({
+            "item_uid": f"ship:{ship_id}:fuel:water",
+            "item_kind": "resource",
+            "item_id": "water",
+            "label": str(resource_meta.get("name") or "Water"),
+            "subtitle": "Fuel",
+            "category": str(resource_meta.get("category_id") or "fuel"),
+            "category_id": str(resource_meta.get("category_id") or "fuel"),
+            "resource_id": "water",
+            "icon": str(resource_meta.get("icon") or ""),
+            "mass_kg": fuel_kg,
+            "quantity": fuel_kg,
+            "icon_seed": "ship_fuel::water",
+        })
     rows.sort(key=lambda r: (str(r.get("phase") or ""), str(r.get("label") or r.get("item_id") or "")))
     return rows
 

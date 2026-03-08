@@ -56,6 +56,47 @@
     return `${Math.max(0, Number(value) || 0).toFixed(2)} m³`;
   }
 
+  function mergeTooltipLines(baseLines, generatedLines) {
+    const merged = [];
+    const labels = new Set();
+
+    function pushLines(lines) {
+      if (!Array.isArray(lines)) return;
+      lines.forEach((line) => {
+        if (Array.isArray(line) && line.length >= 2) {
+          const label = String(line[0] || "").trim();
+          const value = String(line[1] || "");
+          const key = label.toLowerCase();
+          if (label && labels.has(key)) return;
+          if (label) labels.add(key);
+          merged.push([label, value]);
+        }
+      });
+    }
+
+    pushLines(baseLines);
+    pushLines(generatedLines);
+    return merged;
+  }
+
+  function buildModuleTooltipLines(item) {
+    const p = item && typeof item === "object" ? item : {};
+    const lines = [];
+    if (Number(p.thrust_kn) > 0) lines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
+    if (Number(p.isp_s) > 0) lines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
+    if (Number(p.thermal_mw) > 0) lines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
+    if (Number(p.core_temp_k) > 0) lines.push(["Core Temp", `${Number(p.core_temp_k).toFixed(0)} K`]);
+    if (Number(p.rated_temp_k) > 0) lines.push(["Core Temp Req", `${Number(p.rated_temp_k).toFixed(0)} K`]);
+    if (Number(p.electric_mw) > 0) lines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
+    if (Number(p.heat_rejection_mw) > 0) lines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MWth`]);
+    if (Number(p.capacity_m3) > 0) lines.push(["Capacity", `${Number(p.capacity_m3).toFixed(0)} m³`]);
+    if (Number(p.fuel_capacity_kg) > 0) lines.push(["Fuel Cap", fmtKg(Number(p.fuel_capacity_kg))]);
+    if (Number(p.scan_rate_km2_per_hr) > 0) lines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
+    if (Number(p.mining_rate_kg_per_hr) > 0) lines.push(["Mining Rate", `${Number(p.mining_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    if (Number(p.construction_rate_kg_per_hr) > 0) lines.push(["Build Rate", `${Number(p.construction_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    return lines;
+  }
+
   function errorDetailText(detail, fallback = "Request failed") {
     if (typeof detail === "string" && detail.trim()) return detail;
 
@@ -269,13 +310,8 @@
     const phase = String(item?.phase || "").trim();
     const qty = Math.max(0, Number(item?.quantity) || 0);
 
-    // Build tooltip lines from item metadata
-    const tooltipLines = [];
-    if (item?.thrust_kn) tooltipLines.push(["Thrust", `${Number(item.thrust_kn).toFixed(0)} kN`]);
-    if (item?.isp_s) tooltipLines.push(["ISP", `${Number(item.isp_s).toFixed(0)} s`]);
-    if (item?.capacity_kg) tooltipLines.push(["Capacity", fmtKg(item.capacity_kg)]);
-    if (item?.power_mw) tooltipLines.push(["Power", `${Number(item.power_mw).toFixed(1)} MW`]);
-    if (item?.resource_id) tooltipLines.push(["Resource", String(item.resource_id)]);
+    const baseTooltipLines = Array.isArray(item?.tooltip_lines) ? item.tooltip_lines : [];
+    const tooltipLines = mergeTooltipLines(baseTooltipLines, buildModuleTooltipLines(item));
 
     const cell = itemDisplay && typeof itemDisplay.createGridCell === "function"
       ? itemDisplay.createGridCell({
@@ -291,6 +327,12 @@
           volume_m3: item?.volume_m3,
           quantity: qty > 1 ? qty : 0,
           draggable: !!transfer,
+          branch: item?.branch || "",
+          family: item?.family || item?.thruster_family || "",
+          techLevel: item?.tech_level || "",
+          core_temp_k: item?.core_temp_k,
+          rated_temp_k: item?.rated_temp_k,
+          water_extraction_kg_per_hr: item?.water_extraction_kg_per_hr,
           miner_type: item?.miner_type,
           operational_environment: item?.operational_environment,
           min_surface_gravity_ms2: item?.min_surface_gravity_ms2,

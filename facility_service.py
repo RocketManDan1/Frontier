@@ -183,9 +183,16 @@ def list_facilities_at_location(
     return result
 
 
-def get_facility_count_by_location(conn: sqlite3.Connection) -> Dict[str, int]:
-    """Return {location_id: facility_count} for all locations with facilities."""
-    rows = conn.execute(
-        "SELECT location_id, COUNT(*) as cnt FROM facilities GROUP BY location_id"
-    ).fetchall()
+def get_facility_count_by_location(conn: sqlite3.Connection, corp_id: str = None) -> Dict[str, int]:
+    """Return {location_id: facility_count} for locations with facilities.
+    If corp_id is provided, only count facilities owned by that corp."""
+    if corp_id:
+        rows = conn.execute(
+            "SELECT location_id, COUNT(*) as cnt FROM facilities WHERE corp_id = ? GROUP BY location_id",
+            (corp_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT location_id, COUNT(*) as cnt FROM facilities GROUP BY location_id"
+        ).fetchall()
     return {str(r["location_id"]): r["cnt"] for r in rows}

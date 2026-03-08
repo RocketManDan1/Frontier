@@ -71,6 +71,47 @@
     return `${h}h ${m}m`;
   }
 
+  function mergeTooltipLines(baseLines, generatedLines) {
+    const merged = [];
+    const labels = new Set();
+
+    function pushLines(lines) {
+      if (!Array.isArray(lines)) return;
+      lines.forEach((line) => {
+        if (Array.isArray(line) && line.length >= 2) {
+          const label = String(line[0] || "").trim();
+          const value = String(line[1] || "");
+          const key = label.toLowerCase();
+          if (label && labels.has(key)) return;
+          if (label) labels.add(key);
+          merged.push([label, value]);
+        }
+      });
+    }
+
+    pushLines(baseLines);
+    pushLines(generatedLines);
+    return merged;
+  }
+
+  function buildModuleTooltipLines(item) {
+    const p = item && typeof item === "object" ? item : {};
+    const lines = [];
+    if (Number(p.thrust_kn) > 0) lines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
+    if (Number(p.isp_s) > 0) lines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
+    if (Number(p.thermal_mw) > 0) lines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
+    if (Number(p.core_temp_k) > 0) lines.push(["Core Temp", `${Number(p.core_temp_k).toFixed(0)} K`]);
+    if (Number(p.rated_temp_k) > 0) lines.push(["Core Temp Req", `${Number(p.rated_temp_k).toFixed(0)} K`]);
+    if (Number(p.electric_mw) > 0) lines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
+    if (Number(p.heat_rejection_mw) > 0) lines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MWth`]);
+    if (Number(p.capacity_m3) > 0) lines.push(["Capacity", `${Number(p.capacity_m3).toFixed(0)} m³`]);
+    if (Number(p.fuel_capacity_kg) > 0) lines.push(["Fuel Cap", fmtKg(Number(p.fuel_capacity_kg))]);
+    if (Number(p.scan_rate_km2_per_hr) > 0) lines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
+    if (Number(p.mining_rate_kg_per_hr) > 0) lines.push(["Mining Rate", `${Number(p.mining_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    if (Number(p.construction_rate_kg_per_hr) > 0) lines.push(["Build Rate", `${Number(p.construction_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    return lines;
+  }
+
   /* ── API Helpers ─────────────────────────────────────────── */
 
   async function fetchJSON(url, opts) {
@@ -147,7 +188,7 @@
       if (currentFilter === "orbital") return !s.is_surface_site;
       if (currentFilter === "active") {
         const eq = s.equipment || {};
-        return (eq.refinery || {}).total > 0 || (eq.constructor || {}).total > 0 || (eq.miner || {}).total > 0 || (eq.printer || {}).total > 0 || (eq.prospector || {}).total > 0 || (eq.robonaut || {}).total > 0 || s.active_jobs > 0;
+        return s.facility_count > 0 || (eq.refinery || {}).total > 0 || (eq.constructor || {}).total > 0 || (eq.miner || {}).total > 0 || (eq.printer || {}).total > 0 || (eq.prospector || {}).total > 0 || (eq.robonaut || {}).total > 0 || s.active_jobs > 0;
       }
       return true;
     });
@@ -316,10 +357,16 @@
       parts.forEach(p => {
         const part = p.part || {};
         const cat = part.category_id || part.type || "generic";
+        const tooltipLines = mergeTooltipLines([], buildModuleTooltipLines(part));
         const cell = itemDisplay.createGridCell({
           label: p.name, iconSeed: p.item_id, itemId: p.item_id,
           category: cat,
           mass_kg: p.mass_kg, quantity: p.quantity,
+          branch: part.branch || "",
+          family: part.family || part.thruster_family || "",
+          techLevel: part.tech_level || "",
+          core_temp_k: part.core_temp_k,
+          rated_temp_k: part.rated_temp_k,
           thermal_mw_input: part.thermal_mw_input,
           electric_mw: part.electric_mw,
           conversion_efficiency: part.conversion_efficiency,
@@ -329,6 +376,7 @@
           water_extraction_kg_per_hr: part.water_extraction_kg_per_hr,
           min_water_ice_fraction: part.min_water_ice_fraction,
           max_water_ice_fraction: part.max_water_ice_fraction,
+          tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         });
         invGrid.appendChild(cell);
       });
@@ -634,7 +682,8 @@
     const equipment = industryData.equipment || [];
     const constructors = equipment.filter(
       e => e.category === "miner" || e.category === "printer" ||
-           e.category === "constructor" || e.category === "prospector" || e.category === "robonaut"
+           e.category === "constructor" || e.category === "prospector" || e.category === "robonaut" ||
+           e.category === "isru"
     );
 
     badge.textContent = constructors.length;
@@ -651,7 +700,7 @@
     const idleCount = constructors.filter(c => c.mode === "idle").length;
     const totalMiningRate = constructors
       .filter(c => c.mode === "mine")
-      .reduce((sum, c) => sum + (c.config?.mining_rate_kg_per_hr || 0), 0);
+      .reduce((sum, c) => sum + (c.config?.mining_rate_kg_per_hr || c.config?.water_extraction_kg_per_hr || 0), 0);
     const totalBuildRate = constructors
       .filter(c => c.mode === "construct")
       .reduce((sum, c) => sum + (c.config?.construction_rate_kg_per_hr || 0), 0);
@@ -666,6 +715,7 @@
       const cfg = eq.config || {};
       const mode = eq.mode || "idle";
       const isMiner = eq.category === "miner";
+      const isIsru = eq.category === "isru";
       const isPrinter = eq.category === "printer";
       const isProspector = eq.category === "prospector" || eq.category === "robonaut";
       const mineChecked = mode === "mine" ? "checked" : "";
@@ -679,6 +729,17 @@
         // Prospectors: idle only
         modeHtml = `
           <div class="constructorModeSwitch">
+            <label class="modeOption ${mode === 'idle' ? 'active' : ''}">
+              <input type="radio" name="mode_${eq.id}" value="idle" ${idleChecked}> ⏸ Idle
+            </label>
+          </div>`;
+      } else if (isIsru) {
+        // ISRU: mine + idle (like miners)
+        modeHtml = `
+          <div class="constructorModeSwitch">
+            <label class="modeOption ${mode === 'mine' ? 'active' : ''}">
+              <input type="radio" name="mode_${eq.id}" value="mine" ${mineChecked}> 💧 Extract
+            </label>
             <label class="modeOption ${mode === 'idle' ? 'active' : ''}">
               <input type="radio" name="mode_${eq.id}" value="idle" ${idleChecked}> ⏸ Idle
             </label>
@@ -728,7 +789,12 @@
       }
 
       let statsHtml = "";
-      if (isMiner) {
+      if (isIsru) {
+        const extractRate = cfg.water_extraction_kg_per_hr || 0;
+        statsHtml = `<span class="eqDetail">${extractRate} kg/hr extract</span>` +
+          `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
+        if (cfg.branch) statsHtml += `<span class="eqDetail">${cfg.branch.replace(/_/g, " ")}</span>`;
+      } else if (isMiner) {
         statsHtml = `<span class="eqDetail">${miningRate} kg/hr mine</span>` +
           `<span class="eqDetail">${cfg.electric_mw || 0} MWe</span>`;
         if (cfg.miner_type) statsHtml += `<span class="eqDetail">${cfg.miner_type.replace("_", "-")}</span>`;
@@ -745,7 +811,7 @@
       }
 
       const totalMinedHtml = eq.mining_total_kg > 0 ? `<span class="muted">Total mined: ${fmtKg(eq.mining_total_kg)}</span>` : '';
-      const icon = isProspector ? '📡' : isMiner ? '⛏' : isPrinter ? '🖨' : '⛏';
+      const icon = isProspector ? '📡' : isIsru ? '💧' : isMiner ? '⛏' : isPrinter ? '🖨' : '⛏';
 
       return `<div class="constructorRow" data-equip-id="${eq.id}">
         <div class="constructorInfo">
@@ -1542,15 +1608,17 @@
           constructors: "constructor", builders: "constructor", builder: "constructor",
           miners: "miner", miner: "miner",
           printers: "printer", printer: "printer",
+          isru_modules: "isru", isru_module: "isru", isru_units: "isru", isru_unit: "isru",
+          water_extractor: "isru", water_extraction: "isru", sifting: "isru", heat_drill: "isru",
           refineries: "refinery", reactors: "reactor", generators: "generator", radiators: "radiator",
         });
         return aliases[value] || value;
       };
-      const deployableCategories = new Set(["refinery", "miner", "printer", "constructor", "prospector", "robonaut", "reactor", "generator", "radiator"]);
-      const catOrder = ["reactor", "generator", "radiator", "refinery", "miner", "printer", "constructor", "prospector", "robonaut"];
+      const deployableCategories = new Set(["refinery", "miner", "printer", "constructor", "prospector", "robonaut", "isru", "reactor", "generator", "radiator"]);
+      const catOrder = ["reactor", "generator", "radiator", "refinery", "miner", "isru", "printer", "constructor", "prospector", "robonaut"];
       const catLabels = Object.create(null);
       Object.assign(catLabels, { reactor: "Reactors", generator: "Generators", radiator: "Radiators",
-        refinery: "Refineries", miner: "Miners", printer: "Printers", constructor: "Legacy Constructors", prospector: "Prospectors", robonaut: "Prospectors" });
+        refinery: "Refineries", miner: "Miners", isru: "ISRU", printer: "Printers", constructor: "Legacy Constructors", prospector: "Prospectors", robonaut: "Prospectors" });
 
       // Fetch cargo context and industry data in parallel
       const [context, indData] = await Promise.all([
@@ -1607,7 +1675,10 @@
             wasteHeatMw: Number(item.waste_heat_mw || 0),
             heatRejectionMw: Number(item.heat_rejection_mw || 0),
             miningRate: Number(item.mining_rate_kg_per_hr || 0),
+            waterExtractionRate: Number(item.water_extraction_kg_per_hr || 0),
             constructionRate: Number(item.construction_rate_kg_per_hr || 0),
+            minWaterIceFrac: Number(item.min_water_ice_fraction || 0),
+            maxWaterIceFrac: Number(item.max_water_ice_fraction || 0),
             prospectRangeKm: Number(item.prospect_range_km || 0),
             scanRateKm2PerHr: Number(item.scan_rate_km2_per_hr || 0),
             conversionEff: Number(item.conversion_efficiency || 0),
@@ -1665,6 +1736,12 @@
           if (item.minerType) chips.push(item.minerType.replace(/_/g, " "));
           if (item.excavationType) chips.push(item.excavationType.replace(/_/g, " "));
           if (item.minGravity) chips.push(`≥${item.minGravity} m/s²`);
+        } else if (cat === "isru") {
+          if (item.waterExtractionRate) chips.push(`<b>${item.waterExtractionRate}</b> kg/hr extract`);
+          if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
+          if (item.minWaterIceFrac > 0) chips.push(`Ice ≥ ${(item.minWaterIceFrac * 100).toFixed(0)}%`);
+          if (item.maxWaterIceFrac > 0 && item.maxWaterIceFrac < 1) chips.push(`Ice ≤ ${(item.maxWaterIceFrac * 100).toFixed(0)}%`);
+          if (item.excavationType) chips.push(item.excavationType.replace(/_/g, " "));
         } else if (cat === "printer") {
           if (item.constructionRate) chips.push(`<b>${item.constructionRate}</b> kg/hr build`);
           if (item.electricMw) chips.push(`<b>${item.electricMw}</b> MWe`);
@@ -2149,6 +2226,8 @@
       subtitle = formatPrinterTypeLabel(item.printer_type, true);
     }
 
+    const tooltipLines = mergeTooltipLines(item.tooltip_lines, buildModuleTooltipLines(item));
+
     const cell = itemDisplay.createGridCell({
       label: item.label || item.name || "Item",
       iconSeed: item.icon_seed || item.item_uid || item.item_id,
@@ -2158,6 +2237,11 @@
       mass_kg: item.mass_kg,
       volume_m3: item.volume_m3,
       subtitle: subtitle,
+      branch: item.branch || "",
+      family: item.family || item.thruster_family || "",
+      techLevel: item.tech_level || "",
+      core_temp_k: item.core_temp_k,
+      rated_temp_k: item.rated_temp_k,
       water_extraction_kg_per_hr: item.water_extraction_kg_per_hr,
       min_water_ice_fraction: item.min_water_ice_fraction,
       max_water_ice_fraction: item.max_water_ice_fraction,
@@ -2172,7 +2256,7 @@
       max_concurrent_recipes: item.max_concurrent_recipes,
       recipe_slots: item.recipe_slots,
       supported_recipe_names: item.supported_recipe_names,
-      tooltipLines: item.tooltip_lines,
+      tooltipLines: tooltipLines.length ? tooltipLines : undefined,
     });
 
     // Make clickable to stage

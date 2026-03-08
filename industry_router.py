@@ -173,43 +173,81 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
             "gravity_m_s2": float(row["gravity_m_s2"]),
         }
 
-    # Get equipment counts per location
-    equip_rows = conn.execute(
-        """
-        SELECT location_id, category,
-               COUNT(*) as total,
-               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
-        FROM deployed_equipment
-        GROUP BY location_id, category
-        """
-    ).fetchall()
+    # Get equipment counts per location (scoped to user's corp)
+    corp_id = _get_corp_id(user)
+    if corp_id:
+        equip_rows = conn.execute(
+            """
+            SELECT location_id, category,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
+            FROM deployed_equipment
+            WHERE corp_id = ?
+            GROUP BY location_id, category
+            """,
+            (corp_id,),
+        ).fetchall()
+    else:
+        equip_rows = conn.execute(
+            """
+            SELECT location_id, category,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
+            FROM deployed_equipment
+            GROUP BY location_id, category
+            """
+        ).fetchall()
     equip_by_loc: Dict[str, Dict] = {}
     for r in equip_rows:
         loc = r["location_id"]
         equip_by_loc.setdefault(loc, {})
         equip_by_loc[loc][r["category"]] = {"total": r["total"], "active": r["active"]}
 
-    # Get active job counts per location
-    job_rows = conn.execute(
-        """
-        SELECT location_id, COUNT(*) as cnt
-        FROM production_jobs
-        WHERE status = 'active'
-        GROUP BY location_id
-        """
-    ).fetchall()
+    # Get active job counts per location (scoped to user's corp)
+    if corp_id:
+        job_rows = conn.execute(
+            """
+            SELECT location_id, COUNT(*) as cnt
+            FROM production_jobs
+            WHERE status = 'active' AND corp_id = ?
+            GROUP BY location_id
+            """,
+            (corp_id,),
+        ).fetchall()
+    else:
+        job_rows = conn.execute(
+            """
+            SELECT location_id, COUNT(*) as cnt
+            FROM production_jobs
+            WHERE status = 'active'
+            GROUP BY location_id
+            """
+        ).fetchall()
     jobs_by_loc = {r["location_id"]: r["cnt"] for r in job_rows}
 
-    # Get inventory summary per location (count of resource types + total mass)
-    inv_rows = conn.execute(
-        """
-        SELECT location_id,
-               COUNT(*) as stack_count,
-               SUM(mass_kg) as total_mass_kg
-        FROM location_inventory_stacks
-        GROUP BY location_id
-        """
-    ).fetchall()
+    # Get inventory summary per location (scoped to user's corp)
+    if corp_id:
+        inv_rows = conn.execute(
+            """
+            SELECT location_id,
+                   COUNT(*) as stack_count,
+                   SUM(mass_kg) as total_mass_kg
+            FROM location_inventory_stacks
+            WHERE corp_id = ?
+            GROUP BY location_id
+            """,
+            (corp_id,),
+        ).fetchall()
+    else:
+        inv_rows = conn.execute(
+            """
+            SELECT location_id,
+                   COUNT(*) as stack_count,
+                   SUM(mass_kg) as total_mass_kg
+            FROM location_inventory_stacks
+            GROUP BY location_id
+            """
+        ).fetchall()
     inv_by_loc = {}
     for r in inv_rows:
         inv_by_loc[r["location_id"]] = {
@@ -228,9 +266,9 @@ def api_sites(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> D
     ).fetchall()
     ships_by_loc = {r["location_id"]: r["cnt"] for r in ship_rows}
 
-    # Get facility counts per location
+    # Get facility counts per location (scoped to user's corp)
     import facility_service
-    facility_counts = facility_service.get_facility_count_by_location(conn)
+    facility_counts = facility_service.get_facility_count_by_location(conn, corp_id=corp_id or None)
 
     # Metadata
     metadata = _main()._location_metadata_by_id()

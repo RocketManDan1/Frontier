@@ -2627,6 +2627,7 @@ def build_shipyard_catalog_payload(
                 "core_temp_k": float(item.get("core_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2645,6 +2646,7 @@ def build_shipyard_catalog_payload(
                 "family": str(item.get("thruster_family") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2662,6 +2664,7 @@ def build_shipyard_catalog_payload(
                 "waste_heat_mw": float(item.get("waste_heat_mw") or 0.0),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2677,6 +2680,7 @@ def build_shipyard_catalog_payload(
                 "operating_temp_k": float(item.get("operating_temp_k") or 0.0),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2694,6 +2698,7 @@ def build_shipyard_catalog_payload(
                 "emission_type": str(item.get("emission_type") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2716,6 +2721,7 @@ def build_shipyard_catalog_payload(
                 "min_volatile_mass_fraction": float(item.get("min_volatile_mass_fraction") or 0.0),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2734,6 +2740,7 @@ def build_shipyard_catalog_payload(
                 "operational_environment": str(item.get("operational_environment") or "surface"),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 
@@ -2757,6 +2764,7 @@ def build_shipyard_catalog_payload(
                 "specialization": str(item.get("specialization") or ""),
                 "branch": str(item.get("branch") or ""),
                 "tech_level": float(item.get("tech_level") or 1),
+                "research_node": str(item.get("research_node") or ""),
             }
         )
 

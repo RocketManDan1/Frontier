@@ -3,7 +3,7 @@ Organization service — business logic for org finances, research teams, LEO bo
 
 Economy model:
   - Each org earns $1,000,000,000 (1B) per 30-day game month
-  - Research teams cost $150,000,000/month, generate 5 research points per 7-day game week
+  - Research teams cost $150,000,000/month, generate 5 research points per 30-day game month
   - LEO boosts cost $100,000,000 base + $5,000 per kg payload
   - Only tech-level 1 and 2 items + water can be boosted from Earth
 
@@ -28,7 +28,7 @@ GAME_MONTH_SECONDS = 30.0 * 24.0 * 3600.0  # 30 game days
 GAME_WEEK_SECONDS = 7.0 * 24.0 * 3600.0  # 7 game days
 
 RESEARCH_TEAM_COST_PER_MONTH = 150_000_000.0  # $150M
-RESEARCH_TEAM_POINTS_PER_WEEK = 5.0
+RESEARCH_TEAM_POINTS_PER_MONTH = 5.0
 
 LEO_BOOST_BASE_COST = 100_000_000.0  # $100M
 LEO_BOOST_COST_PER_KG = 5_000.0  # $5,000/kg
@@ -522,8 +522,7 @@ def settle_org(conn: sqlite3.Connection, org_id: str) -> Dict[str, Any]:
     team_count = int(active_teams["cnt"]) if active_teams else 0
 
     team_costs = team_count * RESEARCH_TEAM_COST_PER_MONTH * months_elapsed
-    weeks_elapsed = elapsed_s / GAME_WEEK_SECONDS
-    research_gained = team_count * RESEARCH_TEAM_POINTS_PER_WEEK * weeks_elapsed
+    research_gained = team_count * RESEARCH_TEAM_POINTS_PER_MONTH * months_elapsed
 
     # Loan repayment accrual
     active_loans = conn.execute(
@@ -636,7 +635,7 @@ def _org_to_dict(org: sqlite3.Row, conn: sqlite3.Connection) -> Dict[str, Any]:
         ],
         "income_per_month_usd": MONTHLY_INCOME_USD,
         "team_cost_per_month_usd": RESEARCH_TEAM_COST_PER_MONTH,
-        "team_points_per_week": RESEARCH_TEAM_POINTS_PER_WEEK,
+        "team_points_per_month": RESEARCH_TEAM_POINTS_PER_MONTH,
         "monthly_loan_payments_usd": monthly_loan_payments,
         "monthly_expenses_usd": monthly_team_expenses + monthly_loan_payments,
     }
@@ -786,7 +785,7 @@ def hire_research_team(conn: sqlite3.Connection, org_id: str) -> Dict[str, Any]:
     conn.execute(
         """INSERT INTO research_teams (id, org_id, hired_at, cost_per_month_usd, points_per_week, status)
            VALUES (?, ?, ?, ?, ?, 'active')""",
-        (team_id, org_id, now, RESEARCH_TEAM_COST_PER_MONTH, RESEARCH_TEAM_POINTS_PER_WEEK),
+        (team_id, org_id, now, RESEARCH_TEAM_COST_PER_MONTH, RESEARCH_TEAM_POINTS_PER_MONTH),
     )
 
     # Deduct first month
@@ -877,8 +876,8 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
                 "required_tech_id": node_id,
             })
 
-    # Prefer unlock-gated items per family; if a family yields no unlock matches,
-    # fall back to TL-only candidates for that family so options don't disappear.
+    # Only show items whose research node the org has actually unlocked.
+    # Items without a research_node (e.g. storage) pass through automatically.
     for loader_name in [
         "thruster",
         "reactor",
@@ -893,12 +892,10 @@ def get_boostable_items(conn: sqlite3.Connection, org_id: str) -> List[Dict[str,
         "storage",
     ]:
         family_candidates = part_candidates_by_type.get(loader_name, [])
-        unlocked_family = [
-            p for p in family_candidates
-            if p.get("required_tech_id") is None or p.get("required_tech_id") in unlocked_ids
-        ]
-        chosen_family = unlocked_family if unlocked_family else family_candidates
-        for p in chosen_family:
+        for p in family_candidates:
+            tech_id = p.get("required_tech_id")
+            if tech_id is not None and tech_id not in unlocked_ids:
+                continue
             out = dict(p)
             out.pop("required_tech_id", None)
             boostable.append(out)

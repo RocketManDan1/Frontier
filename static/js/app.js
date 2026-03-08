@@ -1657,6 +1657,24 @@
     return Math.max(0, Math.min(fuel, m0 - mf));
   }
 
+  function buildModuleTooltipLines(part) {
+    const p = part && typeof part === "object" ? part : {};
+    const lines = [];
+    if (Number(p.thrust_kn) > 0) lines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
+    if (Number(p.isp_s) > 0) lines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
+    if (Number(p.thermal_mw) > 0) lines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
+    if (Number(p.core_temp_k) > 0) lines.push(["Core Temp", `${Number(p.core_temp_k).toFixed(0)} K`]);
+    if (Number(p.rated_temp_k) > 0) lines.push(["Core Temp Req", `${Number(p.rated_temp_k).toFixed(0)} K`]);
+    if (Number(p.electric_mw) > 0) lines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
+    if (Number(p.heat_rejection_mw) > 0) lines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MWth`]);
+    if (Number(p.capacity_m3) > 0) lines.push(["Capacity", `${Number(p.capacity_m3).toFixed(0)} m³`]);
+    if (Number(p.fuel_capacity_kg) > 0) lines.push(["Fuel Cap", fmtKg(Number(p.fuel_capacity_kg))]);
+    if (Number(p.scan_rate_km2_per_hr) > 0) lines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
+    if (Number(p.mining_rate_kg_per_hr) > 0) lines.push(["Mining Rate", `${Number(p.mining_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    if (Number(p.construction_rate_kg_per_hr) > 0) lines.push(["Build Rate", `${Number(p.construction_rate_kg_per_hr).toFixed(0)} kg/hr`]);
+    return lines;
+  }
+
   function buildLocationInventoryHtml(inventory) {
     const resources = Array.isArray(inventory?.resources) ? inventory.resources : [];
     const parts = Array.isArray(inventory?.parts) ? inventory.parts : [];
@@ -1706,6 +1724,7 @@
       parts.forEach((p) => {
         const partData = (p?.part && typeof p.part === "object") ? p.part : {};
         const category = String(partData.type || partData.category_id || "module").toLowerCase();
+        const tooltipLines = buildModuleTooltipLines(partData);
         const cell = ID.createGridCell({
           label: String(p?.name || p?.item_id || "Part"),
           iconSeed: `part::${p?.item_id || ""}`,
@@ -1715,19 +1734,26 @@
           quantity: Math.max(0, Math.floor(Number(p?.quantity) || 0)),
           subtitle: category,
           branch: partData.branch || "",
-          family: partData.thruster_family || "",
+          family: partData.family || partData.thruster_family || "",
           techLevel: partData.tech_level || "",
+          core_temp_k: partData.core_temp_k,
+          rated_temp_k: partData.rated_temp_k,
+          water_extraction_kg_per_hr: partData.water_extraction_kg_per_hr,
           miner_type: partData.miner_type,
           operational_environment: partData.operational_environment,
           min_surface_gravity_ms2: partData.min_surface_gravity_ms2,
           max_surface_gravity_ms2: partData.max_surface_gravity_ms2,
           min_volatile_mass_fraction: partData.min_volatile_mass_fraction,
+          mining_rate_kg_per_hr: partData.mining_rate_kg_per_hr,
+          construction_rate_kg_per_hr: partData.construction_rate_kg_per_hr,
+          fuel_capacity_kg: partData.fuel_capacity_kg,
           thermal_mw_input: partData.thermal_mw_input,
           electric_mw: partData.electric_mw,
           conversion_efficiency: partData.conversion_efficiency,
           max_concurrent_recipes: partData.max_concurrent_recipes,
           recipe_slots: partData.recipe_slots,
           supported_recipe_names: partData.supported_recipe_names,
+          tooltipLines: tooltipLines.length ? tooltipLines : undefined,
         });
         partGrid.appendChild(cell);
       });
@@ -2280,15 +2306,7 @@
       const p = typeof part === "object" && part ? part : {};
       const name = String(p.name || p.type || "Part");
       const category = String(p.type || p.category_id || "module").toLowerCase();
-      const tooltipLines = [];
-      if (Number(p.thrust_kn) > 0) tooltipLines.push(["Thrust", `${Number(p.thrust_kn).toFixed(0)} kN`]);
-      if (Number(p.isp_s) > 0) tooltipLines.push(["ISP", `${Number(p.isp_s).toFixed(0)} s`]);
-      if (Number(p.capacity_m3) > 0) tooltipLines.push(["Capacity", `${Number(p.capacity_m3).toFixed(2)} m³`]);
-      if (Number(p.thermal_mw) > 0) tooltipLines.push(["Power", `${Number(p.thermal_mw).toFixed(1)} MWth`]);
-      if (Number(p.electric_mw) > 0) tooltipLines.push(["Electric", `${Number(p.electric_mw).toFixed(1)} MWe`]);
-      if (Number(p.heat_rejection_mw) > 0) tooltipLines.push(["Rejection", `${Number(p.heat_rejection_mw).toFixed(1)} MW`]);
-      if (Number(p.scan_rate_km2_per_hr) > 0) tooltipLines.push(["Scan Rate", `${Number(p.scan_rate_km2_per_hr).toFixed(0)} km²/hr`]);
-      if (Number(p.water_kg) > 0) tooltipLines.push(["Water", fmtKg(Number(p.water_kg))]);
+      const tooltipLines = buildModuleTooltipLines(p);
       const cell = ID.createGridCell({
         label: name,
         iconSeed: p.item_id || name,
@@ -2297,13 +2315,19 @@
         mass_kg: Number(p.mass_kg) || 0,
         subtitle: category,
         branch: p.branch || "",
-        family: p.thruster_family || "",
+        family: p.family || p.thruster_family || "",
         techLevel: p.tech_level || "",
+        core_temp_k: p.core_temp_k,
+        rated_temp_k: p.rated_temp_k,
+        water_extraction_kg_per_hr: p.water_extraction_kg_per_hr,
         miner_type: p.miner_type,
         operational_environment: p.operational_environment,
         min_surface_gravity_ms2: p.min_surface_gravity_ms2,
         max_surface_gravity_ms2: p.max_surface_gravity_ms2,
         min_volatile_mass_fraction: p.min_volatile_mass_fraction,
+        mining_rate_kg_per_hr: p.mining_rate_kg_per_hr,
+        construction_rate_kg_per_hr: p.construction_rate_kg_per_hr,
+        fuel_capacity_kg: p.fuel_capacity_kg,
         thermal_mw_input: p.thermal_mw_input,
         electric_mw: p.electric_mw,
         conversion_efficiency: p.conversion_efficiency,
@@ -7877,11 +7901,12 @@
 
     function renderQuoteDetails(q, depTime) {
       const destName = locationsById.get(q.to_id)?.name || q.to_id;
-      const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, q.dv_m_s);
+      const launchDvMs = Number(q.dv_m_s || 0);
+      const fuelNeedKg = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, launchDvMs);
       const fuelAfterKg = Math.max(0, shipFuel - fuelNeedKg);
       const fuelAfterPct = shipFuelCap > 0 ? Math.round((fuelAfterKg / shipFuelCap) * 100) : 0;
       const hasFuel = fuelNeedKg <= shipFuel + 0.1;
-      const hasDv = q.dv_m_s <= shipDv + 0.1;
+      const hasDv = launchDvMs <= shipDv + 0.1;
 
       const evaluateSurfaceTwr = () => {
         const surfaceSites = Array.isArray(q.surface_sites) ? q.surface_sites : [];
@@ -7961,10 +7986,9 @@
         `;
       }
 
-      // TOF slider section — replaces the old burn profile.
-      // For interplanetary transfers, the actual Δv shown comes from the
-      // porkchop grid at the selected TOF.  For local transfers we just
-      // show the Lambert/Hohmann result.
+      // TOF slider section for porkchop inspection.
+      // Launch feasibility always follows q.dv_m_s (server quote used by
+      // /api/ships/{id}/transfer). The slider only samples porkchop cells.
       const tofDays = Math.round(q.base_tof_s / 86400);
 
       const html = `
@@ -8001,9 +8025,13 @@
           </div>` : ""}
           <div style="margin-top:10px;">
             <div class="tpRow tpHighlight">
-              <span class="tpLabel"><b>Total Δv</b></span>
-              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpTotalDvReadout"><b>${Math.round(q.dv_m_s)} m/s</b></span>
+              <span class="tpLabel"><b>Launch Δv (current window)</b></span>
+              <span class="tpVal ${hasDv ? 'tpPositive' : 'tpNegative'}" id="tpLaunchDvReadout"><b>${Math.round(launchDvMs)} m/s</b></span>
             </div>
+            ${q.is_interplanetary ? `<div class="tpRow" style="font-size:12px;opacity:0.8;">
+              <span class="tpLabel">Porkchop sample Δv</span>
+              <span class="tpVal" id="tpPorkchopDvReadout">—</span>
+            </div>` : ""}
             ${q.interplanetary_dv_m_s != null ? `
             <div class="tpRow" style="font-size:12px;opacity:0.7;">
               <span class="tpLabel">${q.gateway_departure ? _esc(locationsById.get(q.gateway_departure)?.name || q.gateway_departure) + ' →' : 'Interplanetary'}</span>
@@ -8040,7 +8068,7 @@
             <span class="tpVal" id="tpShipDvRemaining">${Math.round(shipDv)} m/s</span>
           </div>
           <div id="tpCostStatus">
-          ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(q.dv_m_s)}, have ${Math.round(shipDv)})</span></div>` : ""}
+          ${!hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(launchDvMs)}, have ${Math.round(shipDv)})</span></div>` : ""}
           ${!hasFuel && hasDv ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>` : ""}
           ${!hasSurfaceTwr ? `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient surface TWR for ${_esc(twrCheck.siteId || "surface site")} (TWR ${Number(twrCheck.twr || 0).toFixed(2)} &lt; 1.00 at ${Number(twrCheck.gravity || 0).toFixed(2)} m/s²)</span></div>` : ""}
           </div>
@@ -8446,7 +8474,7 @@
     function wireTofSlider(data, depTime) {
       const slider = document.getElementById("tpTofSlider");
       const readout = document.getElementById("tpTofReadout");
-      const dvReadout = document.getElementById("tpTotalDvReadout");
+      const dvReadout = document.getElementById("tpPorkchopDvReadout");
       const transitReadout = document.getElementById("tpTransitTimeReadout");
       const tofMinLabel = document.getElementById("tpTofMinLabel");
       const tofMaxLabel = document.getElementById("tpTofMaxLabel");
@@ -8502,18 +8530,15 @@
         if (dv != null && isFinite(dv)) {
           const dvM = Math.round(dv);
           if (dvReadout) dvReadout.innerHTML = `<b>${dvM} m/s</b>`;
-          // Update fuel/feasibility class
           if (dvReadout) {
-            dvReadout.className = dvM <= shipDv + 0.1 ? "tpVal tpPositive" : "tpVal tpNegative";
+            dvReadout.className = "tpVal";
           }
         } else {
           if (dvReadout) { dvReadout.innerHTML = `<b>N/A</b>`; dvReadout.className = "tpVal muted"; }
         }
 
+        // Show sampled TOF from the porkchop cell; launch uses server quote TOF.
         if (transitReadout) transitReadout.textContent = fmtDuration(tofS);
-
-        // Update ship cost section with new Δv
-        if (dv != null && isFinite(dv)) updateShipCostFromDv(dv);
 
         // Redraw crosshair on porkchop
         if (porkchopRedrawCrosshair) porkchopRedrawCrosshair(tofS);
@@ -8522,41 +8547,6 @@
       slider.oninput = updateFromSlider;
       // Trigger initial update
       updateFromSlider();
-    }
-
-    // ── Update ship cost section from a given Δv ──────────
-    function updateShipCostFromDv(dvMs) {
-      const fuelReqEl = document.getElementById("tpFuelRequired");
-      const fuelRemEl = document.getElementById("tpFuelRemaining");
-      const statusEl = document.getElementById("tpCostStatus");
-      const confirmBtn = document.getElementById("tpConfirmBtn");
-      if (!fuelReqEl || !fuelRemEl) return;
-
-      const fuelNeed = computeFuelNeededKg(ship.dry_mass_kg, ship.fuel_kg, ship.isp_s, dvMs);
-      const fuelAfter = Math.max(0, shipFuel - fuelNeed);
-      const fuelAfterP = shipFuelCap > 0 ? Math.round((fuelAfter / shipFuelCap) * 100) : 0;
-      const okFuel = fuelNeed <= shipFuel + 0.1;
-      const okDv = dvMs <= shipDv + 0.1;
-
-      fuelReqEl.textContent = fmtKg(fuelNeed);
-      fuelReqEl.className = "tpVal" + (okFuel ? "" : " tpNegative");
-
-      fuelRemEl.textContent = `${fmtKg(fuelAfter)} (${fuelAfterP}%)`;
-      fuelRemEl.className = "tpVal" + (fuelAfterP > 20 ? "" : fuelAfterP > 0 ? " tpWarn" : " tpNegative");
-
-      // Rebuild status messages
-      if (statusEl) {
-        let msgs = "";
-        if (!okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient Δv (need ${Math.round(dvMs)}, have ${Math.round(shipDv)})</span></div>`;
-        if (!okFuel && okDv) msgs += `<div class="tpRow"><span class="tpLabel"></span><span class="tpVal tpNegative">Insufficient fuel</span></div>`;
-        statusEl.innerHTML = msgs;
-      }
-
-      // Enable/disable confirm button
-      if (confirmBtn) {
-        const canTransfer = okDv && okFuel && !confirmBtn.textContent.includes("Overheating");
-        confirmBtn.disabled = !canTransfer;
-      }
     }
 
     function porkchopColor(t) {

@@ -83,19 +83,19 @@ class TestLocationToShipTransfer:
         assert "water" in cargo
         assert cargo["water"] == pytest.approx(10_000.0)
 
-    def test_load_respects_cargo_capacity(self, world: GameWorldBuilder, corp_and_ships):
-        """Ship B has 50,000 kg capacity — loading more should be capped."""
+    def test_load_is_unbounded(self, world: GameWorldBuilder, corp_and_ships):
+        """Ship cargo loads are no longer capped by ship capacity."""
         corp_id, org_id, ship_a, ship_b = corp_and_ships
         conn = world.conn
         import main as _main
 
-        # Try to load 80,000 kg onto a 50,000 kg capacity ship
+        # Try to load 80,000 kg onto a nominally 50,000 kg-capacity ship.
         accepted = _main.add_cargo_to_ship(conn, ship_b, "water", 80_000.0)
         conn.commit()
 
-        assert accepted <= 50_000.0
+        assert accepted == pytest.approx(80_000.0)
         cargo = world.get_ship_cargo(ship_b)
-        assert cargo.get("water", 0.0) <= 50_000.0
+        assert cargo.get("water", 0.0) == pytest.approx(80_000.0)
 
     def test_load_multiple_resources(self, world: GameWorldBuilder, corp_and_ships):
         """Load different resources onto the same ship."""
@@ -113,9 +113,9 @@ class TestLocationToShipTransfer:
         assert cargo["iron_oxides"] == pytest.approx(15_000.0)
         assert cargo["aluminum_oxides"] == pytest.approx(5_000.0)
 
-        # Total should not exceed capacity (100,000 kg)
+        # Total cargo can exceed legacy nominal capacity.
         total = sum(cargo.values())
-        assert total <= 100_000.0
+        assert total == pytest.approx(40_000.0)
 
 
 # ── Ship → Location Resource Transfer ─────────────────────────────────────────
@@ -193,13 +193,13 @@ class TestShipToShipTransfer:
         assert cargo_a["water"] == pytest.approx(20_000.0)
         assert cargo_b["water"] == pytest.approx(10_000.0)
 
-    def test_transfer_respects_target_capacity(self, world: GameWorldBuilder, corp_and_ships):
-        """Transfer capped by target ship's remaining capacity."""
+    def test_transfer_ignores_target_capacity(self, world: GameWorldBuilder, corp_and_ships):
+        """Ship-to-ship transfer is not capped by legacy target capacity."""
         corp_id, org_id, ship_a, ship_b = corp_and_ships
         conn = world.conn
         import main as _main
 
-        # Fill ship B nearly full (capacity 50,000)
+        # Fill ship B heavily, then transfer should still accept all cargo.
         _main.add_cargo_to_ship(conn, ship_b, "iron_oxides", 45_000.0)
         conn.commit()
 
@@ -207,7 +207,7 @@ class TestShipToShipTransfer:
         _main.add_cargo_to_ship(conn, ship_a, "water", 20_000.0)
         conn.commit()
 
-        # Try to transfer all 20,000 — should only accept up to ~5,000
+        # Try to transfer all 20,000 — all should be accepted.
         taken = _main.remove_cargo_from_ship(conn, ship_a, "water", 20_000.0)
         accepted = _main.add_cargo_to_ship(conn, ship_b, "water", taken)
         # Put back the excess
@@ -215,10 +215,11 @@ class TestShipToShipTransfer:
             _main.add_cargo_to_ship(conn, ship_a, "water", taken - accepted)
         conn.commit()
 
-        assert accepted <= 5_000.0 + 1  # Small tolerance for float
+        assert accepted == pytest.approx(20_000.0)
         cargo_b = world.get_ship_cargo(ship_b)
+        assert cargo_b.get("water", 0.0) == pytest.approx(20_000.0)
         total_b = sum(cargo_b.values())
-        assert total_b <= 50_001.0
+        assert total_b == pytest.approx(65_000.0)
 
 
 # ── Part (Stack) Transfers ─────────────────────────────────────────────────────

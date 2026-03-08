@@ -247,7 +247,7 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
         for miner in loc_miners:
             config = json.loads(miner["config_json"] or "{}")
             rate_kg_hr = float(config.get("mining_rate_kg_per_hr") or 0.0)
-            if rate_kg_hr <= 0:
+            if rate_kg_hr <= 0 and miner["category"] != "isru":
                 continue
 
             corp_id = str(miner["corp_id"] or "")
@@ -257,7 +257,7 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
             elapsed_hr = elapsed_s / 3600.0
             total_mined_kg = rate_kg_hr * elapsed_hr
 
-            if total_mined_kg < 0.01:
+            if total_mined_kg < 0.01 and miner["category"] != "isru":
                 continue
 
             # ── Power gate: skip output if facility is unpowered ──
@@ -938,6 +938,7 @@ def deploy_equipment(
         config.update({
             "water_extraction_kg_per_hr": catalog_entry.get("water_extraction_kg_per_hr", 0),
             "extraction_method": catalog_entry.get("extraction_method", ""),
+            "branch": catalog_entry.get("branch", ""),
             "min_water_ice_fraction": catalog_entry.get("min_water_ice_fraction", 0.0),
             "max_water_ice_fraction": catalog_entry.get("max_water_ice_fraction", 1.0),
             "mining_output_resource_id": "water",
@@ -1141,7 +1142,7 @@ def compute_site_power_balance(equipment: List[Dict[str, Any]]) -> Dict[str, Any
                 "name": eq["name"], "heat_rejection_mw": rejection,
             })
 
-        elif cat in ("refinery", "miner", "printer", "constructor", "robonaut", "prospector"):
+        elif cat in ("refinery", "miner", "printer", "constructor", "robonaut", "prospector", "isru"):
             demand = float(cfg.get("electric_mw") or 0)
             is_active = eq.get("status") == "active"
             if is_active:

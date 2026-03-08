@@ -118,7 +118,7 @@
 
     // Teams
     teamSummary.textContent = `${activeTeams.length} active team${activeTeams.length !== 1 ? "s" : ""}` +
-      ` · ${(currentOrg.team_points_per_week || 5)} RP/week each`;
+      ` · ${(currentOrg.team_points_per_month || 5)} RP/month each`;
 
     teamsList.innerHTML = "";
     if (activeTeams.length === 0) {
@@ -129,7 +129,7 @@
         row.className = "orgTeamRow";
         row.innerHTML = `
           <span class="orgTeamName">Research Team</span>
-          <span class="muted small">${fmtUsd(team.cost_per_month_usd)}/mo · ${team.points_per_week} RP/wk</span>
+          <span class="muted small">${fmtUsd(team.cost_per_month_usd)}/mo · ${team.points_per_week} RP/mo</span>
           <button class="btnDanger btnSmall fireTeamBtn" data-id="${team.id}" type="button">Dismiss</button>
         `;
         teamsList.appendChild(row);

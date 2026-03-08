@@ -9,6 +9,7 @@ Extracted from main.py — handles:
 import json
 import re
 import sqlite3
+from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -105,6 +106,21 @@ def _first_incompatibility(parts: List[Dict[str, Any]]) -> Optional[Dict[str, An
     return incompatible[0]
 
 
+def _invalid_build_item_ids(item_ids: List[str], resolved_parts: List[Dict[str, Any]]) -> List[str]:
+    """Return requested item IDs that do not resolve to ship parts."""
+    requested_counts = Counter(str(i).strip() for i in (item_ids or []) if str(i).strip())
+    resolved_counts = Counter(
+        str((p or {}).get("item_id") or "").strip()
+        for p in (resolved_parts or [])
+        if str((p or {}).get("item_id") or "").strip()
+    )
+    invalid: List[str] = []
+    for item_id, req in requested_counts.items():
+        if resolved_counts.get(item_id, 0) < req:
+            invalid.append(item_id)
+    return invalid
+
+
 # ── Pydantic models ────────────────────────────────────────
 
 class ShipyardPreviewReq(BaseModel):
@@ -138,6 +154,16 @@ def api_shipyard_preview(req: ShipyardPreviewReq, request: Request, conn: sqlite
 
     item_ids = m.normalize_shipyard_item_ids(req.parts)
     parts = m.shipyard_parts_from_item_ids(item_ids)
+    invalid_item_ids = _invalid_build_item_ids(item_ids, parts)
+    if invalid_item_ids:
+        invalid_joined = ", ".join(invalid_item_ids)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid non-part item(s) in ship build: {invalid_joined}. "
+                "Use fuel loading for water/resources."
+            ),
+        )
 
     # Determine available water at location
     if req.unlimited_fuel:
@@ -188,6 +214,16 @@ def api_shipyard_build(req: ShipyardBuildReq, request: Request, conn: sqlite3.Co
         raise HTTPException(status_code=400, detail="At least one part is required")
 
     requested_parts = m.shipyard_parts_from_item_ids(item_ids)
+    invalid_item_ids = _invalid_build_item_ids(item_ids, requested_parts)
+    if invalid_item_ids:
+        invalid_joined = ", ".join(invalid_item_ids)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid non-part item(s) in ship build: {invalid_joined}. "
+                "Use fuel loading for water/resources."
+            ),
+        )
     incompatibility = _first_incompatibility(requested_parts)
     if incompatibility is not None:
         raise HTTPException(

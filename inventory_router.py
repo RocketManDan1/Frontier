@@ -414,6 +414,10 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
 
     accepted_mass_kg = move_mass_kg
     try:
+        # settle_arrivals can perform writes and leave an implicit transaction open.
+        # Ensure a clean boundary before starting our explicit atomic transfer block.
+        if conn.in_transaction:
+            conn.commit()
         conn.execute("BEGIN IMMEDIATE")
 
         # ── Execute source withdrawal ──
@@ -466,7 +470,8 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
 
         conn.commit()
     except Exception:
-        conn.rollback()
+        if conn.in_transaction:
+            conn.rollback()
         raise
 
     return {

@@ -88,7 +88,6 @@
     { id: "miners",       label: "Miners",        catId: "miner",       hue: 175, tooltip: "Surface excavation systems specialized for large-body, microgravity, or cryovolatile sites." },
     { id: "printers",     label: "Printers",      catId: "printer",     hue: 165, tooltip: "Surface fabrication systems specialized for industrial equipment or ship components." },
     { id: "isru",         label: "ISRU",          catId: "isru",        hue: 135, tooltip: "In-situ resource utilization modules for volatile extraction and processing support." },
-    { id: "storage",      label: "Storage",       catId: "storage",     hue: 260, tooltip: "Cargo and propellant capacity for logistics and mission endurance." },
     { id: "radiators",    label: "Radiators",     catId: "radiator",    hue: 200, tooltip: "Rejects excess waste heat so the ship can run at sustained power." },
     { id: "generators",   label: "Generators",    catId: "generator",   hue: 145, tooltip: "Converts MWth into electrical output (MWe)." },
     { id: "reactors",     label: "Reactors",      catId: "reactor",     hue: 55,  tooltip: "Uses reactions between fundamental forces to create MWth." },
@@ -307,6 +306,8 @@
         const catById = new Map(catParts.map((p) => [String(p.item_id || ""), p]));
 
         garageParts = items
+          // Water/resources are handled via fuel_kg in boost mode, not as build parts.
+          .filter((item) => String(item?.type || "").toLowerCase() !== "resource")
           .map((item) => {
             const base = mapBoostableToGaragePart(item);
             // Merge in full catalog data if available (for tooltip stats)
