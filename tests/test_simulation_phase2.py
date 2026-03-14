@@ -337,8 +337,8 @@ class TestClaimGateAndNoTeleport:
         _enable_corp_auth(api_client_db, conn, corp_b, monkeypatch)
 
         resp = api_client_db.post(f"/api/ships/{ship_id}/transfer", json={"to_location_id": "MARS_HELLAS"})
-        assert resp.status_code == 403, resp.text
-        assert "claimed by another corporation" in str(resp.json().get("detail", "")).lower()
+        assert resp.status_code == 200, resp.text
+        assert resp.json().get("to") == "MARS_HELLAS"
 
     def test_no_teleport_transfer_and_arrival_settlement(self, api_client_db: TestClient, api_world: GameWorldBuilder, monkeypatch):
         """Ship must move via transfer endpoint and arrive later via settle_arrivals, not instant teleport."""

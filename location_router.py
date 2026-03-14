@@ -249,6 +249,17 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
         site_id = s["location_id"]
         is_prospected = site_id in prospected_sites
         site_resources = resources_by_site.get(site_id, []) if is_prospected else []
+        # Spectrographic hints — always visible (not gated by prospecting)
+        raw_res = resources_by_site.get(site_id, [])
+        hints = []
+        for res in raw_res:
+            frac = res["mass_fraction"]
+            rid = res["resource_id"]
+            if frac >= 0.15:
+                if rid == "metallic_alloys_native_metal":
+                    hints.append("native_metals")
+                elif rid == "carbon_volatiles":
+                    hints.append("carbon_volatiles")
         site_entry: Dict[str, Any] = {
             "location_id": site_id,
             "name": s["site_name"],
@@ -257,6 +268,7 @@ def api_surface_sites(request: Request, conn: sqlite3.Connection = Depends(get_d
             "gravity_m_s2": float(s["gravity_m_s2"]),
             "is_prospected": is_prospected,
             "resource_distribution": site_resources,
+            "spectrographic_hints": hints,
         }
         if is_prospected:
             site_entry["eligible_equipment"] = _compute_site_eligibility(

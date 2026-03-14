@@ -5687,36 +5687,37 @@
 
       dot.interactive = true;
       dot.buttonMode = true;
+      const hasBodyTooltip = entry.kind === "moonlet" || entry.kind === "asteroid";
       dot.on("pointerover", (e) => {
         entry.hovered = true;
-        if (entry.kind === "moonlet") {
+        if (hasBodyTooltip) {
           if (bodyTooltipTimerId) clearTimeout(bodyTooltipTimerId);
-          const moonGroupId = loc.id;  // moonlet IDs like "IO", "CALLISTO"
+          const groupId = loc.id;
           bodyTooltipTimerId = setTimeout(() => {
             const pt = e.data?.global || e.global || { x: 0, y: 0 };
-            showBodyTooltip(moonGroupId, pt.x, pt.y);
+            showBodyTooltip(groupId, pt.x, pt.y);
           }, 250);
         }
       });
       dot.on("pointermove", (e) => {
-        if (entry.kind === "moonlet" && bodyTooltipBodyId === loc.id) {
+        if (hasBodyTooltip && bodyTooltipBodyId === loc.id) {
           const pt = e.data?.global || e.global || { x: 0, y: 0 };
           positionBodyTooltip(pt.x, pt.y);
         }
       });
       dot.on("pointerout", () => {
         entry.hovered = false;
-        if (entry.kind === "moonlet") hideBodyTooltip();
+        if (hasBodyTooltip) hideBodyTooltip();
       });
       dot.on("pointertap", (e) => {
         if (isSecondaryPointerEvent(e)) return;
-        if (entry.kind === "moonlet") hideBodyTooltip();
+        if (hasBodyTooltip) hideBodyTooltip();
         const clickCount = Number(e?.data?.originalEvent?.detail || 1);
         if (clickCount >= 2) ensureInfoPanelVisible();
         showLocationInfo(loc);
       });
       dot.on("rightclick", (e) => {
-        if (entry.kind === "moonlet") hideBodyTooltip();
+        if (hasBodyTooltip) hideBodyTooltip();
         openLocationContextMenu(loc, e);
       });
 
@@ -6203,12 +6204,19 @@
          <div class="bodyTooltipRow"><span class="bodyTooltipLabel">Gravity</span><span class="bodyTooltipVal">${gravStr}</span></div>`
       : "";
 
+    // Hazardous surface warning
+    const hazardousBodies = ["mercury", "venus", "titan"];
+    const hazardWarning = hazardousBodies.includes(bId)
+      ? `<div class="bodyTooltipDivider"></div><div class="bodyTooltipHazard">&#9888; The surface of this celestial poses great risk to both manned and unmanned craft. Landing is not possible at this time.</div>`
+      : "";
+
     // Sites section — filled async
     const sitesPlaceholder = `<div class="bodyTooltipSites" id="bodyTooltipSites"></div>`;
 
     bodyTooltipEl.innerHTML = `
       <div class="bodyTooltipTitle">${bodyName}</div>
       ${rows}
+      ${hazardWarning}
       ${sitesPlaceholder}`;
     bodyTooltipEl.style.display = "block";
     positionBodyTooltip(screenX, screenY);
@@ -6223,7 +6231,24 @@
         sitesEl.innerHTML = `<div class="bodyTooltipDivider"></div><div class="bodyTooltipMuted">No surface sites</div>`;
         return;
       }
-      let html = `<div class="bodyTooltipDivider"></div>`;
+      // Aggregate spectrographic hints across all sites for this body
+      const bodyHints = new Set();
+      for (const site of bodySites) {
+        for (const h of (site.spectrographic_hints || [])) bodyHints.add(h);
+      }
+
+      let html = "";
+      if (bodyHints.size > 0) {
+        html += `<div class="bodyTooltipDivider"></div>`;
+        if (bodyHints.has("native_metals")) {
+          html += `<div class="bodyTooltipHint">Spectrographic analysis indicates significant presence of native metallic ore.</div>`;
+        }
+        if (bodyHints.has("carbon_volatiles")) {
+          html += `<div class="bodyTooltipHint">Spectrographic analysis indicates significant presence of carbon volatiles.</div>`;
+        }
+      }
+
+      html += `<div class="bodyTooltipDivider"></div>`;
       html += `<div class="bodyTooltipSitesHeader">Sites (${bodySites.length})</div>`;
       for (const site of bodySites) {
         const icon = site.is_prospected ? "✓" : "?";
@@ -6836,7 +6861,7 @@
           const isSelected = ship.id === selectedShipId;
           // Quantize inputs to skip redundant full redraws
           const qProg = (tt * 500) | 0;
-          const qZoom = (zoom * 100) | 0;
+          const qZoom = (Math.log2(Math.max(0.0001, zoom)) * 20) | 0;
           const qWarp = warp ? `${(warp.dxS|0)},${(warp.dyS|0)},${(warp.dxE|0)},${(warp.dyE|0)}` : "";
           const cacheKey = `${qProg}|${qZoom}|${isSelected ? 1 : 0}|${qWarp}`;
           if (pathGfx.__transitCacheKey !== cacheKey) {
@@ -7632,6 +7657,7 @@
     let lastPorkchopData = null;       // stored porkchop grid data
     let lastPorkchopDepTime = null;    // departure time used for the porkchop
     let porkchopRedrawCrosshair = null; // function to redraw crosshair at a TOF
+    let userSelectedTofS = null;       // TOF chosen via porkchop slider
     const transferTreeOpenState = new Map();
 
     function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -8152,10 +8178,13 @@
         btn.disabled = true;
         btn.textContent = "Executing…";
         try {
+          const transferBody = { to_location_id: selectedDest };
+          if (userSelectedTofS != null) transferBody.tof_s = userSelectedTofS;
+          if (departureTimeOverride != null) transferBody.departure_time = departureTimeOverride;
           const resp = await fetch(`/api/ships/${encodeURIComponent(ship.id)}/transfer`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to_location_id: selectedDest }),
+            body: JSON.stringify(transferBody),
           });
           if (!resp.ok) {
             const data = await resp.json().catch(() => ({}));
@@ -8529,6 +8558,7 @@
       function updateFromSlider() {
         const ti = Number(slider.value);
         const tofS = tofs[ti];
+        userSelectedTofS = tofS;
         const tofDays = Math.round(tofS / 86400);
         readout.textContent = `${tofDays} days`;
 

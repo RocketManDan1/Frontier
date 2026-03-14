@@ -3,13 +3,16 @@
 
   /* ─── DOM refs ───────────────────────────────────────────────────────── */
   const tabBtnAvailable = document.getElementById("missionsTabBtnAvailable");
+  const tabBtnActive = document.getElementById("missionsTabBtnActive");
   const tabBtnHistory = document.getElementById("missionsTabBtnHistory");
   const tabAvailable = document.getElementById("missionsTabAvailable");
+  const tabActive = document.getElementById("missionsTabActive");
   const tabHistory = document.getElementById("missionsTabHistory");
 
   const missionsList = document.getElementById("missionsList");
   const missionsEmpty = document.getElementById("missionsEmpty");
   const missionsDetail = document.getElementById("missionsDetail");
+  const missionsActiveDetail = document.getElementById("missionsActiveDetail");
   const missionsHistoryList = document.getElementById("missionsHistoryList");
 
   const activeBar = document.getElementById("missionsActiveBar");
@@ -30,16 +33,20 @@
 
   /* ─── Tab switching ──────────────────────────────────────────────────── */
   function setTab(name) {
-    const isAvail = name === "available";
-    if (tabAvailable) tabAvailable.style.display = isAvail ? "block" : "none";
-    if (tabHistory) tabHistory.style.display = isAvail ? "none" : "block";
-    tabBtnAvailable?.classList.toggle("active", isAvail);
-    tabBtnHistory?.classList.toggle("active", !isAvail);
-    tabBtnAvailable?.setAttribute("aria-selected", String(isAvail));
-    tabBtnHistory?.setAttribute("aria-selected", String(!isAvail));
-    if (!isAvail) loadHistory();
+    if (tabAvailable) tabAvailable.style.display = name === "available" ? "block" : "none";
+    if (tabActive) tabActive.style.display = name === "active" ? "block" : "none";
+    if (tabHistory) tabHistory.style.display = name === "history" ? "block" : "none";
+    tabBtnAvailable?.classList.toggle("active", name === "available");
+    tabBtnActive?.classList.toggle("active", name === "active");
+    tabBtnHistory?.classList.toggle("active", name === "history");
+    tabBtnAvailable?.setAttribute("aria-selected", String(name === "available"));
+    tabBtnActive?.setAttribute("aria-selected", String(name === "active"));
+    tabBtnHistory?.setAttribute("aria-selected", String(name === "history"));
+    if (name === "active") renderActiveDetail();
+    if (name === "history") loadHistory();
   }
   tabBtnAvailable?.addEventListener("click", () => setTab("available"));
+  tabBtnActive?.addEventListener("click", () => setTab("active"));
   tabBtnHistory?.addEventListener("click", () => setTab("history"));
 
   /* ─── Tier display helpers ───────────────────────────────────────────── */
@@ -131,6 +138,7 @@
         gameTime = data.game_time_s || 0;
         renderMissionList();
         renderActiveMission();
+        renderActiveDetail();
         if (selectedId) renderDetail(selectedId);
       })
       .catch(function (err) {
@@ -257,6 +265,68 @@
       activeExpiry.textContent = "Time left: " + formatGameTime(remain);
     }
 
+  }
+
+  /* ─── Render active mission detail tab ────────────────────────────────── */
+  function renderActiveDetail() {
+    if (!missionsActiveDetail) return;
+    if (!activeMission) {
+      missionsActiveDetail.innerHTML = '<div class="missionsDetailEmpty">No active mission</div>';
+      return;
+    }
+    var m = activeMission;
+    var expiresIn = m.expires_at ? (m.expires_at - gameTime) : 0;
+
+    // Module location text
+    var moduleHtml = "";
+    var ml = m.module_location;
+    if (ml) {
+      var locText = ml.location_id || "Unknown";
+      if (ml.ship_name) {
+        locText = "loaded on " + esc(ml.ship_name) + (ml.location_id ? " @ " + esc(ml.location_id) : "");
+      } else if (ml.found_in && String(ml.found_in).indexOf("ship:") === 0) {
+        var shipId = String(ml.found_in).slice(5);
+        locText = "loaded on " + esc(shipId) + (ml.location_id ? " @ " + esc(ml.location_id) : "");
+      } else if (ml.found_in === "location_inventory") {
+        locText = esc(ml.location_id) + " (station)";
+      }
+      moduleHtml = '<div class="missionsDetailRow"><span class="missionsDetailLabel">Module Location</span><span>' + locText + '</span></div>';
+    }
+
+    // Power progress for hard missions
+    var powerHtml = "";
+    if (m.tier === "hard" && m.status === "powered" && m.power_started_at) {
+      var powerElapsed = gameTime - m.power_started_at;
+      var powerReq = m.power_required_s || (90 * 86400);
+      var pct = Math.min(100, (powerElapsed / powerReq) * 100);
+      powerHtml = '<div class="missionsDetailRow"><span class="missionsDetailLabel">Power Progress</span><span>' + pct.toFixed(1) + '%</span></div>';
+    }
+
+    missionsActiveDetail.innerHTML =
+      '<div class="missionsDetailCard">' +
+        '<div class="missionsDetailTier"><span class="' + tierClass(m.tier) + '">' + tierStars(m.tier) + ' ' + cap(m.tier) + '</span>' +
+          ' <span class="' + statusClass(m.status) + '">' + statusLabel(m.status) + '</span></div>' +
+        '<h2 class="missionsDetailTitle">' + esc(m.title) + '</h2>' +
+        '<div class="missionsDetailMeta">' +
+          '<div class="missionsDetailRow"><span class="missionsDetailLabel">Destination</span><span>' + esc(m.destination_name) + ' <code>' + esc(m.destination_id) + '</code></span></div>' +
+          '<div class="missionsDetailRow"><span class="missionsDetailLabel">Total Payout</span><span class="missionsDetailMoney">' + formatMoney(m.payout_total) + '</span></div>' +
+          '<div class="missionsDetailRow"><span class="missionsDetailLabel">Upfront (50%)</span><span>' + formatMoney(m.payout_upfront) + '</span></div>' +
+          '<div class="missionsDetailRow"><span class="missionsDetailLabel">Completion (50%)</span><span>' + formatMoney(m.payout_completion) + '</span></div>' +
+          (expiresIn > 0 ? '<div class="missionsDetailRow"><span class="missionsDetailLabel">Time Remaining</span><span>' + formatGameTime(expiresIn) + '</span></div>' : '') +
+          moduleHtml +
+          powerHtml +
+        '</div>' +
+        '<div class="missionsDetailDesc">' + esc(m.description) + '</div>' +
+        '<div class="missionsDetailActions">' +
+          '<button class="btnOutline missionsBtn missionsCompleteBtn" id="activeDetailComplete" type="button">Complete</button>' +
+          '<button class="btnOutline missionsBtn missionsAbandonBtn" id="activeDetailAbandon" type="button">Abandon</button>' +
+        '</div>' +
+      '</div>';
+
+    var completeBtn = document.getElementById("activeDetailComplete");
+    var abandonBtn = document.getElementById("activeDetailAbandon");
+    if (completeBtn) completeBtn.addEventListener("click", function () { btnComplete?.click(); });
+    if (abandonBtn) abandonBtn.addEventListener("click", function () { btnAbandon?.click(); });
   }
 
   /* ─── Actions ────────────────────────────────────────────────────────── */

@@ -33,6 +33,7 @@
       <!-- Sub-tabs -->
       <div class="missionsSubTabs" role="tablist" aria-label="Mission sections">
         <button id="missionsTabBtnAvailable" class="missionsSubTabBtn active" type="button" role="tab" aria-selected="true">Available</button>
+        <button id="missionsTabBtnActive" class="missionsSubTabBtn" type="button" role="tab" aria-selected="false">Active</button>
         <button id="missionsTabBtnHistory" class="missionsSubTabBtn" type="button" role="tab" aria-selected="false">History</button>
       </div>
 
@@ -53,7 +54,14 @@
         </div>
       </div>
 
-      <!-- ═══════════════ TAB 2: History ═══════════════ -->
+      <!-- ═══════════════ TAB 2: Active Mission ═══════════════ -->
+      <div id="missionsTabActive" class="missionsTabPane" style="display:none;">
+        <div class="missionsActiveDetail" id="missionsActiveDetail">
+          <div class="missionsDetailEmpty">No active mission</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ TAB 3: History ═══════════════ -->
       <div id="missionsTabHistory" class="missionsTabPane" style="display:none;">
         <div class="missionsHistoryList" id="missionsHistoryList">
           <div class="missionsEmptyMsg">Loading history…</div>

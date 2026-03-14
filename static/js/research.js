@@ -543,5 +543,21 @@
     }
   }
 
+  // Poll RP so the indicator stays current between unlocks
+  async function pollRp() {
+    try {
+      var resp = await fetch("/api/org", { cache: "no-store" });
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var fresh = (data.org && data.org.research_points) || 0;
+      if (fresh !== orgResearchPoints) {
+        orgResearchPoints = fresh;
+        renderRpIndicator();
+        renderInfo();
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   loadTree();
+  setInterval(pollRp, 10000);
 })();

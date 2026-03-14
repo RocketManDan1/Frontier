@@ -89,6 +89,8 @@ def _require_ship_ownership(conn, request, ship_id: str):
 
 class TransferReq(BaseModel):
     to_location_id: str
+    departure_time: Optional[float] = None      # game epoch seconds; None = now
+    tof_s: Optional[float] = None               # user-selected time of flight from porkchop
 
 
 class InventoryContainerReq(BaseModel):
@@ -1079,6 +1081,9 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     dv = float(route_quote["dv_m_s"])
     tof = float(route_quote["tof_s"])
 
+    # If the user selected a specific TOF from the porkchop plot, use it
+    user_tof_s = req.tof_s
+
     raw_parts, _raw_cargo = m.split_ship_parts_and_cargo(ship["parts_json"] or "[]")
     parts = m.normalize_parts(raw_parts)
     stats = m.derive_ship_stats_from_parts(
@@ -1141,26 +1146,6 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
                                f"ship thrust {thrust_kn:.1f} kN, mass {wet_mass_kg:.0f} kg)",
                     )
 
-    # ── Site claim gate: block landing on surface sites claimed by another corp ──
-    my_corp_id = user.get("corp_id") if hasattr(user, "get") else None
-    if my_corp_id:
-        # Check if destination is a surface site claimed by another corp's refinery
-        dest_site = conn.execute(
-            "SELECT location_id FROM surface_sites WHERE location_id = ?", (to_id,)
-        ).fetchone()
-        if dest_site:
-            claiming_corp = conn.execute(
-                """SELECT corp_id FROM deployed_equipment
-                   WHERE location_id = ? AND category = 'refinery' AND corp_id != ?
-                   LIMIT 1""",
-                (to_id, my_corp_id),
-            ).fetchone()
-            if claiming_corp:
-                raise HTTPException(
-                    status_code=403,
-                    detail="This surface site is claimed by another corporation's refinery",
-                )
-
     fuel_used_kg = m.compute_fuel_needed_for_delta_v_kg(
         stats["dry_mass_kg"],
         stats["fuel_kg"],
@@ -1170,6 +1155,8 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
     fuel_remaining_kg = max(0.0, stats["fuel_kg"] - fuel_used_kg)
 
     dep = now_s
+    if user_tof_s is not None and user_tof_s > 0:
+        tof = user_tof_s
     arr = now_s + max(1.0, tof)
 
     # Snapshot departure/arrival coordinates so in-transit interpolation
@@ -1254,7 +1241,9 @@ def api_ship_transfer(ship_id: str, req: TransferReq, request: Request, conn: sq
         # times for cislunar and similar transfers).
         model_tof = burn_plan.get("total_tof_s")
         transfer_type = burn_plan.get("transfer_type", "")
-        if model_tof and model_tof > 0 and transfer_type not in ("local_hohmann", "soi_hohmann"):
+        # Only override with orbit model TOF if the user didn't explicitly
+        # select a TOF from the porkchop plot / transfer planner.
+        if user_tof_s is None and model_tof and model_tof > 0 and transfer_type not in ("local_hohmann", "soi_hohmann"):
             arr = dep + model_tof
 
     conn.execute(

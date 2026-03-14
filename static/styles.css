@@ -1267,6 +1267,22 @@ body.embedMode .pagePanel {
   font-style: italic;
 }
 
+.bodyTooltipHint {
+  font-size: 10px;
+  color: rgba(200, 210, 140, 0.85);
+  font-style: italic;
+  padding: 2px 0;
+  line-height: 1.35;
+}
+
+.bodyTooltipHazard {
+  font-size: 10px;
+  color: #e05050;
+  font-style: italic;
+  padding: 2px 0;
+  line-height: 1.35;
+}
+
 /* ── Fleet Filter Toggle (cont.) ────────────────────────── */
 
 .fleetToggleBtn {
@@ -9462,7 +9478,8 @@ body.embedMode .contractsTabPane {
   padding: 8px 0;
 }
 
-.missionsDetail {
+.missionsDetail,
+.missionsActiveDetail {
   flex: 1 1 0;
   overflow-y: auto;
   padding: 16px 24px;
