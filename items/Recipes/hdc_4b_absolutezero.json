@@ -4,14 +4,38 @@
   "output_item_id": "hdc_4b_absolutezero",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 24000.0 },
-    { "item_id": "superconductors", "qty": 16000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 15000.0 },
-    { "item_id": "structural_alloys", "qty": 9500.0 },
-    { "item_id": "advanced_ceramics", "qty": 7200.0 },
-    { "item_id": "radiation_composite_armor", "qty": 5600.0 },
-    { "item_id": "carbon_composites", "qty": 4000.0 },
-    { "item_id": "strategic_elements", "qty": 2700.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 26000.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 17500.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 16000.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 10500.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 7800.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 6000.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 4300.0
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 2900.0
+    }
   ],
   "build_time_s": 27300,
   "facility_type": "shipyard",

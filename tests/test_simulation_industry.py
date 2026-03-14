@@ -658,8 +658,9 @@ class TestConstructionQueue:
             conn, "MARS_HELLAS", recipe_id, "industry_boss",
             corp_id=corp_id, facility_id=fac_id,
         )
-        assert "queue_id" in result
-        queue_id = result["queue_id"]
+        assert "queue_ids" in result
+        assert len(result["queue_ids"]) == 1
+        queue_id = result["queue_ids"][0]
 
         # Verify it's in the queue
         qrow = conn.execute(

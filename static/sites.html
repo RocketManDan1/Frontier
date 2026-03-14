@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Frontier: Sol 2000 — Sites &amp; Industry</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout43" />
+    <link rel="stylesheet" href="/static/styles.css?v=fac2" />
   </head>
 
   <body class="sitesPage">
@@ -157,100 +157,105 @@
             </div>
           </div>
 
-          <!-- Facility industry view (existing content, shown when inside a facility) -->
+          <!-- Facility industry view (shown when inside a facility) -->
           <div id="facilityIndustryView" style="display:none">
-          <!-- Power Balance (compact) -->
-          <div class="panel industryPowerPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Power &amp; Thermal</span>
-            </div>
-            <div class="industryPowerContent" id="industryPowerContent"></div>
+
+          <!-- Industrial subtab bar -->
+          <div class="industrySubTabs" id="industrySubTabs">
+            <button class="indSubTab active" data-indtab="overview">Overview</button>
+            <button class="indSubTab" data-indtab="deployments">Deployments</button>
+            <button class="indSubTab" data-indtab="mining">Mining &amp; Refining</button>
+            <button class="indSubTab" data-indtab="printing">Printing</button>
           </div>
 
-          <!-- Deploy button -->
-          <div class="industryActionBar">
-            <button class="btnSmall" id="btnDeployEquip">Deploy Equipment</button>
-          </div>
-
-          <!-- ═══ Miners & Printers (collapsible) ═══ -->
-          <div class="panel industryConstructorsPanel">
-            <div class="panelHeader collapsibleHeader" id="constructorsSectionHeader">
-              <span class="collapseToggle">▾</span>
-              <span class="panelTitle">Miners &amp; Printers</span>
-              <span class="badge" id="constructorCountBadge">0</span>
-              <span class="muted" id="constructorSummary"></span>
+          <!-- ═══ OVERVIEW SUBTAB ═══ -->
+          <div class="indSubTabContent" id="indTabOverview">
+            <!-- Power & Thermal (summary) -->
+            <div class="panel industryPowerPanel">
+              <div class="panelHeader"><span class="panelTitle">Power &amp; Thermal</span></div>
+              <div class="industryPowerContent" id="industryPowerContent"></div>
             </div>
-            <div class="collapsibleBody" id="constructorsSectionBody">
-              <div id="constructorsList"></div>
+            <!-- Aggregate Rates -->
+            <div class="panel industryAggPanel">
+              <div class="panelHeader"><span class="panelTitle">Aggregate Rates</span></div>
+              <div id="industryAggContent"></div>
             </div>
-          </div>
-
-          <!-- ═══ Mining Summary (surface sites) ═══ -->
-          <div class="panel industryMiningPanel" id="industryMiningPanel" style="display:none">
-            <div class="panelHeader">
-              <span class="panelTitle">Mining Output</span>
+            <!-- Mining Output (surface sites) -->
+            <div class="panel industryMiningPanel" id="industryMiningPanel" style="display:none">
+              <div class="panelHeader"><span class="panelTitle">Mining Output</span></div>
+              <div class="industryMiningContent" id="industryMiningContent"></div>
             </div>
-            <div class="industryMiningContent" id="industryMiningContent"></div>
-          </div>
-
-          <!-- ═══ Refinery Slots (priority ordered) ═══ -->
-          <div class="panel industryRefinerySlotsPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Refinery Slots</span>
-              <span class="badge" id="refinerySlotCountBadge">0</span>
-            </div>
-            <div id="refinerySlotsList" class="refinerySlotsList"></div>
-          </div>
-
-          <!-- ═══ Construction Queue (pooled speed) ═══ -->
-          <div class="panel industryConstructionPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Construction Queue</span>
-              <span class="muted" id="constructionPoolInfo"></span>
-            </div>
-            <div id="constructionQueueList" class="constructionQueueList"></div>
-            <div class="constructionQueueActions">
-              <button class="btnSmall" id="btnAddConstruction">+ Add to Queue</button>
+            <!-- Job History -->
+            <div class="panel industryHistoryPanel">
+              <div class="panelHeader"><span class="panelTitle">Job History</span></div>
+              <div class="industryHistoryList" id="industryHistoryList"></div>
             </div>
           </div>
 
-          <!-- ═══ Production Chain Flow ═══ -->
-          <div class="panel industryChainPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Production Chain</span>
+          <!-- ═══ DEPLOYMENTS SUBTAB ═══ -->
+          <div class="indSubTabContent" id="indTabDeployments" style="display:none">
+            <!-- Deploy button -->
+            <div class="industryActionBar">
+              <button class="btnSmall" id="btnDeployEquip">Deploy Equipment</button>
             </div>
-            <div class="chainFlow" id="chainFlow">
-              <div class="chainColumn">
-                <div class="chainColumnHeader"><span class="chainColumnIcon">◆</span> Raw Materials</div>
-                <div class="chainColumnBody" id="chainRawMaterials"></div>
+            <!-- Equipment list grouped by category -->
+            <div id="deploymentsEquipList"></div>
+            <!-- Per-equipment power breakdown -->
+            <div class="panel industryPowerBreakdownPanel">
+              <div class="panelHeader"><span class="panelTitle">Power Breakdown</span></div>
+              <div id="powerBreakdownContent"></div>
+            </div>
+          </div>
+
+          <!-- ═══ MINING & REFINING SUBTAB ═══ -->
+          <div class="indSubTabContent" id="indTabMining" style="display:none">
+            <!-- Miners -->
+            <div class="panel industryConstructorsPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Miners &amp; ISRU</span>
+                <span class="badge" id="minerCountBadge">0</span>
               </div>
-              <div class="chainArrow">
-                <div class="chainArrowLine"></div>
-                <div class="chainArrowHead">▶</div>
-                <div class="chainArrowLabel">REFINE</div>
+              <div id="minersList"></div>
+            </div>
+            <!-- Refineries -->
+            <div class="panel industryRefineriesPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Refineries</span>
+                <span class="badge" id="refineryCountBadge">0</span>
               </div>
-              <div class="chainColumn">
-                <div class="chainColumnHeader"><span class="chainColumnIcon">⬡</span> Refined Materials</div>
-                <div class="chainColumnBody" id="chainRefined"></div>
+              <div id="refineriesList"></div>
+            </div>
+            <!-- Refinery Slots -->
+            <div class="panel industryRefinerySlotsPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Refinery Slots</span>
+                <span class="badge" id="refinerySlotCountBadge">0</span>
               </div>
-              <div class="chainArrow">
-                <div class="chainArrowLine"></div>
-                <div class="chainArrowHead">▶</div>
-                <div class="chainArrowLabel">BUILD</div>
-              </div>
-              <div class="chainColumn">
-                <div class="chainColumnHeader"><span class="chainColumnIcon">⚙</span> Constructable</div>
-                <div class="chainColumnBody" id="chainConstructable"></div>
-              </div>
+              <div id="refinerySlotsList" class="refinerySlotsList"></div>
             </div>
           </div>
 
-          <!-- Job History -->
-          <div class="panel industryHistoryPanel">
-            <div class="panelHeader">
-              <span class="panelTitle">Job History</span>
+          <!-- ═══ PRINTING SUBTAB ═══ -->
+          <div class="indSubTabContent" id="indTabPrinting" style="display:none">
+            <!-- Printers -->
+            <div class="panel industryPrintersPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Printers</span>
+                <span class="badge" id="printerCountBadge">0</span>
+              </div>
+              <div id="printersList"></div>
             </div>
-            <div class="industryHistoryList" id="industryHistoryList"></div>
+            <!-- Build Queue -->
+            <div class="panel industryConstructionPanel">
+              <div class="panelHeader">
+                <span class="panelTitle">Build Queue</span>
+                <span class="muted" id="constructionPoolInfo"></span>
+              </div>
+              <div id="constructionQueueList" class="constructionQueueList"></div>
+              <div class="constructionQueueActions">
+                <button class="btnSmall" id="btnAddConstruction">+ Add to Queue</button>
+              </div>
+            </div>
           </div>
 
           </div><!-- /facilityIndustryView -->
@@ -357,11 +362,27 @@
       <div class="modal" id="recipeSelectModal" style="display:none">
         <div class="modalOverlay"></div>
         <div class="modalBody recipeSelectModalBody">
-          <div class="panelHeader">
+          <div class="panelHeader" id="recipeSelectHeader">
             <span class="panelTitle" id="recipeSelectTitle">Select Recipe</span>
             <button class="btnSmall" id="recipeSelectModalClose">✕</button>
           </div>
-          <div id="recipeSelectContent"></div>
+          <div id="recipeSelectSinglePane">
+            <div id="recipeSelectContent"></div>
+          </div>
+          <div id="recipeSelectDualPane" style="display:none">
+            <div class="recipeModalDual">
+              <div class="recipeModalStaging">
+                <div class="recipeStagingHeader">Build Order</div>
+                <div id="recipeStagingList" class="recipeStagingList"></div>
+                <div class="recipeStagingFooter">
+                  <button class="btnSmall btnAccent" id="recipeStagingConfirm">Add to Queue</button>
+                </div>
+              </div>
+              <div class="recipeModalCatalog">
+                <div id="recipeConstructionCatalog"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -388,10 +409,10 @@
 
     </div>
 
-    <script src="/static/js/auth.js?v=layout43"></script>
-    <script src="/static/js/clock.js?v=layout43"></script>
-    <script src="/static/js/item_display.js?v=id4"></script>
-    <script src="/static/js/item_info.js?v=ii2"></script>
-    <script src="/static/js/sites.js?v=layout43"></script>
+    <script src="/static/js/auth.js?v=fac2"></script>
+    <script src="/static/js/clock.js?v=fac2"></script>
+    <script src="/static/js/item_display.js?v=fac2"></script>
+    <script src="/static/js/item_info.js?v=fac2"></script>
+    <script src="/static/js/sites.js?v=fac2"></script>
   </body>
 </html>

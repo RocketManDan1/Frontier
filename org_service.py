@@ -351,51 +351,61 @@ def sell_market_resource(
     leo_location_id = _resolve_leo_location_id(conn)
     corp_scope = str(corp_id or "")
 
-    sold_mass = 0.0
-    sold_from_name = ""
+    # Wrap consume + payment in a single atomic transaction
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        sold_mass = 0.0
+        sold_from_name = ""
 
-    if src_kind == "location":
-        src = str(source_id or "").strip() or leo_location_id
-        if src != leo_location_id:
-            raise ValueError("Location sales are only allowed from Low Earth Orbit")
+        if src_kind == "location":
+            src = str(source_id or "").strip() or leo_location_id
+            if src != leo_location_id:
+                raise ValueError("Location sales are only allowed from Low Earth Orbit")
 
-        stack_row = _main()._resource_stack_row(conn, leo_location_id, rid, corp_id=corp_scope)
-        available_mass = max(0.0, float(stack_row["mass_kg"] or 0.0))
-        sold_mass = min(requested_mass, available_mass)
-        if sold_mass <= 1e-9:
-            raise ValueError("No sellable mass available at LEO")
-        _main()._consume_location_resource_mass(conn, stack_row, sold_mass)
-        sold_from_name = "Low Earth Orbit"
-    else:
-        ship_id = str(source_id or "").strip()
-        if not ship_id:
-            raise ValueError("source_id is required for ship sales")
+            stack_row = _main()._resource_stack_row(conn, leo_location_id, rid, corp_id=corp_scope)
+            available_mass = max(0.0, float(stack_row["mass_kg"] or 0.0))
+            sold_mass = min(requested_mass, available_mass)
+            if sold_mass <= 1e-9:
+                raise ValueError("No sellable mass available at LEO")
+            _main()._consume_location_resource_mass(conn, stack_row, sold_mass)
+            sold_from_name = "Low Earth Orbit"
+        else:
+            ship_id = str(source_id or "").strip()
+            if not ship_id:
+                raise ValueError("source_id is required for ship sales")
 
-        ship_row = conn.execute(
-            "SELECT id, name, location_id, arrives_at, corp_id FROM ships WHERE id = ?",
-            (ship_id,),
-        ).fetchone()
-        if not ship_row:
-            raise ValueError("Ship not found")
-        if str(ship_row["location_id"] or "") != leo_location_id or ship_row["arrives_at"] is not None:
-            raise ValueError("Ship sales are only allowed for docked ships in Low Earth Orbit")
-        if corp_scope and str(ship_row["corp_id"] or "") != corp_scope:
-            raise ValueError("This ship belongs to another corporation")
+            ship_row = conn.execute(
+                "SELECT id, name, location_id, arrives_at, corp_id FROM ships WHERE id = ?",
+                (ship_id,),
+            ).fetchone()
+            if not ship_row:
+                raise ValueError("Ship not found")
+            if str(ship_row["location_id"] or "") != leo_location_id or ship_row["arrives_at"] is not None:
+                raise ValueError("Ship sales are only allowed for docked ships in Low Earth Orbit")
+            if corp_scope and str(ship_row["corp_id"] or "") != corp_scope:
+                raise ValueError("This ship belongs to another corporation")
 
-        sold_mass = _consume_ship_resource_mass(conn, ship_id, rid, requested_mass)
-        if sold_mass <= 1e-9:
-            raise ValueError("Ship has no sellable mass for that resource")
-        sold_from_name = str(ship_row["name"])
+            sold_mass = _consume_ship_resource_mass(conn, ship_id, rid, requested_mass)
+            if sold_mass <= 1e-9:
+                raise ValueError("Ship has no sellable mass for that resource")
+            sold_from_name = str(ship_row["name"])
 
-    proceeds_usd = sold_mass * unit_price
-    conn.execute(
-        "UPDATE organizations SET balance_usd = balance_usd + ? WHERE id = ?",
-        (proceeds_usd, org_id),
-    )
-    org_row = conn.execute("SELECT balance_usd FROM organizations WHERE id = ?", (org_id,)).fetchone()
-    new_balance = float(org_row["balance_usd"] or 0.0) if org_row else 0.0
+        proceeds_usd = sold_mass * unit_price
+        conn.execute(
+            "UPDATE organizations SET balance_usd = balance_usd + ? WHERE id = ?",
+            (proceeds_usd, org_id),
+        )
+        org_row = conn.execute("SELECT balance_usd FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        new_balance = float(org_row["balance_usd"] or 0.0) if org_row else 0.0
 
-    conn.commit()
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+
     return {
         "source_kind": src_kind,
         "source_id": source_id,
@@ -961,88 +971,97 @@ def boost_manifest_to_leo(
 
     total_cost = calculate_boost_cost(total_mass_kg)
 
-    org = conn.execute("SELECT balance_usd FROM organizations WHERE id = ?", (org_id,)).fetchone()
-    if not org:
-        raise ValueError("Organization not found")
-    balance = float(org["balance_usd"])
-    if balance < total_cost:
-        raise ValueError(f"Insufficient funds. Need ${total_cost:,.0f}, have ${balance:,.0f}")
+    # Wrap balance check + deduction + item insertion in one atomic block
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        org = conn.execute("SELECT balance_usd FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        if not org:
+            raise ValueError("Organization not found")
+        balance = float(org["balance_usd"])
+        if balance < total_cost:
+            raise ValueError(f"Insufficient funds. Need ${total_cost:,.0f}, have ${balance:,.0f}")
 
-    leo_loc = conn.execute(
-        "SELECT id FROM locations WHERE id = 'LEO' LIMIT 1"
-    ).fetchone()
-    dest_location_id = str(leo_loc["id"]) if leo_loc else LEO_LOCATION_ID
+        leo_loc = conn.execute(
+            "SELECT id FROM locations WHERE id = 'LEO' LIMIT 1"
+        ).fetchone()
+        dest_location_id = str(leo_loc["id"]) if leo_loc else LEO_LOCATION_ID
 
-    conn.execute(
-        "UPDATE organizations SET balance_usd = balance_usd - ? WHERE id = ?",
-        (total_cost, org_id),
-    )
-
-    now = game_now_s()
-    if total_mass_kg > 0.0:
-        for line in launch_lines:
-            line["cost_usd"] = total_cost * (float(line["mass_kg"]) / total_mass_kg)
-    else:
-        equal_share = total_cost / max(1, len(launch_lines))
-        for line in launch_lines:
-            line["cost_usd"] = equal_share
-
-    for line in launch_lines:
-        boost_id = str(uuid.uuid4())
-        line["boost_id"] = boost_id
         conn.execute(
-            """INSERT INTO leo_boosts (id, org_id, item_id, item_name, quantity, mass_kg, cost_usd, boosted_at, destination_location_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                boost_id,
-                org_id,
-                line["item_id"],
-                line["item_name"],
+            "UPDATE organizations SET balance_usd = balance_usd - ? WHERE id = ?",
+            (total_cost, org_id),
+        )
+
+        now = game_now_s()
+        if total_mass_kg > 0.0:
+            for line in launch_lines:
+                line["cost_usd"] = total_cost * (float(line["mass_kg"]) / total_mass_kg)
+        else:
+            equal_share = total_cost / max(1, len(launch_lines))
+            for line in launch_lines:
+                line["cost_usd"] = equal_share
+
+        for line in launch_lines:
+            boost_id = str(uuid.uuid4())
+            line["boost_id"] = boost_id
+            conn.execute(
+                """INSERT INTO leo_boosts (id, org_id, item_id, item_name, quantity, mass_kg, cost_usd, boosted_at, destination_location_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    boost_id,
+                    org_id,
+                    line["item_id"],
+                    line["item_name"],
+                    float(line["quantity"]),
+                    float(line["mass_kg"]),
+                    float(line["cost_usd"]),
+                    now,
+                    dest_location_id,
+                ),
+            )
+
+            _add_to_location_inventory(
+                conn,
+                dest_location_id,
+                str(line["item_id"]),
+                str(line["item_name"]),
+                str(line["item_type"]),
                 float(line["quantity"]),
                 float(line["mass_kg"]),
-                float(line["cost_usd"]),
                 now,
-                dest_location_id,
-            ),
-        )
+                corp_id=corp_id,
+            )
 
-        _add_to_location_inventory(
-            conn,
-            dest_location_id,
-            str(line["item_id"]),
-            str(line["item_name"]),
-            str(line["item_type"]),
-            float(line["quantity"]),
-            float(line["mass_kg"]),
-            now,
-            corp_id=corp_id,
-        )
+        # If fuel (water) was requested, add it to the destination inventory
+        if boost_fuel_kg > 0.0:
+            import main as _main_mod
+            resources = _main_mod.load_resource_catalog()
+            water_res = resources.get("water") or {}
+            water_name = str(water_res.get("name") or "Water")
+            water_density = max(0.0, float(water_res.get("mass_per_m3_kg") or 1000.0))
+            water_volume_m3 = (boost_fuel_kg / water_density) if water_density > 0.0 else 0.0
+            import json as _json
+            water_payload = _json.dumps({"resource_id": "water"}, sort_keys=True, separators=(",", ":"))
+            _main_mod._upsert_inventory_stack(
+                conn,
+                location_id=dest_location_id,
+                stack_type="resource",
+                stack_key="water",
+                item_id="water",
+                name=water_name,
+                quantity_delta=boost_fuel_kg,
+                mass_delta_kg=boost_fuel_kg,
+                volume_delta_m3=water_volume_m3,
+                payload_json=water_payload,
+                corp_id=corp_id,
+            )
 
-    # If fuel (water) was requested, add it to the destination inventory
-    if boost_fuel_kg > 0.0:
-        import main as _main_mod
-        resources = _main_mod.load_resource_catalog()
-        water_res = resources.get("water") or {}
-        water_name = str(water_res.get("name") or "Water")
-        water_density = max(0.0, float(water_res.get("mass_per_m3_kg") or 1000.0))
-        water_volume_m3 = (boost_fuel_kg / water_density) if water_density > 0.0 else 0.0
-        import json as _json
-        water_payload = _json.dumps({"resource_id": "water"}, sort_keys=True, separators=(",", ":"))
-        _main_mod._upsert_inventory_stack(
-            conn,
-            location_id=dest_location_id,
-            stack_type="resource",
-            stack_key="water",
-            item_id="water",
-            name=water_name,
-            quantity_delta=boost_fuel_kg,
-            mass_delta_kg=boost_fuel_kg,
-            volume_delta_m3=water_volume_m3,
-            payload_json=water_payload,
-            corp_id=corp_id,
-        )
-
-    conn.commit()
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
     result: Dict[str, Any] = {
         "destination": dest_location_id,

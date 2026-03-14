@@ -117,83 +117,92 @@ def _settle_production_jobs(conn: sqlite3.Connection, now: float, location_id: O
     """Complete production jobs whose completes_at <= now.
     Skips jobs owned by refinery slots or the construction queue — those are
     settled by their own dedicated functions."""
-    where = "WHERE pj.status = 'active' AND pj.completes_at <= ?"
-    params: list = [now]
-    if facility_id:
-        where += " AND pj.facility_id = ?"
-        params.append(facility_id)
-    elif location_id:
-        where += " AND pj.location_id = ?"
-        params.append(location_id)
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        where = "WHERE pj.status = 'active' AND pj.completes_at <= ?"
+        params: list = [now]
+        if facility_id:
+            where += " AND pj.facility_id = ?"
+            params.append(facility_id)
+        elif location_id:
+            where += " AND pj.location_id = ?"
+            params.append(location_id)
 
-    rows = conn.execute(
-        f"""
-        SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
-               pj.recipe_id, pj.outputs_json, pj.completes_at, pj.corp_id, pj.facility_id
-        FROM production_jobs pj
-        {where}
-          AND pj.id NOT IN (SELECT current_job_id FROM refinery_slots WHERE current_job_id IS NOT NULL)
-          AND pj.id NOT IN (SELECT id FROM construction_queue WHERE status = 'active')
-        """,
-        params,
-    ).fetchall()
+        rows = conn.execute(
+            f"""
+            SELECT pj.id, pj.location_id, pj.equipment_id, pj.job_type,
+                   pj.recipe_id, pj.outputs_json, pj.completes_at, pj.corp_id, pj.facility_id
+            FROM production_jobs pj
+            {where}
+              AND pj.id NOT IN (SELECT current_job_id FROM refinery_slots WHERE current_job_id IS NOT NULL)
+              AND pj.id NOT IN (SELECT id FROM construction_queue WHERE status = 'active')
+            """,
+            params,
+        ).fetchall()
 
-    if not rows:
-        return
+        if not rows:
+            conn.commit()
+            return
 
-    # Lazy import to avoid circular ref
-    import main as _main
+        # Lazy import to avoid circular ref
+        import main as _main
 
-    # Build a lookup of all known part catalogs so we can distinguish parts from resources
-    part_catalogs = {}
-    for loader in (
-        catalog_service.load_miner_catalog,
-        catalog_service.load_printer_catalog,
-        catalog_service.load_refinery_catalog,
-        catalog_service.load_thruster_main_catalog,
-        catalog_service.load_reactor_catalog,
-        catalog_service.load_generator_catalog,
-        catalog_service.load_radiator_catalog,
-        catalog_service.load_robonaut_catalog,
-        catalog_service.load_isru_catalog,
-        catalog_service.load_storage_catalog,
-    ):
-        part_catalogs.update(loader())
+        # Build a lookup of all known part catalogs so we can distinguish parts from resources
+        part_catalogs = {}
+        for loader in (
+            catalog_service.load_miner_catalog,
+            catalog_service.load_printer_catalog,
+            catalog_service.load_refinery_catalog,
+            catalog_service.load_thruster_main_catalog,
+            catalog_service.load_reactor_catalog,
+            catalog_service.load_generator_catalog,
+            catalog_service.load_radiator_catalog,
+            catalog_service.load_robonaut_catalog,
+            catalog_service.load_isru_catalog,
+            catalog_service.load_storage_catalog,
+        ):
+            part_catalogs.update(loader())
 
-    resource_catalog = catalog_service.load_resource_catalog()
+        resource_catalog = catalog_service.load_resource_catalog()
 
-    for row in rows:
-        job_id = row["id"]
-        loc_id = row["location_id"]
-        equip_id = row["equipment_id"]
-        job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
-        job_fid = str(row["facility_id"] or "") if "facility_id" in row.keys() else ""
+        for row in rows:
+            job_id = row["id"]
+            loc_id = row["location_id"]
+            equip_id = row["equipment_id"]
+            job_corp_id = str(row["corp_id"] or "") if "corp_id" in row.keys() else ""
+            job_fid = str(row["facility_id"] or "") if "facility_id" in row.keys() else ""
 
-        # Deliver outputs to facility inventory
-        outputs = json.loads(row["outputs_json"] or "[]")
-        for out in outputs:
-            item_id = str(out.get("item_id") or "").strip()
-            qty = float(out.get("qty") or 0.0)
-            if not item_id or qty <= 0:
-                continue
+            # Deliver outputs to facility inventory
+            outputs = json.loads(row["outputs_json"] or "[]")
+            for out in outputs:
+                item_id = str(out.get("item_id") or "").strip()
+                qty = float(out.get("qty") or 0.0)
+                if not item_id or qty <= 0:
+                    continue
 
-            if item_id in part_catalogs:
-                part_entry = dict(part_catalogs[item_id])
-                _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty, corp_id=job_corp_id)
-            else:
-                _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty, corp_id=job_corp_id)
+                if item_id in part_catalogs:
+                    part_entry = dict(part_catalogs[item_id])
+                    _main.add_part_to_location_inventory(conn, loc_id, part_entry, count=qty, corp_id=job_corp_id)
+                else:
+                    _main.add_resource_to_location_inventory(conn, loc_id, item_id, qty, corp_id=job_corp_id)
 
-        # Mark job completed, free equipment
-        conn.execute(
-            "UPDATE production_jobs SET status = 'completed', completed_at = ? WHERE id = ?",
-            (now, job_id),
-        )
-        conn.execute(
-            "UPDATE deployed_equipment SET status = 'idle' WHERE id = ?",
-            (equip_id,),
-        )
+            # Mark job completed, free equipment
+            conn.execute(
+                "UPDATE production_jobs SET status = 'completed', completed_at = ? WHERE id = ?",
+                (now, job_id),
+            )
+            conn.execute(
+                "UPDATE deployed_equipment SET status = 'idle' WHERE id = ?",
+                (equip_id,),
+            )
 
-    conn.commit()
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
 
 def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
@@ -203,117 +212,134 @@ def _settle_mining_v2(conn: sqlite3.Connection, now: float, location_id: Optiona
     Uses deployed_equipment.mode = 'mine' instead of production_jobs.
     Tracks last_settled in config_json of the equipment.
     """
-    where = "WHERE de.category IN ('miner', 'constructor', 'isru') AND de.mode = 'mine'"
-    params: list = []
-    if facility_id:
-        where += " AND de.facility_id = ?"
-        params.append(facility_id)
-    elif location_id:
-        where += " AND de.location_id = ?"
-        params.append(location_id)
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        where = "WHERE de.category IN ('miner', 'constructor', 'isru') AND de.mode = 'mine'"
+        params: list = []
+        if facility_id:
+            where += " AND de.facility_id = ?"
+            params.append(facility_id)
+        elif location_id:
+            where += " AND de.location_id = ?"
+            params.append(location_id)
 
-    miners = conn.execute(
-        f"""
-        SELECT de.id, de.location_id, de.config_json, de.corp_id, de.category, de.facility_id
-        FROM deployed_equipment de
-        {where}
-        """,
-        params,
-    ).fetchall()
-
-    if not miners:
-        return
-
-    import main as _main
-
-    # Group miners by location for efficiency
-    by_location: Dict[str, list] = {}
-    for m in miners:
-        loc_id = m["location_id"]
-        by_location.setdefault(loc_id, []).append(m)
-
-    # Pre-compute power status per facility to avoid repeated queries
-    _power_cache: Dict[str, bool] = {}
-
-    for loc_id, loc_miners in by_location.items():
-        # Get site resource distribution
-        site_resources = conn.execute(
-            "SELECT resource_id, mass_fraction FROM surface_site_resources WHERE site_location_id = ?",
-            (loc_id,),
+        miners = conn.execute(
+            f"""
+            SELECT de.id, de.location_id, de.config_json, de.corp_id, de.category, de.facility_id
+            FROM deployed_equipment de
+            {where}
+            """,
+            params,
         ).fetchall()
-        if not site_resources:
-            continue
 
-        for miner in loc_miners:
-            config = json.loads(miner["config_json"] or "{}")
-            rate_kg_hr = float(config.get("mining_rate_kg_per_hr") or 0.0)
-            if rate_kg_hr <= 0 and miner["category"] != "isru":
+        if not miners:
+            conn.commit()
+            return
+
+        import main as _main
+
+        # Group miners by location for efficiency
+        by_location: Dict[str, list] = {}
+        for m in miners:
+            loc_id = m["location_id"]
+            by_location.setdefault(loc_id, []).append(m)
+
+        # Pre-compute power status per facility to avoid repeated queries
+        _power_cache: Dict[str, bool] = {}
+
+        for loc_id, loc_miners in by_location.items():
+            # Get site resource distribution
+            site_resources = conn.execute(
+                "SELECT resource_id, mass_fraction FROM surface_site_resources WHERE site_location_id = ?",
+                (loc_id,),
+            ).fetchall()
+            if not site_resources:
                 continue
 
-            corp_id = str(miner["corp_id"] or "")
-            miner_fid = str(miner["facility_id"] or "") if "facility_id" in miner.keys() else ""
-            last_settled = float(config.get("mining_last_settled") or now)
-            elapsed_s = max(0.0, now - last_settled)
-            elapsed_hr = elapsed_s / 3600.0
-            total_mined_kg = rate_kg_hr * elapsed_hr
+            for miner in loc_miners:
+                config = json.loads(miner["config_json"] or "{}")
+                rate_kg_hr = float(config.get("mining_rate_kg_per_hr") or 0.0)
+                if rate_kg_hr <= 0 and miner["category"] != "isru":
+                    continue
 
-            if total_mined_kg < 0.01 and miner["category"] != "isru":
-                continue
+                corp_id = str(miner["corp_id"] or "")
+                miner_fid = str(miner["facility_id"] or "") if "facility_id" in miner.keys() else ""
+                last_settled = float(config.get("mining_last_settled") or now)
+                elapsed_s = max(0.0, now - last_settled)
 
-            # ── Power gate: skip output if facility is unpowered ──
-            if miner_fid:
-                if miner_fid not in _power_cache:
-                    _power_cache[miner_fid] = _is_facility_powered(conn, miner_fid)
-                if not _power_cache[miner_fid]:
-                    # Still advance last_settled so no backlog accumulates
+                # Clock-reset guard: if time went backward, skip without updating
+                # last_settled to prevent double-mining when time advances again.
+                if elapsed_s <= 0.0:
+                    continue
+
+                elapsed_hr = elapsed_s / 3600.0
+                total_mined_kg = rate_kg_hr * elapsed_hr
+
+                if total_mined_kg < 0.01 and miner["category"] != "isru":
+                    continue
+
+                # ── Power gate: skip output if facility is unpowered ──
+                if miner_fid:
+                    if miner_fid not in _power_cache:
+                        _power_cache[miner_fid] = _is_facility_powered(conn, miner_fid)
+                    if not _power_cache[miner_fid]:
+                        # Still advance last_settled so no backlog accumulates
+                        config["mining_last_settled"] = now
+                        conn.execute(
+                            "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
+                            (_json_dumps(config), miner["id"]),
+                        )
+                        continue
+
+                if miner["category"] == "isru":
+                    # ISRU: flat-rate water extraction — rate is NOT multiplied by ice fraction.
+                    # The ice fraction only gates deployment eligibility; output is the rated water_extraction_kg_per_hr.
+                    water_rate = float(config.get("water_extraction_kg_per_hr") or 0.0)
+                    if water_rate <= 0:
+                        continue
+                    last_settled_isru = float(config.get("mining_last_settled") or now)
+                    elapsed_s_isru = max(0.0, now - last_settled_isru)
+                    if elapsed_s_isru <= 0.0:
+                        continue
+                    elapsed_hr_isru = elapsed_s_isru / 3600.0
+                    water_kg = water_rate * elapsed_hr_isru
+                    if water_kg > 0.01:
+                        output_resource_id = str(config.get("mining_output_resource_id") or "water")
+                        _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, water_kg, corp_id=corp_id)
+                    # Update tracking (use water_kg as total_mined for ISRU)
+                    prev_total = float(config.get("mining_total_mined_kg") or 0.0)
                     config["mining_last_settled"] = now
+                    config["mining_total_mined_kg"] = prev_total + water_kg
                     conn.execute(
                         "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
                         (_json_dumps(config), miner["id"]),
                     )
                     continue
+                else:
+                    # Split output by resource mass fractions
+                    for sr in site_resources:
+                        res_id = sr["resource_id"]
+                        fraction = float(sr["mass_fraction"])
+                        mined_kg = total_mined_kg * fraction
+                        if mined_kg > 0.01:
+                            _main.add_resource_to_location_inventory(conn, loc_id, res_id, mined_kg, corp_id=corp_id)
 
-            if miner["category"] == "isru":
-                # ISRU: flat-rate water extraction — rate is NOT multiplied by ice fraction.
-                # The ice fraction only gates deployment eligibility; output is the rated water_extraction_kg_per_hr.
-                water_rate = float(config.get("water_extraction_kg_per_hr") or 0.0)
-                if water_rate <= 0:
-                    continue
-                last_settled_isru = float(config.get("mining_last_settled") or now)
-                elapsed_s_isru = max(0.0, now - last_settled_isru)
-                elapsed_hr_isru = elapsed_s_isru / 3600.0
-                water_kg = water_rate * elapsed_hr_isru
-                if water_kg > 0.01:
-                    output_resource_id = str(config.get("mining_output_resource_id") or "water")
-                    _main.add_resource_to_location_inventory(conn, loc_id, output_resource_id, water_kg, corp_id=corp_id)
-                # Update tracking (use water_kg as total_mined for ISRU)
+                # Update last_settled and total mined tracking
                 prev_total = float(config.get("mining_total_mined_kg") or 0.0)
                 config["mining_last_settled"] = now
-                config["mining_total_mined_kg"] = prev_total + water_kg
+                config["mining_total_mined_kg"] = prev_total + total_mined_kg
                 conn.execute(
                     "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
                     (_json_dumps(config), miner["id"]),
                 )
-                continue
-            else:
-                # Split output by resource mass fractions
-                for sr in site_resources:
-                    res_id = sr["resource_id"]
-                    fraction = float(sr["mass_fraction"])
-                    mined_kg = total_mined_kg * fraction
-                    if mined_kg > 0.01:
-                        _main.add_resource_to_location_inventory(conn, loc_id, res_id, mined_kg, corp_id=corp_id)
 
-            # Update last_settled and total mined tracking
-            prev_total = float(config.get("mining_total_mined_kg") or 0.0)
-            config["mining_last_settled"] = now
-            config["mining_total_mined_kg"] = prev_total + total_mined_kg
-            conn.execute(
-                "UPDATE deployed_equipment SET config_json = ? WHERE id = ?",
-                (_json_dumps(config), miner["id"]),
-            )
-
-    conn.commit()
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
 
 def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
@@ -325,209 +351,217 @@ def _settle_refinery_slots(conn: sqlite3.Connection, now: float, location_id: Op
     """
     import main as _main
 
-    # Step 0: Recover stuck slots (active but no job reference)
-    if facility_id:
-        where_loc_bare = "AND facility_id = ?"
-        where_loc = "AND rs.facility_id = ?"
-        params_loc: list = [facility_id]
-    elif location_id:
-        where_loc_bare = "AND location_id = ?"
-        where_loc = "AND rs.location_id = ?"
-        params_loc: list = [location_id]
-    else:
-        where_loc_bare = ""
-        where_loc = ""
-        params_loc: list = []
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        # Step 0: Recover stuck slots (active but no job reference)
+        if facility_id:
+            where_loc_bare = "AND facility_id = ?"
+            where_loc = "AND rs.facility_id = ?"
+            params_loc: list = [facility_id]
+        elif location_id:
+            where_loc_bare = "AND location_id = ?"
+            where_loc = "AND rs.location_id = ?"
+            params_loc: list = [location_id]
+        else:
+            where_loc_bare = ""
+            where_loc = ""
+            params_loc: list = []
 
-    conn.execute(
-        f"""
-        UPDATE refinery_slots SET status = 'idle', current_job_id = NULL
-        WHERE status = 'active'
-          AND (current_job_id IS NULL
-               OR current_job_id NOT IN (SELECT id FROM production_jobs WHERE status = 'active'))
-        {where_loc_bare}
-        """,
-        params_loc,
-    )
-
-    # Step 1: Complete finished slot jobs
-    active_slots = conn.execute(
-        f"""
-        SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id,
-               rs.current_job_id, rs.corp_id, rs.facility_id,
-               pj.id AS job_id, pj.completes_at, pj.outputs_json
-        FROM refinery_slots rs
-        JOIN production_jobs pj ON pj.id = rs.current_job_id
-        WHERE rs.status = 'active' AND pj.status = 'active' AND pj.completes_at <= ?
-        {where_loc}
-        """,
-        [now] + params_loc,
-    ).fetchall()
-
-    # Build part catalog lookup for output delivery
-    part_catalogs = {}
-    resource_catalog = catalog_service.load_resource_catalog()
-    if active_slots:
-        for loader in (
-            catalog_service.load_miner_catalog,
-            catalog_service.load_printer_catalog,
-            catalog_service.load_refinery_catalog,
-            catalog_service.load_thruster_main_catalog,
-            catalog_service.load_reactor_catalog,
-            catalog_service.load_generator_catalog,
-            catalog_service.load_radiator_catalog,
-            catalog_service.load_robonaut_catalog,
-            catalog_service.load_isru_catalog,
-            catalog_service.load_storage_catalog,
-        ):
-            part_catalogs.update(loader())
-
-    for slot in active_slots:
-        # Deliver outputs
-        outputs = json.loads(slot["outputs_json"] or "[]")
-        slot_corp_id = str(slot["corp_id"] or "")
-        slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
-        loc = slot["location_id"]
-        for out in outputs:
-            item_id = str(out.get("item_id") or "").strip()
-            qty = float(out.get("qty") or 0.0)
-            if not item_id or qty <= 0:
-                continue
-            if item_id in part_catalogs:
-                part_entry = dict(part_catalogs[item_id])
-                _main.add_part_to_location_inventory(conn, loc, part_entry, count=qty, corp_id=slot_corp_id)
-            else:
-                _main.add_resource_to_location_inventory(conn, loc, item_id, qty, corp_id=slot_corp_id)
-
-        # Calculate total primary output qty for cumulative tracking
-        primary_output_qty = 0.0
-        for out in outputs:
-            primary_output_qty += float(out.get("qty") or 0.0)
-
-        # Mark job completed
-        conn.execute("UPDATE production_jobs SET status = 'completed', completed_at = ? WHERE id = ?", (now, slot["job_id"]))
-        # Mark slot idle, increment cumulative output
         conn.execute(
-            "UPDATE refinery_slots SET status = 'idle', current_job_id = NULL, cumulative_output_qty = cumulative_output_qty + ? WHERE id = ?",
-            (primary_output_qty, slot["slot_id"]),
+            f"""
+            UPDATE refinery_slots SET status = 'idle', current_job_id = NULL
+            WHERE status = 'active'
+              AND (current_job_id IS NULL
+                   OR current_job_id NOT IN (SELECT id FROM production_jobs WHERE status = 'active'))
+            {where_loc_bare}
+            """,
+            params_loc,
         )
 
-    # Step 2: Auto-start idle slots with recipes (in priority order)
-    idle_slots = conn.execute(
-        f"""
-        SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id, rs.corp_id, rs.facility_id
-        FROM refinery_slots rs
-        WHERE rs.status = 'idle' AND rs.recipe_id IS NOT NULL AND rs.recipe_id != ''
-        {where_loc}
-        ORDER BY rs.priority ASC, rs.slot_index ASC
-        """,
-        params_loc,
-    ).fetchall()
+        # Step 1: Complete finished slot jobs
+        active_slots = conn.execute(
+            f"""
+            SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id,
+                   rs.current_job_id, rs.corp_id, rs.facility_id,
+                   pj.id AS job_id, pj.completes_at, pj.outputs_json
+            FROM refinery_slots rs
+            JOIN production_jobs pj ON pj.id = rs.current_job_id
+            WHERE rs.status = 'active' AND pj.status = 'active' AND pj.completes_at <= ?
+            {where_loc}
+            """,
+            [now] + params_loc,
+        ).fetchall()
 
-    all_recipes = catalog_service.load_recipe_catalog()
+        # Build part catalog lookup for output delivery
+        part_catalogs = {}
+        resource_catalog = catalog_service.load_resource_catalog()
+        if active_slots:
+            for loader in (
+                catalog_service.load_miner_catalog,
+                catalog_service.load_printer_catalog,
+                catalog_service.load_refinery_catalog,
+                catalog_service.load_thruster_main_catalog,
+                catalog_service.load_reactor_catalog,
+                catalog_service.load_generator_catalog,
+                catalog_service.load_radiator_catalog,
+                catalog_service.load_robonaut_catalog,
+                catalog_service.load_isru_catalog,
+                catalog_service.load_storage_catalog,
+            ):
+                part_catalogs.update(loader())
 
-    # Power cache for facilities encountered during this settle pass
-    _refinery_power_cache: Dict[str, bool] = {}
+        for slot in active_slots:
+            # Deliver outputs
+            outputs = json.loads(slot["outputs_json"] or "[]")
+            slot_corp_id = str(slot["corp_id"] or "")
+            slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
+            loc = slot["location_id"]
+            for out in outputs:
+                item_id = str(out.get("item_id") or "").strip()
+                qty = float(out.get("qty") or 0.0)
+                if not item_id or qty <= 0:
+                    continue
+                if item_id in part_catalogs:
+                    part_entry = dict(part_catalogs[item_id])
+                    _main.add_part_to_location_inventory(conn, loc, part_entry, count=qty, corp_id=slot_corp_id)
+                else:
+                    _main.add_resource_to_location_inventory(conn, loc, item_id, qty, corp_id=slot_corp_id)
 
-    for slot in idle_slots:
-        recipe = all_recipes.get(slot["recipe_id"])
-        if not recipe:
-            continue
+            # Calculate total primary output qty for cumulative tracking
+            primary_output_qty = 0.0
+            for out in outputs:
+                primary_output_qty += float(out.get("qty") or 0.0)
 
-        loc = slot["location_id"]
-        equip_id = slot["equipment_id"]
-        corp_id = str(slot["corp_id"] or "")
-        slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
-
-        # ── Power gate: don't auto-start if facility is unpowered ──
-        if slot_fid:
-            if slot_fid not in _refinery_power_cache:
-                _refinery_power_cache[slot_fid] = _is_facility_powered(conn, slot_fid)
-            if not _refinery_power_cache[slot_fid]:
-                continue
-
-        # Get equipment config for throughput
-        equip = conn.execute(
-            "SELECT config_json, status FROM deployed_equipment WHERE id = ?",
-            (equip_id,),
-        ).fetchone()
-        if not equip:
-            continue
-        config = json.loads(equip["config_json"] or "{}")
-
-        # Check if inputs are available (location-scoped)
-        inputs = recipe.get("inputs") or []
-        can_start = True
-        for inp in inputs:
-            inp_id = str(inp.get("item_id") or "").strip()
-            inp_qty = float(inp.get("qty") or 0.0)
-            if not inp_id or inp_qty <= 0:
-                continue
-            row = conn.execute(
-                "SELECT quantity FROM location_inventory_stacks WHERE location_id = ? AND corp_id = ? AND stack_type = 'resource' AND stack_key = ?",
-                (loc, corp_id, inp_id),
-            ).fetchone()
-            available = float(row["quantity"]) if row else 0.0
-            if available < inp_qty - 1e-9:
-                can_start = False
-                break
-
-        if not can_start:
-            continue
-
-        # Consume inputs
-        for inp in inputs:
-            inp_id = str(inp.get("item_id") or "").strip()
-            inp_qty = float(inp.get("qty") or 0.0)
-            if not inp_id or inp_qty <= 0:
-                continue
-            resources = catalog_service.load_resource_catalog()
-            res_info = resources.get(inp_id) or {}
-            density = max(0.0, float(res_info.get("mass_per_m3_kg") or 0.0))
-            volume = (inp_qty / density) if density > 0.0 else 0.0
-            _main._upsert_inventory_stack(
-                conn, location_id=loc, stack_type="resource", stack_key=inp_id, item_id=inp_id,
-                name=str(res_info.get("name") or inp_id),
-                quantity_delta=-inp_qty, mass_delta_kg=-inp_qty, volume_delta_m3=-volume,
-                payload_json=_json_dumps({"resource_id": inp_id}), corp_id=corp_id,
+            # Mark job completed
+            conn.execute("UPDATE production_jobs SET status = 'completed', completed_at = ? WHERE id = ?", (now, slot["job_id"]))
+            # Mark slot idle, increment cumulative output
+            conn.execute(
+                "UPDATE refinery_slots SET status = 'idle', current_job_id = NULL, cumulative_output_qty = cumulative_output_qty + ? WHERE id = ?",
+                (primary_output_qty, slot["slot_id"]),
             )
 
-        # Calculate completion time
-        throughput_mult = max(0.01, float(config.get("throughput_mult") or 1.0))
-        efficiency = max(0.0, float(config.get("efficiency") or 1.0))
-        base_time = float(recipe.get("build_time_s") or 600)
-        actual_time = base_time / throughput_mult
-        completes_at = now + actual_time
-
-        # Build outputs
-        outputs_list = []
-        output_item_id = str(recipe.get("output_item_id") or "").strip()
-        output_qty = float(recipe.get("output_qty") or 0.0)
-        if output_item_id and output_qty > 0:
-            outputs_list.append({"item_id": output_item_id, "qty": output_qty * efficiency})
-        for bp in (recipe.get("byproducts") or []):
-            bp_id = str(bp.get("item_id") or "").strip()
-            bp_qty = float(bp.get("qty") or 0.0)
-            if bp_id and bp_qty > 0:
-                outputs_list.append({"item_id": bp_id, "qty": bp_qty * efficiency})
-
-        job_id = str(uuid.uuid4())
-        conn.execute(
-            """
-            INSERT INTO production_jobs
-              (id, location_id, equipment_id, job_type, recipe_id, status,
-               started_at, completes_at, inputs_json, outputs_json, created_by, corp_id, facility_id)
-            VALUES (?, ?, ?, 'refine', ?, 'active', ?, ?, ?, ?, 'system', ?, ?)
+        # Step 2: Auto-start idle slots with recipes (in priority order)
+        idle_slots = conn.execute(
+            f"""
+            SELECT rs.id AS slot_id, rs.equipment_id, rs.location_id, rs.recipe_id, rs.corp_id, rs.facility_id
+            FROM refinery_slots rs
+            WHERE rs.status = 'idle' AND rs.recipe_id IS NOT NULL AND rs.recipe_id != ''
+            {where_loc}
+            ORDER BY rs.priority ASC, rs.slot_index ASC
             """,
-            (job_id, loc, equip_id, slot["recipe_id"], now, completes_at,
-             _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0)} for inp in inputs if inp.get("item_id")]),
-             _json_dumps(outputs_list), corp_id, slot_fid),
-        )
+            params_loc,
+        ).fetchall()
 
-        # Mark slot active
-        conn.execute("UPDATE refinery_slots SET status = 'active', current_job_id = ? WHERE id = ?", (job_id, slot["slot_id"]))
+        all_recipes = catalog_service.load_recipe_catalog()
 
-    conn.commit()
+        # Power cache for facilities encountered during this settle pass
+        _refinery_power_cache: Dict[str, bool] = {}
+
+        for slot in idle_slots:
+            recipe = all_recipes.get(slot["recipe_id"])
+            if not recipe:
+                continue
+
+            loc = slot["location_id"]
+            equip_id = slot["equipment_id"]
+            corp_id = str(slot["corp_id"] or "")
+            slot_fid = str(slot["facility_id"] or "") if "facility_id" in slot.keys() else ""
+
+            # ── Power gate: don't auto-start if facility is unpowered ──
+            if slot_fid:
+                if slot_fid not in _refinery_power_cache:
+                    _refinery_power_cache[slot_fid] = _is_facility_powered(conn, slot_fid)
+                if not _refinery_power_cache[slot_fid]:
+                    continue
+
+            # Get equipment config for throughput
+            equip = conn.execute(
+                "SELECT config_json, status FROM deployed_equipment WHERE id = ?",
+                (equip_id,),
+            ).fetchone()
+            if not equip:
+                continue
+            config = json.loads(equip["config_json"] or "{}")
+
+            # Check if inputs are available (location-scoped)
+            inputs = recipe.get("inputs") or []
+            can_start = True
+            for inp in inputs:
+                inp_id = str(inp.get("item_id") or "").strip()
+                inp_qty = float(inp.get("qty") or 0.0)
+                if not inp_id or inp_qty <= 0:
+                    continue
+                row = conn.execute(
+                    "SELECT quantity FROM location_inventory_stacks WHERE location_id = ? AND corp_id = ? AND stack_type = 'resource' AND stack_key = ?",
+                    (loc, corp_id, inp_id),
+                ).fetchone()
+                available = float(row["quantity"]) if row else 0.0
+                if available < inp_qty - 1e-9:
+                    can_start = False
+                    break
+
+            if not can_start:
+                continue
+
+            # Consume inputs
+            for inp in inputs:
+                inp_id = str(inp.get("item_id") or "").strip()
+                inp_qty = float(inp.get("qty") or 0.0)
+                if not inp_id or inp_qty <= 0:
+                    continue
+                resources = catalog_service.load_resource_catalog()
+                res_info = resources.get(inp_id) or {}
+                density = max(0.0, float(res_info.get("mass_per_m3_kg") or 0.0))
+                volume = (inp_qty / density) if density > 0.0 else 0.0
+                _main._upsert_inventory_stack(
+                    conn, location_id=loc, stack_type="resource", stack_key=inp_id, item_id=inp_id,
+                    name=str(res_info.get("name") or inp_id),
+                    quantity_delta=-inp_qty, mass_delta_kg=-inp_qty, volume_delta_m3=-volume,
+                    payload_json=_json_dumps({"resource_id": inp_id}), corp_id=corp_id,
+                )
+
+            # Calculate completion time
+            throughput_mult = max(0.01, float(config.get("throughput_mult") or 1.0))
+            efficiency = max(0.0, float(config.get("efficiency") or 1.0))
+            base_time = float(recipe.get("build_time_s") or 600)
+            actual_time = base_time / throughput_mult
+            completes_at = now + actual_time
+
+            # Build outputs
+            outputs_list = []
+            output_item_id = str(recipe.get("output_item_id") or "").strip()
+            output_qty = float(recipe.get("output_qty") or 0.0)
+            if output_item_id and output_qty > 0:
+                outputs_list.append({"item_id": output_item_id, "qty": output_qty * efficiency})
+            for bp in (recipe.get("byproducts") or []):
+                bp_id = str(bp.get("item_id") or "").strip()
+                bp_qty = float(bp.get("qty") or 0.0)
+                if bp_id and bp_qty > 0:
+                    outputs_list.append({"item_id": bp_id, "qty": bp_qty * efficiency})
+
+            job_id = str(uuid.uuid4())
+            conn.execute(
+                """
+                INSERT INTO production_jobs
+                  (id, location_id, equipment_id, job_type, recipe_id, status,
+                   started_at, completes_at, inputs_json, outputs_json, created_by, corp_id, facility_id)
+                VALUES (?, ?, ?, 'refine', ?, 'active', ?, ?, ?, ?, 'system', ?, ?)
+                """,
+                (job_id, loc, equip_id, slot["recipe_id"], now, completes_at,
+                 _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0)} for inp in inputs if inp.get("item_id")]),
+                 _json_dumps(outputs_list), corp_id, slot_fid),
+            )
+
+            # Mark slot active
+            conn.execute("UPDATE refinery_slots SET status = 'active', current_job_id = ? WHERE id = ?", (job_id, slot["slot_id"]))
+
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
 
 def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id: Optional[str] = None, *, facility_id: Optional[str] = None) -> None:
@@ -535,201 +569,216 @@ def _settle_construction_queue(conn: sqlite3.Connection, now: float, location_id
     Construction queue settle logic:
     1. Complete any finished construction queue items → deliver outputs.
     2. For the next queued item, compute pooled build speed and auto-start if materials ready.
+    Items missing materials are marked 'waiting_materials' and skipped.
     """
     import main as _main
 
-    if facility_id:
-        where_loc = "AND cq.facility_id = ?"
-        params_loc: list = [facility_id]
-    elif location_id:
-        where_loc = "AND cq.location_id = ?"
-        params_loc: list = [location_id]
-    else:
-        where_loc = ""
-        params_loc: list = []
-
-    # Step 1: Complete finished active items
-    finished = conn.execute(
-        f"""
-        SELECT cq.id, cq.location_id, cq.recipe_id, cq.outputs_json, cq.corp_id, cq.facility_id
-        FROM construction_queue cq
-        WHERE cq.status = 'active' AND cq.completes_at <= ?
-        {where_loc}
-        """,
-        [now] + params_loc,
-    ).fetchall()
-
-    part_catalogs = {}
-    if finished:
-        for loader in (
-            catalog_service.load_miner_catalog,
-            catalog_service.load_printer_catalog,
-            catalog_service.load_refinery_catalog,
-            catalog_service.load_thruster_main_catalog,
-            catalog_service.load_reactor_catalog,
-            catalog_service.load_generator_catalog,
-            catalog_service.load_radiator_catalog,
-            catalog_service.load_robonaut_catalog,
-            catalog_service.load_isru_catalog,
-            catalog_service.load_storage_catalog,
-        ):
-            part_catalogs.update(loader())
-
-    for item in finished:
-        outputs = json.loads(item["outputs_json"] or "[]")
-        item_corp_id = str(item["corp_id"] or "")
-        item_fid = str(item["facility_id"] or "") if "facility_id" in item.keys() else ""
-        loc = item["location_id"]
-        for out in outputs:
-            out_id = str(out.get("item_id") or "").strip()
-            qty = float(out.get("qty") or 0.0)
-            if not out_id or qty <= 0:
-                continue
-            if out_id in part_catalogs:
-                _main.add_part_to_location_inventory(conn, loc, dict(part_catalogs[out_id]), count=qty, corp_id=item_corp_id)
-            else:
-                _main.add_resource_to_location_inventory(conn, loc, out_id, qty, corp_id=item_corp_id)
-
-        conn.execute("UPDATE construction_queue SET status = 'completed', completed_at = ? WHERE id = ?", (now, item["id"]))
-
-    # Step 2: Auto-start next queued items (one per facility at a time)
-    # Get facilities (or locations) with queued items
-    facilities_with_queue = conn.execute(
-        f"""
-        SELECT DISTINCT cq.facility_id, cq.location_id
-        FROM construction_queue cq
-        WHERE cq.status = 'queued'
-        {where_loc}
-        """,
-        params_loc,
-    ).fetchall()
-
-    all_recipes = catalog_service.load_recipe_catalog()
-
-    # Power cache for construction queue facilities
-    _cq_power_cache: Dict[str, bool] = {}
-
-    for fq_row in facilities_with_queue:
-        fq_fid = str(fq_row["facility_id"] or "") if "facility_id" in fq_row.keys() else ""
-        loc = fq_row["location_id"]
-
-        # ── Power gate: don't auto-start construction if facility is unpowered ──
-        if fq_fid:
-            if fq_fid not in _cq_power_cache:
-                _cq_power_cache[fq_fid] = _is_facility_powered(conn, fq_fid)
-            if not _cq_power_cache[fq_fid]:
-                continue
-
-        # Check if there's already an active job at this facility
-        if fq_fid:
-            active = conn.execute(
-                "SELECT COUNT(*) as cnt FROM construction_queue WHERE facility_id = ? AND status = 'active'",
-                (fq_fid,),
-            ).fetchone()
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if facility_id:
+            where_loc = "AND cq.facility_id = ?"
+            params_loc: list = [facility_id]
+        elif location_id:
+            where_loc = "AND cq.location_id = ?"
+            params_loc: list = [location_id]
         else:
-            active = conn.execute(
-                "SELECT COUNT(*) as cnt FROM construction_queue WHERE location_id = ? AND status = 'active'",
-                (loc,),
-            ).fetchone()
-        if active and active["cnt"] > 0:
-            continue
+            where_loc = ""
+            params_loc: list = []
 
-        # Get pooled construction speed (facility-scoped)
-        pool_speed = _get_construction_pool_speed(conn, loc, facility_id=fq_fid)
-        if pool_speed <= 0:
-            continue
-
-        # Get next queued item
-        if fq_fid:
-            next_item = conn.execute(
-                "SELECT * FROM construction_queue WHERE facility_id = ? AND status = 'queued' ORDER BY queue_order ASC LIMIT 1",
-                (fq_fid,),
-            ).fetchone()
-        else:
-            next_item = conn.execute(
-                "SELECT * FROM construction_queue WHERE location_id = ? AND status = 'queued' ORDER BY queue_order ASC LIMIT 1",
-                (loc,),
-            ).fetchone()
-        if not next_item:
-            continue
-
-        recipe = all_recipes.get(next_item["recipe_id"])
-        if not recipe:
-            conn.execute("UPDATE construction_queue SET status = 'cancelled' WHERE id = ?", (next_item["id"],))
-            continue
-
-        corp_id = str(next_item["corp_id"] or "")
-        next_fid = str(next_item["facility_id"] or "") if "facility_id" in next_item.keys() else fq_fid
-
-        # Check inputs (facility-scoped)
-        inputs = recipe.get("inputs") or []
-        can_start = True
-        for inp in inputs:
-            inp_id = str(inp.get("item_id") or "").strip()
-            inp_qty = float(inp.get("qty") or 0.0)
-            if not inp_id or inp_qty <= 0:
-                continue
-            row = conn.execute(
-                "SELECT quantity FROM location_inventory_stacks WHERE location_id = ? AND corp_id = ? AND stack_type = 'resource' AND stack_key = ?",
-                (loc, corp_id, inp_id),
-            ).fetchone()
-            available = float(row["quantity"]) if row else 0.0
-            if available < inp_qty - 1e-9:
-                can_start = False
-                break
-
-        if not can_start:
-            continue
-
-        # Consume inputs
-        for inp in inputs:
-            inp_id = str(inp.get("item_id") or "").strip()
-            inp_qty = float(inp.get("qty") or 0.0)
-            if not inp_id or inp_qty <= 0:
-                continue
-            resources = catalog_service.load_resource_catalog()
-            res_info = resources.get(inp_id) or {}
-            density = max(0.0, float(res_info.get("mass_per_m3_kg") or 0.0))
-            volume = (inp_qty / density) if density > 0.0 else 0.0
-            _main._upsert_inventory_stack(
-                conn, location_id=loc, stack_type="resource", stack_key=inp_id, item_id=inp_id,
-                name=str(res_info.get("name") or inp_id),
-                quantity_delta=-inp_qty, mass_delta_kg=-inp_qty, volume_delta_m3=-volume,
-                payload_json=_json_dumps({"resource_id": inp_id}), corp_id=corp_id,
-            )
-
-        # Calculate build time using pooled speed
-        base_time = float(recipe.get("build_time_s") or 600)
-        throughput_mult = pool_speed / 50.0  # Normalize around 50 kg/hr baseline
-        actual_time = base_time / max(0.01, throughput_mult)
-        completes_at = now + actual_time
-
-        # Build outputs
-        outputs_list = []
-        output_item_id = str(recipe.get("output_item_id") or "").strip()
-        output_qty = float(recipe.get("output_qty") or 0.0)
-        if output_item_id and output_qty > 0:
-            outputs_list.append({"item_id": output_item_id, "qty": output_qty})
-        for bp in (recipe.get("byproducts") or []):
-            bp_id = str(bp.get("item_id") or "").strip()
-            bp_qty = float(bp.get("qty") or 0.0)
-            if bp_id and bp_qty > 0:
-                outputs_list.append({"item_id": bp_id, "qty": bp_qty})
-
-        conn.execute(
-            """
-            UPDATE construction_queue
-            SET status = 'active', started_at = ?, completes_at = ?,
-                inputs_json = ?, outputs_json = ?
-            WHERE id = ?
+        # Step 1: Complete finished active items
+        finished = conn.execute(
+            f"""
+            SELECT cq.id, cq.location_id, cq.recipe_id, cq.outputs_json, cq.corp_id, cq.facility_id
+            FROM construction_queue cq
+            WHERE cq.status = 'active' AND cq.completes_at <= ?
+            {where_loc}
             """,
-            (now, completes_at,
-             _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0)} for inp in inputs if inp.get("item_id")]),
-             _json_dumps(outputs_list),
-             next_item["id"]),
-        )
+            [now] + params_loc,
+        ).fetchall()
 
-    conn.commit()
+        part_catalogs = {}
+        if finished:
+            for loader in (
+                catalog_service.load_miner_catalog,
+                catalog_service.load_printer_catalog,
+                catalog_service.load_refinery_catalog,
+                catalog_service.load_thruster_main_catalog,
+                catalog_service.load_reactor_catalog,
+                catalog_service.load_generator_catalog,
+                catalog_service.load_radiator_catalog,
+                catalog_service.load_robonaut_catalog,
+                catalog_service.load_isru_catalog,
+                catalog_service.load_storage_catalog,
+            ):
+                part_catalogs.update(loader())
+
+        for item in finished:
+            outputs = json.loads(item["outputs_json"] or "[]")
+            item_corp_id = str(item["corp_id"] or "")
+            item_fid = str(item["facility_id"] or "") if "facility_id" in item.keys() else ""
+            loc = item["location_id"]
+            for out in outputs:
+                out_id = str(out.get("item_id") or "").strip()
+                qty = float(out.get("qty") or 0.0)
+                if not out_id or qty <= 0:
+                    continue
+                if out_id in part_catalogs:
+                    _main.add_part_to_location_inventory(conn, loc, dict(part_catalogs[out_id]), count=qty, corp_id=item_corp_id)
+                else:
+                    _main.add_resource_to_location_inventory(conn, loc, out_id, qty, corp_id=item_corp_id)
+
+            conn.execute("UPDATE construction_queue SET status = 'completed', completed_at = ? WHERE id = ?", (now, item["id"]))
+
+        # Step 2: Auto-start next queued items (one per facility at a time)
+        # Get facilities (or locations) with queued or waiting_materials items
+        facilities_with_queue = conn.execute(
+            f"""
+            SELECT DISTINCT cq.facility_id, cq.location_id
+            FROM construction_queue cq
+            WHERE cq.status IN ('queued', 'waiting_materials')
+            {where_loc}
+            """,
+            params_loc,
+        ).fetchall()
+
+        all_recipes = catalog_service.load_recipe_catalog()
+
+        # Power cache for construction queue facilities
+        _cq_power_cache: Dict[str, bool] = {}
+
+        for fq_row in facilities_with_queue:
+            fq_fid = str(fq_row["facility_id"] or "") if "facility_id" in fq_row.keys() else ""
+            loc = fq_row["location_id"]
+
+            # ── Power gate: don't auto-start construction if facility is unpowered ──
+            if fq_fid:
+                if fq_fid not in _cq_power_cache:
+                    _cq_power_cache[fq_fid] = _is_facility_powered(conn, fq_fid)
+                if not _cq_power_cache[fq_fid]:
+                    continue
+
+            # Check if there's already an active job at this facility
+            if fq_fid:
+                active = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM construction_queue WHERE facility_id = ? AND status = 'active'",
+                    (fq_fid,),
+                ).fetchone()
+            else:
+                active = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM construction_queue WHERE location_id = ? AND status = 'active'",
+                    (loc,),
+                ).fetchone()
+            if active and active["cnt"] > 0:
+                continue
+
+            # Get pooled construction speed (facility-scoped)
+            pool_speed = _get_construction_pool_speed(conn, loc, facility_id=fq_fid)
+            if pool_speed <= 0:
+                continue
+
+            # Get all queued/waiting items in priority order — scan for first startable
+            if fq_fid:
+                queue_items = conn.execute(
+                    "SELECT * FROM construction_queue WHERE facility_id = ? AND status IN ('queued', 'waiting_materials') ORDER BY queue_order ASC",
+                    (fq_fid,),
+                ).fetchall()
+            else:
+                queue_items = conn.execute(
+                    "SELECT * FROM construction_queue WHERE location_id = ? AND status IN ('queued', 'waiting_materials') ORDER BY queue_order ASC",
+                    (loc,),
+                ).fetchall()
+
+            started_one = False
+            for next_item in queue_items:
+                recipe = all_recipes.get(next_item["recipe_id"])
+                if not recipe:
+                    conn.execute("UPDATE construction_queue SET status = 'cancelled' WHERE id = ?", (next_item["id"],))
+                    continue
+
+                corp_id = str(next_item["corp_id"] or "")
+                next_fid = str(next_item["facility_id"] or "") if "facility_id" in next_item.keys() else fq_fid
+
+                # Check inputs (facility-scoped)
+                inputs = recipe.get("inputs") or []
+                can_start = True
+                for inp in inputs:
+                    inp_id = str(inp.get("item_id") or "").strip()
+                    inp_qty = float(inp.get("qty") or 0.0)
+                    if not inp_id or inp_qty <= 0:
+                        continue
+                    row = conn.execute(
+                        "SELECT quantity FROM location_inventory_stacks WHERE location_id = ? AND corp_id = ? AND stack_type = 'resource' AND stack_key = ?",
+                        (loc, corp_id, inp_id),
+                    ).fetchone()
+                    available = float(row["quantity"]) if row else 0.0
+                    if available < inp_qty - 1e-9:
+                        can_start = False
+                        break
+
+                if not can_start:
+                    # Mark as waiting_materials and skip to next item
+                    if next_item["status"] != "waiting_materials":
+                        conn.execute("UPDATE construction_queue SET status = 'waiting_materials' WHERE id = ?", (next_item["id"],))
+                    continue
+
+                # Reset status if it was waiting_materials (now has materials)
+                # Consume inputs
+                for inp in inputs:
+                    inp_id = str(inp.get("item_id") or "").strip()
+                    inp_qty = float(inp.get("qty") or 0.0)
+                    if not inp_id or inp_qty <= 0:
+                        continue
+                    resources = catalog_service.load_resource_catalog()
+                    res_info = resources.get(inp_id) or {}
+                    density = max(0.0, float(res_info.get("mass_per_m3_kg") or 0.0))
+                    volume = (inp_qty / density) if density > 0.0 else 0.0
+                    _main._upsert_inventory_stack(
+                        conn, location_id=loc, stack_type="resource", stack_key=inp_id, item_id=inp_id,
+                        name=str(res_info.get("name") or inp_id),
+                        quantity_delta=-inp_qty, mass_delta_kg=-inp_qty, volume_delta_m3=-volume,
+                        payload_json=_json_dumps({"resource_id": inp_id}), corp_id=corp_id,
+                    )
+
+                # Calculate build time using pooled speed
+                base_time = float(recipe.get("build_time_s") or 600)
+                throughput_mult = pool_speed / 50.0  # Normalize around 50 kg/hr baseline
+                actual_time = base_time / max(0.01, throughput_mult)
+                completes_at = now + actual_time
+
+                # Build outputs
+                outputs_list = []
+                output_item_id = str(recipe.get("output_item_id") or "").strip()
+                output_qty = float(recipe.get("output_qty") or 0.0)
+                if output_item_id and output_qty > 0:
+                    outputs_list.append({"item_id": output_item_id, "qty": output_qty})
+                for bp in (recipe.get("byproducts") or []):
+                    bp_id = str(bp.get("item_id") or "").strip()
+                    bp_qty = float(bp.get("qty") or 0.0)
+                    if bp_id and bp_qty > 0:
+                        outputs_list.append({"item_id": bp_id, "qty": bp_qty})
+
+                conn.execute(
+                    """
+                    UPDATE construction_queue
+                    SET status = 'active', started_at = ?, completes_at = ?,
+                        inputs_json = ?, outputs_json = ?
+                    WHERE id = ?
+                    """,
+                    (now, completes_at,
+                     _json_dumps([{"item_id": inp["item_id"], "qty": float(inp.get("qty") or 0)} for inp in inputs if inp.get("item_id")]),
+                     _json_dumps(outputs_list),
+                     next_item["id"]),
+                )
+                started_one = True
+                break  # Only one active job per facility
+
+        conn.commit()
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
 
 def _get_construction_pool_speed(conn: sqlite3.Connection, location_id: str, *, facility_id: str = "") -> float:
@@ -2400,7 +2449,7 @@ def get_construction_queue(conn: sqlite3.Connection, location_id: str, *, facili
             SELECT id, recipe_id, queue_order, status, started_at, completes_at,
                    inputs_json, outputs_json, created_by, corp_id, facility_id
             FROM construction_queue
-            WHERE facility_id = ? AND status IN ('queued', 'active')
+            WHERE facility_id = ? AND status IN ('queued', 'active', 'waiting_materials')
             ORDER BY
                 CASE WHEN status = 'active' THEN 0 ELSE 1 END,
                 queue_order ASC
@@ -2413,7 +2462,7 @@ def get_construction_queue(conn: sqlite3.Connection, location_id: str, *, facili
             SELECT id, recipe_id, queue_order, status, started_at, completes_at,
                    inputs_json, outputs_json, created_by, corp_id, facility_id
             FROM construction_queue
-            WHERE location_id = ? AND status IN ('queued', 'active')
+            WHERE location_id = ? AND status IN ('queued', 'active', 'waiting_materials')
             ORDER BY
                 CASE WHEN status = 'active' THEN 0 ELSE 1 END,
                 queue_order ASC
@@ -2422,7 +2471,20 @@ def get_construction_queue(conn: sqlite3.Connection, location_id: str, *, facili
         ).fetchall()
 
     recipes = catalog_service.load_recipe_catalog()
+    resource_catalog = catalog_service.load_resource_catalog()
     now = game_now_s()
+
+    # Gather inventory for missing-material annotations
+    import main as _main
+    corp_id_for_inv = ""
+    if rows:
+        corp_id_for_inv = str(rows[0]["corp_id"] or "")
+    inv = _main.get_location_inventory_payload(conn, location_id, corp_id=corp_id_for_inv or None)
+    resource_stock: Dict[str, float] = {}
+    for res in inv.get("resources") or []:
+        rid = str(res.get("resource_id") or res.get("item_id") or "")
+        resource_stock[rid] = float(res.get("quantity") or 0)
+
     queue = []
     for r in rows:
         recipe = recipes.get(r["recipe_id"]) if r["recipe_id"] else None
@@ -2451,6 +2513,23 @@ def get_construction_queue(conn: sqlite3.Connection, location_id: str, *, facili
             entry["inputs"] = recipe.get("inputs") or []
             entry["output_item_id"] = recipe.get("output_item_id", "")
             entry["output_qty"] = recipe.get("output_qty", 0)
+        # Annotate waiting_materials / queued items with missing material info
+        if r["status"] in ("waiting_materials", "queued") and recipe:
+            missing = []
+            for inp in (recipe.get("inputs") or []):
+                inp_id = str(inp.get("item_id") or "")
+                inp_qty = float(inp.get("qty") or 0)
+                available = resource_stock.get(inp_id, 0)
+                if available < inp_qty - 1e-9:
+                    res_info = resource_catalog.get(inp_id) or {}
+                    missing.append({
+                        "item_id": inp_id,
+                        "name": str(res_info.get("name") or inp_id),
+                        "required_kg": inp_qty,
+                        "available_kg": available,
+                    })
+            if missing:
+                entry["missing_materials"] = missing
         queue.append(entry)
 
     pool_speed = _get_construction_pool_speed(conn, location_id, facility_id=facility_id)
@@ -2469,8 +2548,9 @@ def queue_construction(
     username: str,
     corp_id: str = "",
     facility_id: str = "",
+    quantity: int = 1,
 ) -> Dict[str, Any]:
-    """Add a recipe to the construction queue."""
+    """Add a recipe to the construction queue (supports batch quantity)."""
     recipes = catalog_service.load_recipe_catalog()
     recipe = recipes.get(recipe_id)
     if not recipe:
@@ -2478,34 +2558,39 @@ def queue_construction(
     if str(recipe.get("facility_type") or "") != "shipyard":
         raise ValueError("Only construction (shipyard) recipes can be queued")
 
+    quantity = max(1, min(quantity, 50))
+
     # Get next queue order
     if facility_id:
         max_order = conn.execute(
-            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE facility_id = ? AND status IN ('queued', 'active')",
+            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE facility_id = ? AND status IN ('queued', 'active', 'waiting_materials')",
             (facility_id,),
         ).fetchone()
     else:
         max_order = conn.execute(
-            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE location_id = ? AND status IN ('queued', 'active')",
+            "SELECT COALESCE(MAX(queue_order), -1) as mo FROM construction_queue WHERE location_id = ? AND status IN ('queued', 'active', 'waiting_materials')",
             (location_id,),
         ).fetchone()
     next_order = (max_order["mo"] if max_order else -1) + 1
 
-    queue_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO construction_queue (id, location_id, recipe_id, queue_order, status, created_by, corp_id, facility_id)
-        VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
-        """,
-        (queue_id, location_id, recipe_id, next_order, username, corp_id, facility_id),
-    )
+    queue_ids = []
+    for i in range(quantity):
+        queue_id = str(uuid.uuid4())
+        conn.execute(
+            """
+            INSERT INTO construction_queue (id, location_id, recipe_id, queue_order, status, created_by, corp_id, facility_id)
+            VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
+            """,
+            (queue_id, location_id, recipe_id, next_order + i, username, corp_id, facility_id),
+        )
+        queue_ids.append(queue_id)
     conn.commit()
 
     return {
-        "queue_id": queue_id,
+        "queue_ids": queue_ids,
         "recipe_id": recipe_id,
         "recipe_name": recipe.get("name", recipe_id),
-        "queue_order": next_order,
+        "quantity": quantity,
     }
 
 

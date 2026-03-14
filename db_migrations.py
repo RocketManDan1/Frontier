@@ -1091,6 +1091,25 @@ def _migration_0030_water_is_fuel(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM ship_cargo_stacks WHERE resource_id = 'water'")
 
 
+def _migration_0031_inventory_quantity_guards(conn: sqlite3.Connection) -> None:
+    """Add trigger-based guards to prevent negative inventory quantities."""
+    conn.executescript("""
+        CREATE TRIGGER IF NOT EXISTS trg_lis_no_negative_update
+        BEFORE UPDATE ON location_inventory_stacks
+        FOR EACH ROW WHEN NEW.quantity < 0 OR NEW.mass_kg < 0
+        BEGIN
+            SELECT RAISE(ABORT, 'Negative inventory quantity');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_lis_no_negative_insert
+        BEFORE INSERT ON location_inventory_stacks
+        FOR EACH ROW WHEN NEW.quantity < 0 OR NEW.mass_kg < 0
+        BEGIN
+            SELECT RAISE(ABORT, 'Negative inventory quantity on insert');
+        END;
+    """)
+
+
 def _migrations() -> List[Migration]:
     return [
         Migration("0001_initial", "Create core gameplay/auth tables", _migration_0001_initial),
@@ -1123,6 +1142,7 @@ def _migrations() -> List[Migration]:
     Migration("0028_miners_printers", "Rename constructor deployed equipment to miner category", _migration_0028_miners_printers),
     Migration("0029_unified_research_tree", "Reset research unlocks for unified research tree, auto-unlock starter_corp", _migration_0029_unified_research_tree),
     Migration("0030_water_is_fuel", "Merge water cargo stacks into ships.fuel_kg", _migration_0030_water_is_fuel),
+    Migration("0031_inventory_quantity_guards", "Add DB triggers to prevent negative inventory quantities", _migration_0031_inventory_quantity_guards),
     ]
 
 

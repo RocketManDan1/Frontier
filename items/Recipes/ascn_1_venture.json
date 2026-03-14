@@ -6,23 +6,23 @@
   "inputs": [
     {
       "item_id": "advanced_aerospace_alloys",
-      "qty": 17000
+      "qty": 14500.0
     },
     {
       "item_id": "carbon_composites",
-      "qty": 10000
+      "qty": 8600.0
     },
     {
       "item_id": "radiation_composite_armor",
-      "qty": 7000
+      "qty": 6000.0
     },
     {
       "item_id": "high_grade_reactor_pellets",
-      "qty": 4000
+      "qty": 3400.0
     },
     {
       "item_id": "semiconductor_materials",
-      "qty": 2000
+      "qty": 1700.0
     }
   ],
   "build_time_s": 7200,

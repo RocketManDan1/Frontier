@@ -11,6 +11,7 @@ Tests cover:
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -72,10 +73,15 @@ class TestShipyardHTMLStructure:
         assert "Edit Ship" in html_content
 
     def test_cache_buster_updated(self, html_content):
-        # Ensure the JS cache buster is >= sy18
-        assert "shipyard.js?v=sy1" in html_content
-        # Ensure CSS cache buster is >= layout34
-        assert "styles.css?v=layout3" in html_content
+        # Ensure the JS cache buster is present and >= sy18
+        js_match = re.search(r"shipyard\.js\?v=sy(\d+)", html_content)
+        assert js_match is not None
+        assert int(js_match.group(1)) >= 18
+
+        # Ensure CSS cache buster is present and >= layout34
+        css_match = re.search(r"styles\.css\?v=layout(\d+)", html_content)
+        assert css_match is not None
+        assert int(css_match.group(1)) >= 34
 
 
 # ── JavaScript Structure Tests ────────────────────────────────────────────
@@ -125,7 +131,8 @@ class TestShipyardJSStructure:
         assert "/api/org/boost" in js_content
 
     def test_edit_uses_deconstruct(self, js_content):
-        assert "/deconstruct" in js_content
+        # Edit mode now uses the consolidated refit endpoint.
+        assert "/api/shipyard/refit" in js_content
 
     def test_edit_uses_fleet_state(self, js_content):
         assert "/api/state" in js_content

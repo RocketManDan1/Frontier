@@ -4,12 +4,30 @@
   "output_item_id": "cvm_3a_themis",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 7000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 5200.0 },
-    { "item_id": "structural_alloys", "qty": 3000.0 },
-    { "item_id": "advanced_ceramics", "qty": 2600.0 },
-    { "item_id": "carbon_composites", "qty": 1600.0 },
-    { "item_id": "radiation_composite_armor", "qty": 1400.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 18500.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 14000.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 7900.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 6900.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 4200.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 3700.0
+    }
   ],
   "build_time_s": 5700,
   "facility_type": "shipyard",

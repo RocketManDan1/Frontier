@@ -40,7 +40,7 @@ def require_facility_owner(
 ) -> Dict[str, Any]:
     """Resolve and verify the caller owns the facility. Returns the facility dict."""
     fac = resolve_facility(conn, facility_id)
-    if corp_id and fac["corp_id"] and corp_id != fac["corp_id"]:
+    if fac["corp_id"] is None or not corp_id or corp_id != fac["corp_id"]:
         raise HTTPException(status_code=403, detail="You do not own this facility")
     return fac
 

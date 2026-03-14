@@ -4,11 +4,26 @@
   "output_item_id": "des_2a_sandstorm",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "structural_alloys", "qty": 13000.0 },
-    { "item_id": "advanced_ceramics", "qty": 7500.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 4500.0 },
-    { "item_id": "semiconductor_materials", "qty": 3500.0 },
-    { "item_id": "megastructure_mass", "qty": 2500.0 }
+    {
+      "item_id": "structural_alloys",
+      "qty": 16000.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 9300.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 5600.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 4300.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 3100.0
+    }
   ],
   "build_time_s": 1800,
   "facility_type": "shipyard",

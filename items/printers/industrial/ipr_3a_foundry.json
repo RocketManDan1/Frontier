@@ -4,14 +4,14 @@
   "research_node": "laser_industrial_printing",
   "tech_level": 3,
   "branch": "laser_powder_bed_fusion",
-  "mass_t": 40.0,
+  "mass_t": 12.09,
   "operational_environment": "surface",
   "printer_type": "industrial",
   "power_requirements": {
-    "electric_mw": 30.0
+    "electric_mw": 8.11
   },
   "performance": {
-    "construction_rate_kg_per_hr": 250,
+    "construction_rate_kg_per_hr": 265,
     "fabrication_type": "laser_powder_bed_fusion"
   },
   "description": "The Foundry introduces laser powder bed fusion at scale, with a 4 m × 4 m × 2 m build volume capable of simultaneously printing multiple complex parts. A 12 kW fibre laser array scans across a spread powder bed at high speed; the sintered layer is indexed down and a fresh powder layer is spread for the next pass. The process handles superalloys, titanium, and advanced ceramics with equal facility, enabling the fabrication of pressure vessels, pump casings, and high-precision gearboxes needed for tier-3 refinery and mining equipment. Includes an integrated post-processing robotic cell for support removal and heat treatment.",

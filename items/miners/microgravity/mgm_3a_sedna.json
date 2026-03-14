@@ -4,17 +4,21 @@
   "research_node": "plasma_microgravity_mining",
   "tech_level": 3,
   "branch": "microwave_disaggregation",
-  "mass_t": 18.0,
+  "mass_t": 19.26,
   "operational_environment": "microgravity",
   "miner_type": "microgravity",
   "max_surface_gravity_ms2": 1.0,
   "power_requirements": {
-    "electric_mw": 16.0
+    "electric_mw": 16.48
   },
   "performance": {
-    "mining_rate_kg_per_hr": 280,
+    "mining_rate_kg_per_hr": 316.4,
     "excavation_type": "microwave_subsurface_disaggregation"
   },
-  "description": "The Sedna introduces microwave subsurface disaggregation — directing focused 2.45 GHz energy into the regolith matrix to rapidly volatilize interstitial ices and shatter silicate grain bonds. The liberated slurry of fragments and sublimated gas is captured by a wide-aperture suction manifold. The technique eliminates percussion reaction forces almost entirely, greatly reducing anchor requirements. Throughput scales with subsurface ice and void fraction; effective on both dry silicates and moderately icy regolith.",
-  "ui_tags": ["microwave_disaggregation", "zero_percussion", "tier_3"]
+  "description": "The Sedna introduces microwave subsurface disaggregation \u2014 directing focused 2.45 GHz energy into the regolith matrix to rapidly volatilize interstitial ices and shatter silicate grain bonds. The liberated slurry of fragments and sublimated gas is captured by a wide-aperture suction manifold. The technique eliminates percussion reaction forces almost entirely, greatly reducing anchor requirements. Throughput scales with subsurface ice and void fraction; effective on both dry silicates and moderately icy regolith.",
+  "ui_tags": [
+    "microwave_disaggregation",
+    "zero_percussion",
+    "tier_3"
+  ]
 }

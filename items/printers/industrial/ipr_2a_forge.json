@@ -4,11 +4,11 @@
   "research_node": "advanced_industrial_printing",
   "tech_level": 2,
   "branch": "directed_energy_deposition",
-  "mass_t": 8.0,
+  "mass_t": 5.62,
   "operational_environment": "surface",
   "printer_type": "industrial",
   "power_requirements": {
-    "electric_mw": 8.0
+    "electric_mw": 3.52
   },
   "performance": {
     "construction_rate_kg_per_hr": 100,

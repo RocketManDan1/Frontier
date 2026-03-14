@@ -4,12 +4,30 @@
   "output_item_id": "spr_3a_press",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 13000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 12000.0 },
-    { "item_id": "structural_alloys", "qty": 8000.0 },
-    { "item_id": "advanced_ceramics", "qty": 6000.0 },
-    { "item_id": "carbon_composites", "qty": 5000.0 },
-    { "item_id": "superconductors", "qty": 4500.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 3900.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 3600.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 2400.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 1800.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 1500.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 1400.0
+    }
   ],
   "build_time_s": 5700,
   "facility_type": "shipyard",

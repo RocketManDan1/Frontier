@@ -4,12 +4,30 @@
   "output_item_id": "hdc_3b_magmaworm",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 10500.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 8000.0 },
-    { "item_id": "structural_alloys", "qty": 5200.0 },
-    { "item_id": "advanced_ceramics", "qty": 4000.0 },
-    { "item_id": "carbon_composites", "qty": 2500.0 },
-    { "item_id": "radiation_composite_armor", "qty": 2300.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 12000.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 9100.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 5900.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 4600.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 2900.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 2600.0
+    }
   ],
   "build_time_s": 8500,
   "facility_type": "shipyard",

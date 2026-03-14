@@ -4,17 +4,21 @@
   "research_node": "advanced_microgravity_mining",
   "tech_level": 2,
   "branch": "rotary_cutter_suction",
-  "mass_t": 4.0,
+  "mass_t": 4.28,
   "operational_environment": "microgravity",
   "miner_type": "microgravity",
   "max_surface_gravity_ms2": 1.0,
   "power_requirements": {
-    "electric_mw": 4.5
+    "electric_mw": 4.725
   },
   "performance": {
-    "mining_rate_kg_per_hr": 100,
+    "mining_rate_kg_per_hr": 113.0,
     "excavation_type": "rotary_cutter_pneumatic_capture"
   },
   "description": "The Ixion improves on the Phaethon with a multi-arm articulated chassis, allowing it to reconfigure anchor points mid-operation. Its primary excavation module uses a contra-rotating cutter paired with a pneumatic suction manifold, capturing liberated fragments before they escape the micro-gravity well. A secondary screening drum separates coarse from fine material in-situ. Suited to C-type and S-type near-Earth asteroids.",
-  "ui_tags": ["rotary_cutter", "pneumatic_capture", "tier_2"]
+  "ui_tags": [
+    "rotary_cutter",
+    "pneumatic_capture",
+    "tier_2"
+  ]
 }

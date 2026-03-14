@@ -124,6 +124,7 @@ class QueueConstructionRequest(BaseModel):
     location_id: str
     recipe_id: str
     facility_id: str = ""
+    quantity: int = 1
 
 
 class DequeueConstructionRequest(BaseModel):
@@ -442,7 +443,11 @@ def api_facility_industry_overview(
 
     user = require_login(conn, request)
     corp_id = _get_corp_id(user)
-    fac = facility_service.require_facility_owner(conn, facility_id, corp_id)
+    is_admin = bool(_safe_get(user, "is_admin", False))
+    if is_admin:
+        fac = facility_service.resolve_facility(conn, facility_id)
+    else:
+        fac = facility_service.require_facility_owner(conn, facility_id, corp_id)
     if not fac:
         raise HTTPException(status_code=404, detail="Facility not found")
 
@@ -504,6 +509,51 @@ def api_facility_industry_overview(
         "construction_pool_speed": construction_data.get("pool_speed_kg_per_hr", 0),
         "construction_pool_mult": construction_data.get("pool_throughput_mult", 0),
         "power_balance": power_balance,
+    }
+
+
+@router.get("/api/industry/facility/{facility_id}/summary")
+def api_facility_industry_summary(
+    facility_id: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """Lightweight counts for industrial subtab badges."""
+    import facility_service
+
+    user = require_login(conn, request)
+    corp_id = _get_corp_id(user)
+    is_admin = bool(_safe_get(user, "is_admin", False))
+    if is_admin:
+        fac = facility_service.resolve_facility(conn, facility_id)
+    else:
+        fac = facility_service.require_facility_owner(conn, facility_id, corp_id)
+
+    location_id = fac["location_id"]
+    industry_service.settle_industry(conn, location_id, facility_id=facility_id)
+
+    equipment = industry_service.get_deployed_equipment(conn, location_id, facility_id=facility_id)
+
+    miners_active = sum(1 for e in equipment if e["category"] in ("miner", "constructor", "isru") and e.get("mode") == "mine")
+    refineries_active = sum(1 for e in equipment if e["category"] == "refinery" and e.get("status") == "active")
+    printers_active = sum(1 for e in equipment if e["category"] in ("printer", "constructor") and e.get("mode") == "construct")
+
+    # Count construction queue items waiting on materials
+    queue_waiting = conn.execute(
+        "SELECT COUNT(*) as cnt FROM construction_queue WHERE facility_id = ? AND status = 'waiting_materials'",
+        (facility_id,),
+    ).fetchone()
+    queue_waiting_count = int(queue_waiting["cnt"]) if queue_waiting else 0
+
+    power_balance = industry_service.compute_site_power_balance(equipment)
+
+    return {
+        "facility_id": facility_id,
+        "miners_active": miners_active,
+        "refineries_active": refineries_active,
+        "printers_active": printers_active,
+        "queue_waiting_materials": queue_waiting_count,
+        "power_ok": bool(power_balance.get("power_ok", True)),
     }
 
 
@@ -781,9 +831,10 @@ def api_queue_construction(
     corp_id = _get_corp_id(user)
     actor_name = _get_actor_name(user)
     industry_service.settle_industry(conn)
+    qty = max(1, min(body.quantity, 50))  # cap at 50 per request
     try:
         result = industry_service.queue_construction(
-            conn, body.location_id, body.recipe_id, actor_name, corp_id=corp_id, facility_id=body.facility_id
+            conn, body.location_id, body.recipe_id, actor_name, corp_id=corp_id, facility_id=body.facility_id, quantity=qty
         )
         return {"ok": True, **result}
     except ValueError as e:

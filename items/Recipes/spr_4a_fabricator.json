@@ -4,14 +4,38 @@
   "output_item_id": "spr_4a_fabricator",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 36000.0 },
-    { "item_id": "superconductors", "qty": 24000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 22000.0 },
-    { "item_id": "structural_alloys", "qty": 14000.0 },
-    { "item_id": "advanced_ceramics", "qty": 10000.0 },
-    { "item_id": "carbon_composites", "qty": 8000.0 },
-    { "item_id": "radiation_composite_armor", "qty": 6000.0 },
-    { "item_id": "strategic_elements", "qty": 5000.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 8600.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 5700.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 5300.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 3400.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 2400.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 1900.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 1400.0
+    },
+    {
+      "item_id": "strategic_elements",
+      "qty": 1200.0
+    }
   ],
   "build_time_s": 17100,
   "facility_type": "shipyard",

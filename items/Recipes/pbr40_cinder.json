@@ -6,15 +6,15 @@
   "inputs": [
     {
       "item_id": "structural_alloys",
-      "qty": 470.0
+      "qty": 400.0
     },
     {
       "item_id": "advanced_ceramics",
-      "qty": 310.0
+      "qty": 250.0
     },
     {
       "item_id": "megastructure_mass",
-      "qty": 120.0
+      "qty": 100.0
     }
   ],
   "build_time_s": 600,

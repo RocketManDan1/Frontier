@@ -4,14 +4,14 @@
   "research_node": "laser_ship_printing",
   "tech_level": 3,
   "branch": "selective_laser_sintering_metal",
-  "mass_t": 35.0,
+  "mass_t": 10.3,
   "operational_environment": "surface",
   "printer_type": "ship",
   "power_requirements": {
-    "electric_mw": 28.0
+    "electric_mw": 6.57
   },
   "performance": {
-    "construction_rate_kg_per_hr": 300,
+    "construction_rate_kg_per_hr": 357.5,
     "fabrication_type": "slm_dual_laser_array"
   },
   "description": "The Press scales ship-component fabrication to a dual-laser SLM (selective laser melting) system with a 6 m × 6 m × 4 m build chamber. Twin 8 kW ytterbium fibre lasers interrogate the powder bed in alternating quadrants, enabling near-continuous operation. The process supports Inconel, Haynes alloys, and oxide dispersion-strengthened steels needed for high-temperature thruster components and reactor internals. Post-print heat treatment furnaces and an in-situ metrology arm ensure dimensional accuracy to 50 µm. Tier-3 reactors, generators, and ISRU heat exchangers are within the machine's operating envelope.",

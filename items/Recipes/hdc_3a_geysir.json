@@ -4,12 +4,30 @@
   "output_item_id": "hdc_3a_geysir",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 6500.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 5000.0 },
-    { "item_id": "structural_alloys", "qty": 3200.0 },
-    { "item_id": "advanced_ceramics", "qty": 2500.0 },
-    { "item_id": "carbon_composites", "qty": 1500.0 },
-    { "item_id": "radiation_composite_armor", "qty": 1300.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 7400.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 5700.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 3700.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 2900.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 1700.0
+    },
+    {
+      "item_id": "radiation_composite_armor",
+      "qty": 1500.0
+    }
   ],
   "build_time_s": 5700,
   "facility_type": "shipyard",

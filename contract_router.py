@@ -163,14 +163,27 @@ def _org_balance(conn: sqlite3.Connection, org_id: str) -> float:
 
 
 def _deduct_money(conn: sqlite3.Connection, org_id: str, amount: float) -> None:
-    """Deduct money from an org's balance. Raises 400 if insufficient."""
-    bal = _org_balance(conn, org_id)
-    if bal < amount:
-        raise HTTPException(status_code=400, detail=f"Insufficient funds. Need ${amount:,.2f}, have ${bal:,.2f}")
-    conn.execute(
-        "UPDATE organizations SET balance_usd = balance_usd - ? WHERE id = ?",
-        (amount, org_id),
-    )
+    """Deduct money from an org's balance. Raises 400 if insufficient.
+    Uses BEGIN IMMEDIATE to prevent concurrent double-deduction."""
+    if conn.in_transaction:
+        conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        bal = _org_balance(conn, org_id)
+        if bal < amount:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail=f"Insufficient funds. Need ${amount:,.2f}, have ${bal:,.2f}")
+        conn.execute(
+            "UPDATE organizations SET balance_usd = balance_usd - ? WHERE id = ?",
+            (amount, org_id),
+        )
+        conn.commit()
+    except HTTPException:
+        raise
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
 
 
 def _credit_money(conn: sqlite3.Connection, org_id: str, amount: float) -> None:

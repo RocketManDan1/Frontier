@@ -4,14 +4,14 @@
   "research_node": "industrial_plasma_ship_printing",
   "tech_level": 4,
   "branch": "plasma_vapor_deposition_nanoscale",
-  "mass_t": 140.0,
+  "mass_t": 22.46,
   "operational_environment": "surface",
   "printer_type": "ship",
   "power_requirements": {
-    "electric_mw": 90.0
+    "electric_mw": 15.18
   },
   "performance": {
-    "construction_rate_kg_per_hr": 750,
+    "construction_rate_kg_per_hr": 1036.75,
     "fabrication_type": "plasma_vpn_atomic_layer_build"
   },
   "description": "The Fabricator is the apex ship-specific printer, employing plasma vapor nanoscale deposition to build components atom-layer by atom-layer in a large magnetically-confined deposition cell. Each feedstock element is independently vaporised, ionised, and directed to the growing workpiece; composition gradients inaccessible to any other manufacturing route can be programmed on a 10 nm scale. The result is thruster nozzles with graded thermal resistance walls, reactor cladding with tungsten-carbide gradients, and generator windings with zero crystal boundary losses. At 750 kg/hr the Fabricator out-produces any earlier ship printer and can sustain output indefinitely from smelted local feedstock.",

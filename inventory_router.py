@@ -132,6 +132,7 @@ def api_inventory_context(kind: str, entity_id: str, request: Request, conn: sql
     anchor_name = inv_id
 
     if inventory_kind == "ship":
+        _check_ship_ownership(conn, user, inv_id)
         ship_state = _main()._load_ship_inventory_state(conn, inv_id)
         location_id = ship_state["location_id"] if ship_state["is_docked"] else ""
         anchor_name = str(ship_state["row"]["name"])
@@ -423,6 +424,33 @@ def api_inventory_transfer(req: InventoryTransferReq, request: Request, conn: sq
         if conn.in_transaction:
             conn.commit()
         conn.execute("BEGIN IMMEDIATE")
+
+        # Re-read source state inside the transaction to prevent TOCTOU races.
+        if source_kind == "ship_resource":
+            source_ship_state = m._load_ship_inventory_state(conn, source_id)
+            if move_resource_id.lower() == "water":
+                available_mass = max(0.0, float(source_ship_state.get("fuel_kg") or 0.0))
+            else:
+                src_resource = next(
+                    (item for item in (source_ship_state.get("resources") or [])
+                     if str(item.get("resource_id") or item.get("item_id") or "").strip() == move_resource_id),
+                    None,
+                )
+                available_mass = max(0.0, float((src_resource or {}).get("mass_kg") or 0.0))
+            accepted_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+            if accepted_mass_kg <= 1e-9:
+                conn.rollback()
+                raise HTTPException(status_code=400, detail="Source ship has no transferable cargo for that resource")
+        else:
+            source_resource_row = m._resource_stack_row(conn, source_location_id, source_key, corp_id=corp_id or "")
+            available_mass = max(0.0, float(source_resource_row["mass_kg"] or 0.0))
+            accepted_mass_kg = max(0.0, min(move_mass_kg, available_mass))
+            if accepted_mass_kg <= 1e-9:
+                conn.rollback()
+                raise HTTPException(status_code=400, detail="Source resource stack has no transferable cargo")
+
+        if target_kind == "ship":
+            target_ship_state = m._load_ship_inventory_state(conn, target_id)
 
         # ── Execute source withdrawal ──
         if source_kind == "ship_resource":

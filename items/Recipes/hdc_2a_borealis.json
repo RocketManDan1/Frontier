@@ -4,11 +4,26 @@
   "output_item_id": "hdc_2a_borealis",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "semiconductor_materials", "qty": 3000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 2000.0 },
-    { "item_id": "structural_alloys", "qty": 1500.0 },
-    { "item_id": "advanced_ceramics", "qty": 1200.0 },
-    { "item_id": "megastructure_mass", "qty": 400.0 }
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 3700.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 2500.0
+    },
+    {
+      "item_id": "structural_alloys",
+      "qty": 1900.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 1500.0
+    },
+    {
+      "item_id": "megastructure_mass",
+      "qty": 500.0
+    }
   ],
   "build_time_s": 1800,
   "facility_type": "shipyard",

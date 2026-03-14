@@ -4,12 +4,30 @@
   "output_item_id": "mgm_3a_sedna",
   "output_qty": 1,
   "inputs": [
-    { "item_id": "structural_alloys", "qty": 12000.0 },
-    { "item_id": "advanced_aerospace_alloys", "qty": 10000.0 },
-    { "item_id": "advanced_ceramics", "qty": 7000.0 },
-    { "item_id": "semiconductor_materials", "qty": 6000.0 },
-    { "item_id": "carbon_composites", "qty": 4500.0 },
-    { "item_id": "superconductors", "qty": 3000.0 }
+    {
+      "item_id": "structural_alloys",
+      "qty": 7800.0
+    },
+    {
+      "item_id": "advanced_aerospace_alloys",
+      "qty": 6500.0
+    },
+    {
+      "item_id": "advanced_ceramics",
+      "qty": 4500.0
+    },
+    {
+      "item_id": "semiconductor_materials",
+      "qty": 3900.0
+    },
+    {
+      "item_id": "carbon_composites",
+      "qty": 2900.0
+    },
+    {
+      "item_id": "superconductors",
+      "qty": 1900.0
+    }
   ],
   "build_time_s": 5700,
   "facility_type": "shipyard",

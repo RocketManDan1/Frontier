@@ -187,7 +187,7 @@ class TestPrintingCompletion:
             corp_id=corp_id,
             facility_id=fac_id,
         )
-        qid = queued["queue_id"]
+        qid = queued["queue_ids"][0]
 
         now = game_now_s()
         industry_service._settle_construction_queue(conn, now, "MARS_HELLAS")

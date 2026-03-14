@@ -4,15 +4,15 @@
   "research_node": "laser_gravity_mining",
   "tech_level": 2.5,
   "branch": "laser_vibro_excavation",
-  "mass_t": 8.2,
+  "mass_t": 9.266,
   "operational_environment": "surface_gravity",
   "miner_type": "large_body",
   "min_surface_gravity_ms2": 1.0,
   "power_requirements": {
-    "electric_mw": 14.0
+    "electric_mw": 15.26
   },
   "performance": {
-    "mining_rate_kg_per_hr": 260,
+    "mining_rate_kg_per_hr": 304.2,
     "excavation_type": "laser_assisted_vibro_bucket"
   },
   "description": "The Kyklops \u2014 named for the one-eyed giants of Greek myth who served as Hephaestus's forge workers, crafting thunderbolts and tridents in the volcanic caverns beneath Etna \u2014 extends the Hephaestus platform with a co-mounted continuous-wave fiber laser prespallation system. Laser-assisted mechanical excavation works by directing a 4 kW near-infrared beam ahead of the vibro-drum teeth, locally heating exposed regolith or rock to 600\u2013900\u00b0C before mechanical contact. Thermal spalling induced by rapid surface heating reduces the specific excavation energy of silicate material by a further 40\u201350 percent beyond vibro-agitation alone, enabling the Kyklops to work through intact basalt strata and ilmenite layers that resist even resonance-assisted cutting. The construction module adds a directed-energy deposition (DED) fabrication arm delivering a regulated regolith melt stream cast into mold forms: the laser raises a confined pool of regolith to full melt in under a minute, and a shaped nozzle pours the melt into pre-positioned forms to yield cast basalt structural panels with compressive strengths up to 120 MPa \u2014 comparable to structural concrete. At 225 kg/hr mining and 82 kg/hr construction, the Kyklops substantially outperforms the Hephaestus while fitting within the same logistics footprint as a single standard container.",

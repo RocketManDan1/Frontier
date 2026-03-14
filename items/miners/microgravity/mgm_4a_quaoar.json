@@ -4,17 +4,21 @@
   "research_node": "industrial_microgravity_mining",
   "tech_level": 4,
   "branch": "laser_plasma_sublimation",
-  "mass_t": 75.0,
+  "mass_t": 80.25,
   "operational_environment": "microgravity",
   "miner_type": "microgravity",
   "max_surface_gravity_ms2": 1.0,
   "power_requirements": {
-    "electric_mw": 55.0
+    "electric_mw": 55.55
   },
   "performance": {
-    "mining_rate_kg_per_hr": 700,
+    "mining_rate_kg_per_hr": 791.0,
     "excavation_type": "laser_plasma_sublimation_capture"
   },
   "description": "The Quaoar is an industrial-scale microgravity mining platform. Its primary excavation system couples a 30 kW fiber laser array with a downstream plasma-assist stage that dissociates refractory oxides on the fly, enabling extraction of metallic iron, nickel, and platinum-group elements directly from the excavation stream. A robotic tether-management system continuously repositions 12 anchor legs across the working face to distribute reaction forces. Designed for extended-duration campaigns on metal-rich M-type asteroids and trans-Neptunian object surface operations.",
-  "ui_tags": ["laser_plasma_sublimation", "metal_rich_extraction", "tier_4"]
+  "ui_tags": [
+    "laser_plasma_sublimation",
+    "metal_rich_extraction",
+    "tier_4"
+  ]
 }
